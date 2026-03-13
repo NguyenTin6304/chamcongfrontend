@@ -23,15 +23,112 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _rememberMe = true;
 
   String? _errorMessage;
   String? _infoMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreSession() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+
+    var redirected = false;
+
+    try {
+      final savedEmail = await _tokenStorage.getLastEmail();
+      if (savedEmail != null && savedEmail.isNotEmpty) {
+        _emailController.text = savedEmail;
+      }
+
+      final accessToken = await _tokenStorage.getToken();
+      final remember = await _tokenStorage.getRememberMe();
+      final refreshToken = await _tokenStorage.getRefreshToken();
+
+      setState(() {
+        _rememberMe = remember;
+      });
+
+      if (accessToken == null || accessToken.isEmpty) {
+        return;
+      }
+
+      var activeAccessToken = accessToken;
+      UserMeResult me;
+
+      try {
+        me = await _authApi.me(token: activeAccessToken);
+      } catch (_) {
+        if (!remember || refreshToken == null || refreshToken.isEmpty) {
+          rethrow;
+        }
+
+        final refreshed = await _authApi.refresh(refreshToken: refreshToken);
+        activeAccessToken = refreshed.accessToken;
+
+        await _tokenStorage.saveSession(
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken ?? refreshToken,
+          rememberMe: true,
+          email: savedEmail,
+        );
+
+        me = await _authApi.me(token: activeAccessToken);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      redirected = true;
+      final profileEmail = me.email.isNotEmpty ? me.email : (savedEmail ?? '');
+      _openByRole(role: me.role.toUpperCase(), email: profileEmail);
+    } catch (_) {
+      await _tokenStorage.clearSession(keepLastEmail: true);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _infoMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      });
+    } finally {
+      if (mounted && !redirected) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _openByRole({
+    required String role,
+    required String email,
+  }) {
+    if (role == 'ADMIN') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => AdminPage(email: email)),
+      );
+      return;
+    }
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => HomePage(email: email)),
+    );
   }
 
   InputDecoration _inputDecoration({
@@ -111,8 +208,18 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final result = await _authApi.login(email: email, password: password);
-      await _tokenStorage.saveToken(result.accessToken);
+      final result = await _authApi.login(
+        email: email,
+        password: password,
+        rememberMe: _rememberMe,
+      );
+
+      await _tokenStorage.saveSession(
+        accessToken: result.accessToken,
+        refreshToken: _rememberMe ? result.refreshToken : null,
+        rememberMe: _rememberMe,
+        email: email,
+      );
 
       UserMeResult? me;
       try {
@@ -127,16 +234,7 @@ class _LoginPageState extends State<LoginPage> {
 
       final profileEmail = (me?.email ?? '').isNotEmpty ? me!.email : email;
       final role = (me?.role ?? 'USER').toUpperCase();
-
-      if (role == 'ADMIN') {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => AdminPage(email: profileEmail)),
-        );
-      } else {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => HomePage(email: profileEmail)),
-        );
-      }
+      _openByRole(role: role, email: profileEmail);
     } catch (error) {
       if (!mounted) {
         return;
@@ -194,20 +292,20 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           Text(
                             'Chào mừng quay lại',
-                            style: Theme.of(context).textTheme.titleLarge,textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleLarge,
+                            textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Đăng nhập để tiếp tục chấm công.',textAlign: TextAlign.center,
+                            'Đăng nhập để tiếp tục chấm công.',
+                            textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey.shade700,
-                                ),
+                              color: Colors.grey.shade700,
+                            ),
                           ),
                           const SizedBox(height: 14),
-                          if (_errorMessage != null)
-                            _buildBanner(text: _errorMessage!, isError: true),
-                          if (_infoMessage != null)
-                            _buildBanner(text: _infoMessage!, isError: false),
+                          if (_errorMessage != null) _buildBanner(text: _errorMessage!, isError: true),
+                          if (_infoMessage != null) _buildBanner(text: _infoMessage!, isError: false),
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
@@ -272,7 +370,20 @@ class _LoginPageState extends State<LoginPage> {
                               }
                             },
                           ),
-                          const SizedBox(height: 16),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: _rememberMe,
+                            onChanged: _isLoading
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _rememberMe = value ?? true;
+                                    });
+                                  },
+                            title: const Text('Ghi nhớ đăng nhập'),
+                            controlAffinity: ListTileControlAffinity.leading,
+                          ),
+                          const SizedBox(height: 6),
                           SizedBox(
                             height: 48,
                             child: FilledButton.icon(
@@ -315,5 +426,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
-

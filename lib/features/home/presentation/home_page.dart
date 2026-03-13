@@ -367,8 +367,14 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildRangeBadge(bool isOutOfRange) {
-    final color = isOutOfRange ? Colors.red : Colors.green;
+  Widget _buildRangeBadge({
+    required bool isOutOfRange,
+    String? type,
+  }) {
+    final normalizedType = (type ?? '').toUpperCase();
+    final color = isOutOfRange
+        ? Colors.orange
+        : (normalizedType == 'OUT' ? Colors.blue : Colors.green);
     final label = isOutOfRange ? 'Ngoài vùng' : 'Trong vùng';
 
     return Container(
@@ -497,6 +503,10 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Expanded(
                       child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
                         onPressed: (_loadingAction || !canCheckin) ? null : _checkin,
                         icon: _loadingAction && _activeAction == 'IN'
                             ? const SizedBox(
@@ -511,6 +521,10 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
                         onPressed: (_loadingAction || !canCheckout) ? null : _checkout,
                         icon: _loadingAction && _activeAction == 'OUT'
                             ? const SizedBox(
@@ -546,7 +560,10 @@ class _HomePageState extends State<HomePage> {
                         Text('Giờ vào: ${_lastAction?.punctualityStatus ?? '-'}'),
                         Text('Giờ về: ${_lastAction?.checkoutStatus ?? '-'}'),
                         const SizedBox(height: 6),
-                        _buildRangeBadge(_lastAction?.isOutOfRange ?? false),
+                        _buildRangeBadge(
+                          isOutOfRange: _lastAction?.isOutOfRange ?? false,
+                          type: _lastAction?.type,
+                        ),
                         const SizedBox(height: 6),
                         Text('Message: ${_lastAction?.message ?? '-'}'),
                       ],
@@ -575,7 +592,10 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ..._history.map(
                   (log) {
-                    final tone = log.isOutOfRange ? Colors.red : Colors.green;
+                    final logType = log.type.toUpperCase();
+                    final tone = log.isOutOfRange
+                        ? Colors.orange
+                        : (logType == "OUT" ? Colors.blue : Colors.green);
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
@@ -607,7 +627,10 @@ class _HomePageState extends State<HomePage> {
                             if (log.checkoutStatus != null)
                               Text('Giờ về: ${log.checkoutStatus}'),
                             const SizedBox(height: 4),
-                            _buildRangeBadge(log.isOutOfRange),
+                            _buildRangeBadge(
+                              isOutOfRange: log.isOutOfRange,
+                              type: log.type,
+                            ),
                           ],
                         ),
                         trailing: Column(
@@ -638,17 +661,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
