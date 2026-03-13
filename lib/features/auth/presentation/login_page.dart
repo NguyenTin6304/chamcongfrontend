@@ -74,7 +74,7 @@ class _LoginPageState extends State<LoginPage> {
       try {
         me = await _authApi.me(token: activeAccessToken);
       } catch (_) {
-        if (!remember || refreshToken == null || refreshToken.isEmpty) {
+        if (refreshToken == null || refreshToken.isEmpty) {
           rethrow;
         }
 
@@ -84,7 +84,7 @@ class _LoginPageState extends State<LoginPage> {
         await _tokenStorage.saveSession(
           accessToken: refreshed.accessToken,
           refreshToken: refreshed.refreshToken ?? refreshToken,
-          rememberMe: true,
+          rememberMe: remember,
           email: savedEmail,
         );
 
@@ -216,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
 
       await _tokenStorage.saveSession(
         accessToken: result.accessToken,
-        refreshToken: _rememberMe ? result.refreshToken : null,
+        refreshToken: result.refreshToken,
         rememberMe: _rememberMe,
         email: email,
       );
@@ -426,3 +426,4 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
