@@ -326,9 +326,9 @@ class _HomePageState extends State<HomePage> {
       case 'IN':
         return Colors.green;
       case 'OUT':
-        return Colors.orange;
+        return Colors.blue;
       case 'UNASSIGNED':
-        return Colors.red;
+        return Colors.orange;
       default:
         return Colors.blueGrey;
     }
