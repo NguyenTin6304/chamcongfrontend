@@ -23,7 +23,10 @@ class _HomePageState extends State<HomePage> {
 
   final _tokenStorage = TokenStorage();
   final _attendanceApi = const AttendanceApi();
-  final _vnDateFormat = DateFormat('dd/MM/yyyy HH:mm:ss');
+  final _vnDateTimeFormat = DateFormat('dd/MM/yyyy HH:mm:ss');
+  final _vnDateFormat = DateFormat('dd/MM/yyyy');
+  final _vnTimeFormat = DateFormat('HH:mm:ss');
+  final _dayKeyFormat = DateFormat('yyyy-MM-dd');
   final _scrollController = ScrollController();
 
   String? _token;
@@ -232,7 +235,10 @@ class _HomePageState extends State<HomePage> {
         _lastAction = result;
       });
 
-      _showSnack(result.message);
+      final timingNotice = _timingNotice(result);
+      _showSnack(
+        timingNotice == null ? result.message : '${result.message} | $timingNotice',
+      );
       await _refreshStatus(showSnack: false);
       await _refreshHistory(showSnack: false);
     } catch (error) {
@@ -279,33 +285,25 @@ class _HomePageState extends State<HomePage> {
     if (dt == null) {
       return raw.isEmpty ? '-' : raw;
     }
-    return '${_vnDateFormat.format(dt)} (VN)';
+    return '${_vnDateTimeFormat.format(dt)} (VN)';
   }
+
+  String _formatTimeVn(String raw) {
+    final dt = _parseToVn(raw);
+    if (dt == null) {
+      return '--:--';
+    }
+    return _vnTimeFormat.format(dt);
+  }
+
+  String _formatDateVn(DateTime dt) => _vnDateFormat.format(dt);
 
   String _formatLocalAsVn(DateTime? value) {
     if (value == null) {
       return '-';
     }
     final vn = value.toUtc().add(_vnOffset);
-    return '${_vnDateFormat.format(vn)} (VN)';
-  }
-
-  String _distanceText(double? value) {
-    if (value == null) {
-      return '-';
-    }
-    return '${value.toStringAsFixed(1)} m';
-  }
-
-  String _geofenceSourceLabel(String? source) {
-    switch (source) {
-      case 'GROUP':
-        return 'Theo group/geofence';
-      case 'SYSTEM_FALLBACK':
-        return 'Fallback system rule';
-      default:
-        return '-';
-    }
+    return '${_vnDateTimeFormat.format(vn)} (VN)';
   }
 
   String _fallbackReasonLabel(String? reason) {
@@ -318,6 +316,52 @@ class _HomePageState extends State<HomePage> {
         return 'Group không có geofence active';
       default:
         return reason ?? '-';
+    }
+  }
+  String? _timingNotice(AttendanceActionResult result) {
+    final type = result.type.toUpperCase();
+    if (type == 'IN') {
+      final status = (result.punctualityStatus ?? '').toUpperCase();
+      if (status.isEmpty) {
+        return null;
+      }
+      return 'Giờ vào: ${_checkinTimingLabel(status)}';
+    }
+
+    if (type == 'OUT') {
+      final status = (result.checkoutStatus ?? '').toUpperCase();
+      if (status.isEmpty) {
+        return null;
+      }
+      return 'Giờ về: ${_checkoutTimingLabel(status)}';
+    }
+
+    return null;
+  }
+
+  String _checkinTimingLabel(String status) {
+    switch (status) {
+      case 'EARLY':
+        return 'Đi sớm';
+      case 'ON_TIME':
+        return 'Đúng giờ';
+      case 'LATE':
+        return 'Đi trễ';
+      default:
+        return status;
+    }
+  }
+
+  String _checkoutTimingLabel(String status) {
+    switch (status) {
+      case 'EARLY':
+        return 'Về sớm';
+      case 'ON_TIME':
+        return 'Về đúng giờ';
+      case 'LATE':
+        return 'Về trễ';
+      default:
+        return status;
     }
   }
 
@@ -345,6 +389,13 @@ class _HomePageState extends State<HomePage> {
       default:
         return 'Chưa xác định';
     }
+  }
+
+  Color _actionColor({required String type, required bool isOutOfRange}) {
+    if (isOutOfRange) {
+      return Colors.orange;
+    }
+    return type == 'OUT' ? Colors.blue : Colors.green;
   }
 
   Widget _buildStatusBadge(String? state) {
@@ -390,6 +441,199 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildActionChip({
+    required String type,
+    required bool isOutOfRange,
+  }) {
+    final color = _actionColor(type: type, isOutOfRange: isOutOfRange);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        type,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  DateTime _logSortTime(AttendanceLogItem log) {
+    return _parseToVn(log.time) ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  DateTime _pairSortTime(_AttendancePair pair) {
+    final outTime = pair.outLog != null ? _parseToVn(pair.outLog!.time) : null;
+    if (outTime != null) {
+      return outTime;
+    }
+    final inTime = pair.inLog != null ? _parseToVn(pair.inLog!.time) : null;
+    if (inTime != null) {
+      return inTime;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  List<_AttendancePair> _buildHistoryPairs(List<AttendanceLogItem> logs) {
+    if (logs.isEmpty) {
+      return const [];
+    }
+
+    final sorted = [...logs]..sort((a, b) => _logSortTime(a).compareTo(_logSortTime(b)));
+
+    final pairs = <_AttendancePair>[];
+    AttendanceLogItem? pendingIn;
+
+    for (final log in sorted) {
+      final type = log.type.toUpperCase();
+      if (type == 'IN') {
+        if (pendingIn != null) {
+          pairs.add(_AttendancePair(inLog: pendingIn));
+        }
+        pendingIn = log;
+      } else if (type == 'OUT') {
+        if (pendingIn != null) {
+          pairs.add(_AttendancePair(inLog: pendingIn, outLog: log));
+          pendingIn = null;
+        } else {
+          pairs.add(_AttendancePair(outLog: log));
+        }
+      }
+    }
+
+    if (pendingIn != null) {
+      pairs.add(_AttendancePair(inLog: pendingIn));
+    }
+
+    return pairs;
+  }
+
+  List<_AttendanceDayGroup> _buildGroupedHistory(List<AttendanceLogItem> logs) {
+    final pairs = _buildHistoryPairs(logs);
+    final map = <String, List<_AttendancePair>>{};
+    final dateByKey = <String, DateTime?>{};
+
+    for (final pair in pairs) {
+      final baseTime =
+          (pair.inLog != null ? _parseToVn(pair.inLog!.time) : null) ??
+          (pair.outLog != null ? _parseToVn(pair.outLog!.time) : null);
+
+      final key = baseTime == null ? 'unknown' : _dayKeyFormat.format(baseTime);
+      map.putIfAbsent(key, () => <_AttendancePair>[]).add(pair);
+      dateByKey[key] = baseTime;
+    }
+
+    final groups = map.entries.map((entry) {
+      final items = entry.value..sort((a, b) => _pairSortTime(b).compareTo(_pairSortTime(a)));
+      return _AttendanceDayGroup(
+        dayKey: entry.key,
+        dayDate: dateByKey[entry.key],
+        items: items,
+      );
+    }).toList();
+
+    groups.sort((a, b) {
+      final ad = a.dayDate;
+      final bd = b.dayDate;
+      if (ad == null && bd == null) {
+        return 0;
+      }
+      if (ad == null) {
+        return 1;
+      }
+      if (bd == null) {
+        return -1;
+      }
+      return bd.compareTo(ad);
+    });
+
+    return groups;
+  }
+
+  Widget _buildPairCard(_AttendancePair pair) {
+    final inLog = pair.inLog;
+    final outLog = pair.outLog;
+
+    final isOutOfRange = (inLog?.isOutOfRange ?? false) || (outLog?.isOutOfRange ?? false);
+
+    final inTime = inLog != null ? _formatTimeVn(inLog.time) : '--:--';
+    final outTime = outLog != null ? _formatTimeVn(outLog.time) : '--:--';
+
+    final fallbackReason =
+        ((outLog?.fallbackReason ?? '').isNotEmpty ? outLog?.fallbackReason : inLog?.fallbackReason);
+
+    final tone = _actionColor(type: outLog != null ? 'OUT' : 'IN', isOutOfRange: isOutOfRange);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.22)),
+        color: tone.withValues(alpha: 0.03),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildActionChip(type: 'IN', isOutOfRange: isOutOfRange),
+              Text(inTime, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const Icon(Icons.arrow_right_alt, size: 16),
+              _buildActionChip(type: 'OUT', isOutOfRange: isOutOfRange),
+              Text(outTime, style: const TextStyle(fontWeight: FontWeight.w600)),
+              _buildRangeBadge(isOutOfRange: isOutOfRange, type: outLog?.type ?? inLog?.type),
+            ],
+          ),
+          if ((fallbackReason ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Fallback: ${_fallbackReasonLabel(fallbackReason)}',
+              style: TextStyle(
+                color: Colors.orange.shade800,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDaySection(_AttendanceDayGroup group, {required bool initiallyExpanded}) {
+    final title = group.dayDate == null ? 'Không xác định ngày' : _formatDateVn(group.dayDate!);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ExpansionTile(
+        key: PageStorageKey<String>('history-day-${group.dayKey}'),
+        initiallyExpanded: initiallyExpanded,
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            Text('${group.items.length} dòng'),
+          ],
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        children: group.items.map(_buildPairCard).toList(),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -400,6 +644,9 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final canCheckin = _status?.canCheckin ?? false;
     final canCheckout = _status?.canCheckout ?? false;
+    final groups = _buildGroupedHistory(_history);
+    final hasGps = _position != null;
+    final lastTimingNotice = _lastAction == null ? null : _timingNotice(_lastAction!);
 
     return Scaffold(
       appBar: AppBar(
@@ -490,9 +737,7 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text('Latitude: ${_position?.latitude.toStringAsFixed(6) ?? '-'}'),
-                        Text('Longitude: ${_position?.longitude.toStringAsFixed(6) ?? '-'}'),
-                        Text('Độ chính xác: ${_distanceText(_position?.accuracy)}'),
+                        Text('Trạng thái GPS: ${hasGps ? 'Đã sẵn sàng' : 'Chưa lấy vị trí'}'),
                         Text('Cập nhật: ${_formatLocalAsVn(_positionAt)}'),
                       ],
                     ),
@@ -552,18 +797,19 @@ class _HomePageState extends State<HomePage> {
                         const SizedBox(height: 8),
                         Text('Type: ${_lastAction?.type ?? '-'}'),
                         Text('Time: ${_formatDateTimeVn(_lastAction?.time ?? '')}'),
-                        Text('Nearest distance: ${_distanceText(_lastAction?.nearestDistanceM ?? _lastAction?.distanceM)}'),
-                        Text('Geofence match: ${_lastAction?.matchedGeofence ?? '-'}'),
-                        Text('Nguồn geofence: ${_geofenceSourceLabel(_lastAction?.geofenceSource)}'),
-                        if ((_lastAction?.fallbackReason ?? '').isNotEmpty)
-                          Text('Lý do fallback: ${_fallbackReasonLabel(_lastAction?.fallbackReason)}'),
-                        Text('Giờ vào: ${_lastAction?.punctualityStatus ?? '-'}'),
-                        Text('Giờ về: ${_lastAction?.checkoutStatus ?? '-'}'),
+                        if (lastTimingNotice != null) ...[
+                          const SizedBox(height: 4),
+                          Text(lastTimingNotice),
+                        ],
                         const SizedBox(height: 6),
                         _buildRangeBadge(
                           isOutOfRange: _lastAction?.isOutOfRange ?? false,
                           type: _lastAction?.type,
                         ),
+                        if ((_lastAction?.fallbackReason ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('Fallback: ${_fallbackReasonLabel(_lastAction?.fallbackReason)}'),
+                        ],
                         const SizedBox(height: 6),
                         Text('Message: ${_lastAction?.message ?? '-'}'),
                       ],
@@ -590,61 +836,13 @@ class _HomePageState extends State<HomePage> {
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: Text('Chưa có dữ liệu lịch sử.'),
                   ),
-                ..._history.map(
-                  (log) {
-                    final logType = log.type.toUpperCase();
-                    final tone = log.isOutOfRange
-                        ? Colors.orange
-                        : (logType == "OUT" ? Colors.blue : Colors.green);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: tone.withValues(alpha: 0.25)),
-                        color: tone.withValues(alpha: 0.03),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: tone.withValues(alpha: 0.15),
-                          child: Text(
-                            log.type,
-                            style: TextStyle(color: tone, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        title: Text(_formatDateTimeVn(log.time)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text('Nearest distance: ${_distanceText(log.nearestDistanceM ?? log.distanceM)}'),
-                            if (log.matchedGeofence != null && log.matchedGeofence!.isNotEmpty)
-                              Text('Geofence match: ${log.matchedGeofence}'),
-                            Text('Nguồn geofence: ${_geofenceSourceLabel(log.geofenceSource)}'),
-                            if ((log.fallbackReason ?? '').isNotEmpty)
-                              Text('Lý do fallback: ${_fallbackReasonLabel(log.fallbackReason)}'),
-                            if (log.punctualityStatus != null)
-                              Text('Giờ vào: ${log.punctualityStatus}'),
-                            if (log.checkoutStatus != null)
-                              Text('Giờ về: ${log.checkoutStatus}'),
-                            const SizedBox(height: 4),
-                            _buildRangeBadge(
-                              isOutOfRange: log.isOutOfRange,
-                              type: log.type,
-                            ),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('lat ${log.lat.toStringAsFixed(5)}'),
-                            Text('lng ${log.lng.toStringAsFixed(5)}'),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                if (_history.isNotEmpty)
+                  ...groups.asMap().entries.map(
+                    (entry) => _buildDaySection(
+                      entry.value,
+                      initiallyExpanded: entry.key == 0,
+                    ),
+                  ),
                 const SizedBox(height: 12),
               ],
             ),
@@ -662,5 +860,25 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+class _AttendancePair {
+  const _AttendancePair({
+    this.inLog,
+    this.outLog,
+  });
 
+  final AttendanceLogItem? inLog;
+  final AttendanceLogItem? outLog;
+}
+
+class _AttendanceDayGroup {
+  const _AttendanceDayGroup({
+    required this.dayKey,
+    required this.dayDate,
+    required this.items,
+  });
+
+  final String dayKey;
+  final DateTime? dayDate;
+  final List<_AttendancePair> items;
+}
 
