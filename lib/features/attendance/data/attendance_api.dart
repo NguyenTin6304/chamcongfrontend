@@ -13,6 +13,8 @@ class AttendanceStatusResult {
     required this.message,
     this.lastAction,
     this.lastActionTime,
+    this.warningCode,
+    this.warningDate,
   });
 
   final bool employeeAssigned;
@@ -22,6 +24,8 @@ class AttendanceStatusResult {
   final String message;
   final String? lastAction;
   final String? lastActionTime;
+  final String? warningCode;
+  final String? warningDate;
 }
 
 class AttendanceActionResult {
@@ -105,6 +109,8 @@ class AttendanceApi {
         message: data['message'] as String? ?? '',
         lastAction: data['last_action'] as String?,
         lastActionTime: data['last_action_time'] as String?,
+        warningCode: data['warning_code'] as String?,
+        warningDate: data['warning_date'] as String?,
       );
     }
 
@@ -248,3 +254,4 @@ class AttendanceApi {
     return double.tryParse(value.toString());
   }
 }
+

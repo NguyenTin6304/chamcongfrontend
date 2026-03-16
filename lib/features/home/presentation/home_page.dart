@@ -297,6 +297,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _formatDateVn(DateTime dt) => _vnDateFormat.format(dt);
+  String _formatWarningDate(String? rawDate) {
+    if (rawDate == null || rawDate.isEmpty) {
+      return '--';
+    }
+    final parsed = DateTime.tryParse(rawDate);
+    if (parsed == null) {
+      return rawDate;
+    }
+    return _vnDateFormat.format(parsed);
+  }
+
 
   String _formatLocalAsVn(DateTime? value) {
     if (value == null) {
@@ -647,6 +658,8 @@ class _HomePageState extends State<HomePage> {
     final groups = _buildGroupedHistory(_history);
     final hasGps = _position != null;
     final lastTimingNotice = _lastAction == null ? null : _timingNotice(_lastAction!);
+    final missedCheckoutWarning = (_status?.warningCode ?? '').toUpperCase() == 'MISSED_CHECKOUT';
+    final missedCheckoutDate = _formatWarningDate(_status?.warningDate);
 
     return Scaffold(
       appBar: AppBar(
@@ -681,6 +694,33 @@ class _HomePageState extends State<HomePage> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
+                if (missedCheckoutWarning) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Bạn quên checkout ngày $missedCheckoutDate. Hệ thống đã ghi nhận ngoại lệ, hôm nay bạn vẫn có thể check-in bình thường.',
+                            style: TextStyle(
+                              color: Colors.orange.shade900,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(14),
