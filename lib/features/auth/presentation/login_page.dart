@@ -337,6 +337,12 @@ class _LoginPageState extends State<LoginPage> {
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (value) => {
+                              if (!_isLoading) {
+                                _submit()
+                              }
+                            },
                             autofillHints: const [AutofillHints.password],
                             decoration: _inputDecoration(
                               label: 'Mật khẩu',

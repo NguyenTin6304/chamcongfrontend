@@ -15,6 +15,10 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  final _emailFocusNode = FocusNode();
+  final _passwordFocusNode = FocusNode();
+  final _confirmPasswordFocusNode = FocusNode();
+
   final _authApi = const AuthApi();
 
   bool _isLoading = false;
@@ -28,6 +32,9 @@ class _RegisterPageState extends State<RegisterPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
+    _confirmPasswordFocusNode.dispose();
     super.dispose();
   }
 
@@ -127,6 +134,13 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
+  void _submitFromKeyboard(String _) {
+    if (_isLoading) {
+      return;
+    }
+    _submit();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -164,7 +178,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           if (_errorMessage != null) _buildErrorBanner(_errorMessage!),
                           TextFormField(
                             controller: _emailController,
+                            focusNode: _emailFocusNode,
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
                             autofillHints: const [AutofillHints.email],
                             decoration: _inputDecoration(
                               label: 'Email',
@@ -180,6 +196,9 @@ class _RegisterPageState extends State<RegisterPage> {
                               }
                               return null;
                             },
+                            onFieldSubmitted: (_) {
+                              _passwordFocusNode.requestFocus();
+                            },
                             onChanged: (_) {
                               if (_errorMessage != null) {
                                 setState(() {
@@ -191,7 +210,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           const SizedBox(height: 12),
                           TextFormField(
                             controller: _passwordController,
+                            focusNode: _passwordFocusNode,
                             obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.next,
                             autofillHints: const [AutofillHints.newPassword],
                             decoration: _inputDecoration(
                               label: 'Mật khẩu',
@@ -216,6 +237,9 @@ class _RegisterPageState extends State<RegisterPage> {
                               }
                               return null;
                             },
+                            onFieldSubmitted: (_) {
+                              _confirmPasswordFocusNode.requestFocus();
+                            },
                             onChanged: (_) {
                               if (_errorMessage != null) {
                                 setState(() {
@@ -227,7 +251,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           const SizedBox(height: 12),
                           TextFormField(
                             controller: _confirmPasswordController,
+                            focusNode: _confirmPasswordFocusNode,
                             obscureText: _obscureConfirmPassword,
+                            textInputAction: TextInputAction.done,
                             autofillHints: const [AutofillHints.newPassword],
                             decoration: _inputDecoration(
                               label: 'Nhập lại mật khẩu',
@@ -254,6 +280,7 @@ class _RegisterPageState extends State<RegisterPage> {
                               }
                               return null;
                             },
+                            onFieldSubmitted: _submitFromKeyboard,
                             onChanged: (_) {
                               if (_errorMessage != null) {
                                 setState(() {
@@ -300,4 +327,3 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 }
-
