@@ -14,6 +14,7 @@ class ActiveRuleResult {
     this.graceMinutes,
     this.endTime,
     this.checkoutGraceMinutes,
+    this.crossDayCutoffMinutes,
   });
 
   final double latitude;
@@ -23,6 +24,7 @@ class ActiveRuleResult {
   final int? graceMinutes;
   final String? endTime;
   final int? checkoutGraceMinutes;
+  final int? crossDayCutoffMinutes;
 }
 
 class EmployeeLite {
@@ -122,6 +124,7 @@ class AdminApi {
         graceMinutes: (data['grace_minutes'] as num?)?.toInt(),
         endTime: data['end_time'] as String?,
         checkoutGraceMinutes: (data['checkout_grace_minutes'] as num?)?.toInt(),
+        crossDayCutoffMinutes: (data['cross_day_cutoff_minutes'] as num?)?.toInt(),
       );
     }
 
@@ -141,6 +144,7 @@ class AdminApi {
     int? graceMinutes,
     String? endTime,
     int? checkoutGraceMinutes,
+    int? crossDayCutoffMinutes,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/rules/active');
     final body = <String, dynamic>{
@@ -160,6 +164,9 @@ class AdminApi {
     if (checkoutGraceMinutes != null) {
       body['checkout_grace_minutes'] = checkoutGraceMinutes;
     }
+    if (crossDayCutoffMinutes != null) {
+      body['cross_day_cutoff_minutes'] = crossDayCutoffMinutes;
+    }
 
     final response = await http.put(
       uri,
@@ -178,6 +185,7 @@ class AdminApi {
         graceMinutes: (data['grace_minutes'] as num?)?.toInt(),
         endTime: data['end_time'] as String?,
         checkoutGraceMinutes: (data['checkout_grace_minutes'] as num?)?.toInt(),
+        crossDayCutoffMinutes: (data['cross_day_cutoff_minutes'] as num?)?.toInt(),
       );
     }
 
@@ -703,9 +711,6 @@ class AdminApi {
     return double.tryParse(value.toString());
   }
 }
-
-
-
 
 
 

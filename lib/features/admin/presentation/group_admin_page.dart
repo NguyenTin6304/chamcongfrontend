@@ -976,25 +976,25 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                         TextField(
                           controller: _groupStartTimeController,
                           keyboardType: TextInputType.datetime,
-                          decoration: _decoration('Start time (HH:mm) - optional', Icons.schedule),
+                          decoration: _decoration('Start time (HH:mm)', Icons.schedule),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _groupGraceMinutesController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Grace minutes check-in - optional', Icons.timer_outlined),
+                          decoration: _decoration('Grace minutes check-in', Icons.timer_outlined),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _groupEndTimeController,
                           keyboardType: TextInputType.datetime,
-                          decoration: _decoration('End time (HH:mm) - optional', Icons.access_time_filled_outlined),
+                          decoration: _decoration('End time (HH:mm)', Icons.access_time_filled_outlined),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _groupCheckoutGraceController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Grace minutes check-out - optional', Icons.timer_off_outlined),
+                          decoration: _decoration('Grace minutes check-out', Icons.timer_off_outlined),
                         ),
                         const SizedBox(height: 10),
                         SizedBox(

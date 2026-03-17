@@ -32,6 +32,7 @@ class _AdminPageState extends State<AdminPage> {
   final _graceMinutesController = TextEditingController();
   final _endTimeController = TextEditingController();
   final _checkoutGraceMinutesController = TextEditingController();
+  final _cutoffMinutesController = TextEditingController();
 
   final _employeeCodeController = TextEditingController();
   final _employeeNameController = TextEditingController();
@@ -81,6 +82,7 @@ class _AdminPageState extends State<AdminPage> {
     _graceMinutesController.text = '30';
     _endTimeController.text = '17:30';
     _checkoutGraceMinutesController.text = '0';
+    _cutoffMinutesController.text = '240';
     _bootstrap();
   }
 
@@ -94,6 +96,7 @@ class _AdminPageState extends State<AdminPage> {
     _graceMinutesController.dispose();
     _endTimeController.dispose();
     _checkoutGraceMinutesController.dispose();
+    _cutoffMinutesController.dispose();
     _employeeCodeController.dispose();
     _employeeNameController.dispose();
     super.dispose();
@@ -153,11 +156,13 @@ class _AdminPageState extends State<AdminPage> {
           _graceMinutesController.text = (rule.graceMinutes ?? 30).toString();
           _endTimeController.text = (rule.endTime ?? '17:30');
           _checkoutGraceMinutesController.text = (rule.checkoutGraceMinutes ?? 0).toString();
+          _cutoffMinutesController.text = (rule.crossDayCutoffMinutes ?? 240).toString();
         } else {
           _startTimeController.text = '08:00';
           _graceMinutesController.text = '30';
           _endTimeController.text = '17:30';
           _checkoutGraceMinutesController.text = '0';
+          _cutoffMinutesController.text = '240';
         }
       });
     } catch (error) {
@@ -285,6 +290,7 @@ class _AdminPageState extends State<AdminPage> {
     final graceMinutes = int.tryParse(_graceMinutesController.text.trim());
     final endTimeRaw = _endTimeController.text.trim();
     final checkoutGraceMinutes = int.tryParse(_checkoutGraceMinutesController.text.trim());
+    final cutoffMinutes = int.tryParse(_cutoffMinutesController.text.trim());
 
     final startMatch = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(startTimeRaw);
     final startHour = startMatch == null ? null : int.tryParse(startMatch.group(1)!);
@@ -317,9 +323,12 @@ class _AdminPageState extends State<AdminPage> {
         graceMinutes < 0 ||
         !validEndTime ||
         checkoutGraceMinutes == null ||
-        checkoutGraceMinutes < 0) {
+        checkoutGraceMinutes < 0 ||
+        cutoffMinutes == null ||
+        cutoffMinutes < 0 ||
+        cutoffMinutes > 720) {
       setState(() {
-        _error = 'Dữ liệu rule không hợp lệ. Kiểm tra lat/lng/radius/start_time/end_time (HH:mm) và grace_minutes/checkout_grace_minutes.';
+        _error = 'Dữ liệu rule không hợp lệ. Kiểm tra lat/lng/radius/start_time/end_time (HH:mm), grace và cutoff (0-720 phút).';
       });
       return;
     }
@@ -340,6 +349,7 @@ class _AdminPageState extends State<AdminPage> {
         graceMinutes: graceMinutes,
         endTime: endTimeRaw,
         checkoutGraceMinutes: checkoutGraceMinutes,
+        crossDayCutoffMinutes: cutoffMinutes,
       );
 
       if (!mounted) {
@@ -356,6 +366,8 @@ class _AdminPageState extends State<AdminPage> {
         _endTimeController.text = updated.endTime ?? endTimeRaw;
         _checkoutGraceMinutesController.text =
             (updated.checkoutGraceMinutes ?? checkoutGraceMinutes).toString();
+        _cutoffMinutesController.text =
+            (updated.crossDayCutoffMinutes ?? cutoffMinutes).toString();
         _info = 'Đã cập nhật rule thành công.';
       });
     } catch (error) {
@@ -1017,6 +1029,7 @@ class _AdminPageState extends State<AdminPage> {
                           Text('Grace vào: ${_activeRule!.graceMinutes ?? '-'} phút'),
                           Text('End time: ${_activeRule!.endTime ?? '-'}'),
                           Text('Grace về: ${_activeRule!.checkoutGraceMinutes ?? '-'} phút'),
+                          Text('Cutoff: ${_activeRule!.crossDayCutoffMinutes ?? '-'} phút (từ 00:00)'),
                         ],
                       ],
                     ),
@@ -1068,6 +1081,12 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _checkoutGraceMinutesController,
                           keyboardType: TextInputType.number,
                           decoration: _decoration('Grace minutes (check-out)', Icons.timer_off_outlined),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _cutoffMinutesController,
+                          keyboardType: TextInputType.number,
+                          decoration: _decoration('Cutoff (minutes from 00:00)', Icons.nightlight_round),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -1295,28 +1314,6 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

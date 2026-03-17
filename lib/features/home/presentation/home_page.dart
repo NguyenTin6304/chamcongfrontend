@@ -316,19 +316,6 @@ class _HomePageState extends State<HomePage> {
     final vn = value.toUtc().add(_vnOffset);
     return '${_vnDateTimeFormat.format(vn)} (VN)';
   }
-
-  String _fallbackReasonLabel(String? reason) {
-    switch (reason) {
-      case 'EMPLOYEE_NOT_ASSIGNED_GROUP':
-        return 'Employee chưa gán group';
-      case 'GROUP_INACTIVE_OR_NOT_FOUND':
-        return 'Group bị tắt hoặc không tồn tại';
-      case 'NO_ACTIVE_GEOFENCE_IN_GROUP':
-        return 'Group không có geofence active';
-      default:
-        return reason ?? '-';
-    }
-  }
   String? _timingNotice(AttendanceActionResult result) {
     final type = result.type.toUpperCase();
     if (type == 'IN') {
@@ -575,9 +562,6 @@ class _HomePageState extends State<HomePage> {
     final inTime = inLog != null ? _formatTimeVn(inLog.time) : '--:--';
     final outTime = outLog != null ? _formatTimeVn(outLog.time) : '--:--';
 
-    final fallbackReason =
-        ((outLog?.fallbackReason ?? '').isNotEmpty ? outLog?.fallbackReason : inLog?.fallbackReason);
-
     final tone = _actionColor(type: outLog != null ? 'OUT' : 'IN', isOutOfRange: isOutOfRange);
 
     return Container(
@@ -604,17 +588,6 @@ class _HomePageState extends State<HomePage> {
               _buildRangeBadge(isOutOfRange: isOutOfRange, type: outLog?.type ?? inLog?.type),
             ],
           ),
-          if ((fallbackReason ?? '').isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Fallback: ${_fallbackReasonLabel(fallbackReason)}',
-              style: TextStyle(
-                color: Colors.orange.shade800,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -846,10 +819,6 @@ class _HomePageState extends State<HomePage> {
                           isOutOfRange: _lastAction?.isOutOfRange ?? false,
                           type: _lastAction?.type,
                         ),
-                        if ((_lastAction?.fallbackReason ?? '').isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text('Fallback: ${_fallbackReasonLabel(_lastAction?.fallbackReason)}'),
-                        ],
                         const SizedBox(height: 6),
                         Text('Message: ${_lastAction?.message ?? '-'}'),
                       ],
@@ -921,4 +890,6 @@ class _AttendanceDayGroup {
   final DateTime? dayDate;
   final List<_AttendancePair> items;
 }
+
+
 
