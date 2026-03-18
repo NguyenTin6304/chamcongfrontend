@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -44,11 +44,7 @@ class EmployeeLite {
 }
 
 class UserLite {
-  const UserLite({
-    required this.id,
-    required this.email,
-    required this.role,
-  });
+  const UserLite({required this.id, required this.email, required this.role});
 
   final int id;
   final String email;
@@ -98,13 +94,50 @@ class GroupGeofenceLite {
 }
 
 class ReportDownloadResult {
-  const ReportDownloadResult({
-    required this.fileName,
-    required this.bytes,
-  });
+  const ReportDownloadResult({required this.fileName, required this.bytes});
 
   final String fileName;
   final Uint8List bytes;
+}
+
+class AttendanceExceptionItem {
+  const AttendanceExceptionItem({
+    required this.id,
+    required this.employeeId,
+    required this.employeeCode,
+    required this.fullName,
+    required this.workDate,
+    required this.exceptionType,
+    required this.status,
+    required this.sourceCheckinLogId,
+    this.groupCode,
+    this.groupName,
+    this.note,
+    this.sourceCheckinTime,
+    this.actualCheckoutTime,
+    this.createdAt,
+    this.resolvedAt,
+    this.resolvedBy,
+    this.resolvedByEmail,
+  });
+
+  final int id;
+  final int employeeId;
+  final String employeeCode;
+  final String fullName;
+  final String? groupCode;
+  final String? groupName;
+  final DateTime workDate;
+  final String exceptionType;
+  final String status;
+  final String? note;
+  final int sourceCheckinLogId;
+  final DateTime? sourceCheckinTime;
+  final DateTime? actualCheckoutTime;
+  final DateTime? createdAt;
+  final DateTime? resolvedAt;
+  final int? resolvedBy;
+  final String? resolvedByEmail;
 }
 
 class AdminApi {
@@ -124,7 +157,8 @@ class AdminApi {
         graceMinutes: (data['grace_minutes'] as num?)?.toInt(),
         endTime: data['end_time'] as String?,
         checkoutGraceMinutes: (data['checkout_grace_minutes'] as num?)?.toInt(),
-        crossDayCutoffMinutes: (data['cross_day_cutoff_minutes'] as num?)?.toInt(),
+        crossDayCutoffMinutes: (data['cross_day_cutoff_minutes'] as num?)
+            ?.toInt(),
       );
     }
 
@@ -132,7 +166,12 @@ class AdminApi {
       return null;
     }
 
-    throw Exception(_extractErrorMessage(data, 'Load active rule failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load active rule failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<ActiveRuleResult> updateActiveRule({
@@ -185,11 +224,14 @@ class AdminApi {
         graceMinutes: (data['grace_minutes'] as num?)?.toInt(),
         endTime: data['end_time'] as String?,
         checkoutGraceMinutes: (data['checkout_grace_minutes'] as num?)?.toInt(),
-        crossDayCutoffMinutes: (data['cross_day_cutoff_minutes'] as num?)?.toInt(),
+        crossDayCutoffMinutes: (data['cross_day_cutoff_minutes'] as num?)
+            ?.toInt(),
       );
     }
 
-    throw Exception(_extractErrorMessage(data, 'Update rule failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(data, 'Update rule failed (${response.statusCode})'),
+    );
   }
 
   Future<List<EmployeeLite>> listEmployees(String token) async {
@@ -198,11 +240,19 @@ class AdminApi {
 
     if (response.statusCode == 200) {
       final data = _parseJsonList(response.body);
-      return data.whereType<Map<String, dynamic>>().map(_employeeFromMap).toList();
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(_employeeFromMap)
+          .toList();
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Load employees failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load employees failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<EmployeeLite> createEmployee({
@@ -230,7 +280,12 @@ class AdminApi {
       return _employeeFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Create employee failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Create employee failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<List<UserLite>> listUsers(String token, {int limit = 300}) async {
@@ -239,19 +294,19 @@ class AdminApi {
 
     if (response.statusCode == 200) {
       final data = _parseJsonList(response.body);
-      return data.whereType<Map<String, dynamic>>().map(
-        (e) {
-          return UserLite(
-            id: (e['id'] as num?)?.toInt() ?? 0,
-            email: e['email'] as String? ?? '-',
-            role: e['role'] as String? ?? 'USER',
-          );
-        },
-      ).toList();
+      return data.whereType<Map<String, dynamic>>().map((e) {
+        return UserLite(
+          id: (e['id'] as num?)?.toInt() ?? 0,
+          email: e['email'] as String? ?? '-',
+          role: e['role'] as String? ?? 'USER',
+        );
+      }).toList();
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Load users failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(data, 'Load users failed (${response.statusCode})'),
+    );
   }
 
   Future<EmployeeLite> assignEmployeeUser({
@@ -259,7 +314,9 @@ class AdminApi {
     required int employeeId,
     required int? userId,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees/$employeeId/assign-user');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/employees/$employeeId/assign-user',
+    );
     final response = await http.put(
       uri,
       headers: _authHeaders(token),
@@ -272,7 +329,9 @@ class AdminApi {
       return _employeeFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Assign user failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(data, 'Assign user failed (${response.statusCode})'),
+    );
   }
 
   Future<EmployeeLite> assignEmployeeGroup({
@@ -280,7 +339,9 @@ class AdminApi {
     required int employeeId,
     required int? groupId,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees/$employeeId/assign-group');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/employees/$employeeId/assign-group',
+    );
     final response = await http.put(
       uri,
       headers: _authHeaders(token),
@@ -293,8 +354,14 @@ class AdminApi {
       return _employeeFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Assign group failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Assign group failed (${response.statusCode})',
+      ),
+    );
   }
+
   Future<void> deleteEmployee({
     required String token,
     required int employeeId,
@@ -307,10 +374,18 @@ class AdminApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Delete employee failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Delete employee failed (${response.statusCode})',
+      ),
+    );
   }
 
-  Future<List<GroupLite>> listGroups(String token, {bool activeOnly = false}) async {
+  Future<List<GroupLite>> listGroups(
+    String token, {
+    bool activeOnly = false,
+  }) async {
     final query = activeOnly ? '?active_only=true' : '';
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/groups$query');
     final response = await http.get(uri, headers: _authHeaders(token));
@@ -321,7 +396,9 @@ class AdminApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Load groups failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(data, 'Load groups failed (${response.statusCode})'),
+    );
   }
 
   Future<GroupLite> createGroup({
@@ -365,7 +442,12 @@ class AdminApi {
       return _groupFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Create group failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Create group failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<GroupLite> updateGroup({
@@ -431,8 +513,14 @@ class AdminApi {
       return _groupFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Update group failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Update group failed (${response.statusCode})',
+      ),
+    );
   }
+
   Future<void> deleteGroup({
     required String token,
     required int groupId,
@@ -445,24 +533,40 @@ class AdminApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Delete group failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Delete group failed (${response.statusCode})',
+      ),
+    );
   }
+
   Future<List<GroupGeofenceLite>> listGroupGeofences({
     required String token,
     required int groupId,
     bool activeOnly = false,
   }) async {
     final query = activeOnly ? '?active_only=true' : '';
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/groups/$groupId/geofences$query');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/groups/$groupId/geofences$query',
+    );
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
       final data = _parseJsonList(response.body);
-      return data.whereType<Map<String, dynamic>>().map(_groupGeofenceFromMap).toList();
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(_groupGeofenceFromMap)
+          .toList();
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Load geofences failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load geofences failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<GroupGeofenceLite> createGroupGeofence({
@@ -493,7 +597,12 @@ class AdminApi {
       return _groupGeofenceFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Create geofence failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Create geofence failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<GroupGeofenceLite> updateGroupGeofence({
@@ -506,7 +615,9 @@ class AdminApi {
     int? radiusM,
     bool? active,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/groups/$groupId/geofences/$geofenceId');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/groups/$groupId/geofences/$geofenceId',
+    );
     final body = <String, dynamic>{};
     if (name != null) {
       body['name'] = name;
@@ -536,7 +647,12 @@ class AdminApi {
       return _groupGeofenceFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Update geofence failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Update geofence failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<void> deleteGroupGeofence({
@@ -544,7 +660,9 @@ class AdminApi {
     required int groupId,
     required int geofenceId,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/groups/$groupId/geofences/$geofenceId');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/groups/$groupId/geofences/$geofenceId',
+    );
     final response = await http.delete(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200 || response.statusCode == 204) {
@@ -552,7 +670,12 @@ class AdminApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Delete geofence failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Delete geofence failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<ReportDownloadResult> downloadAttendanceReport({
@@ -580,19 +703,146 @@ class AdminApi {
       query['include_empty'] = 'true';
     }
 
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance.xlsx')
-        .replace(queryParameters: query.isEmpty ? null : query);
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance.xlsx',
+    ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
       final disposition = response.headers['content-disposition'];
-      final fileName = _extractFilenameFromDisposition(disposition) ?? 'attendance_report.xlsx';
-      return ReportDownloadResult(fileName: fileName, bytes: response.bodyBytes);
+      final fileName =
+          _extractFilenameFromDisposition(disposition) ??
+          'attendance_report.xlsx';
+      return ReportDownloadResult(
+        fileName: fileName,
+        bytes: response.bodyBytes,
+      );
     }
 
     final bodyText = utf8.decode(response.bodyBytes, allowMalformed: true);
     final data = _parseJsonMap(bodyText);
-    throw Exception(_extractErrorMessage(data, 'Export report failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Export report failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<List<AttendanceExceptionItem>> listAttendanceExceptions({
+    required String token,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int? employeeId,
+    int? groupId,
+    String exceptionType = 'MISSED_CHECKOUT',
+    String? statusFilter,
+  }) async {
+    final query = <String, String>{'exception_type': exceptionType};
+    if (fromDate != null) {
+      query['from'] = _formatDateOnly(fromDate);
+    }
+    if (toDate != null) {
+      query['to'] = _formatDateOnly(toDate);
+    }
+    if (employeeId != null) {
+      query['employee_id'] = employeeId.toString();
+    }
+    if (groupId != null) {
+      query['group_id'] = groupId.toString();
+    }
+    if (statusFilter != null && statusFilter.isNotEmpty) {
+      query['status'] = statusFilter;
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders(token));
+
+    if (response.statusCode == 200) {
+      final data = _parseJsonList(response.body);
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(_attendanceExceptionFromMap)
+          .toList(growable: false);
+    }
+
+    final data = _parseJsonMap(response.body);
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load attendance exceptions failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> resolveAttendanceException({
+    required String token,
+    required int exceptionId,
+    String? note,
+    DateTime? actualCheckoutTime,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/resolve',
+    );
+    final body = <String, dynamic>{};
+    if (note != null && note.trim().isNotEmpty) {
+      body['note'] = note.trim();
+    }
+    if (actualCheckoutTime != null) {
+      body['actual_checkout_time'] = actualCheckoutTime.toIso8601String();
+    }
+
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+
+    final data = _parseJsonMap(response.body);
+    if (response.statusCode == 200) {
+      return _attendanceExceptionFromMap(data);
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Resolve attendance exception failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> reopenAttendanceException({
+    required String token,
+    required int exceptionId,
+    String? note,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/reopen',
+    );
+    final body = <String, dynamic>{};
+    if (note != null && note.trim().isNotEmpty) {
+      body['note'] = note.trim();
+    }
+
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+
+    final data = _parseJsonMap(response.body);
+    if (response.statusCode == 200) {
+      return _attendanceExceptionFromMap(data);
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Reopen attendance exception failed (${response.statusCode})',
+      ),
+    );
   }
 
   EmployeeLite _employeeFromMap(Map<String, dynamic> e) {
@@ -630,6 +880,30 @@ class AdminApi {
     );
   }
 
+  AttendanceExceptionItem _attendanceExceptionFromMap(Map<String, dynamic> e) {
+    final workDateRaw = e['work_date']?.toString() ?? '';
+    final workDate = DateTime.tryParse(workDateRaw) ?? DateTime(1970, 1, 1);
+    return AttendanceExceptionItem(
+      id: _toInt(e['id']) ?? 0,
+      employeeId: _toInt(e['employee_id']) ?? 0,
+      employeeCode: e['employee_code'] as String? ?? '-',
+      fullName: e['full_name'] as String? ?? '-',
+      groupCode: e['group_code'] as String?,
+      groupName: e['group_name'] as String?,
+      workDate: workDate,
+      exceptionType: e['exception_type'] as String? ?? '-',
+      status: e['status'] as String? ?? '-',
+      note: e['note'] as String?,
+      sourceCheckinLogId: _toInt(e['source_checkin_log_id']) ?? 0,
+      sourceCheckinTime: _toDateTime(e['source_checkin_time']),
+      actualCheckoutTime: _toDateTime(e['actual_checkout_time']),
+      createdAt: _toDateTime(e['created_at']),
+      resolvedAt: _toDateTime(e['resolved_at']),
+      resolvedBy: _toInt(e['resolved_by']),
+      resolvedByEmail: e['resolved_by_email'] as String?,
+    );
+  }
+
   Map<String, String> _authHeaders(String token) {
     return {
       'Content-Type': 'application/json',
@@ -649,14 +923,18 @@ class AdminApi {
       return null;
     }
 
-    final utf8Match = RegExp(r"filename\*=UTF-8''([^;]+)", caseSensitive: false)
-        .firstMatch(disposition);
+    final utf8Match = RegExp(
+      r"filename\*=UTF-8''([^;]+)",
+      caseSensitive: false,
+    ).firstMatch(disposition);
     if (utf8Match != null) {
       return Uri.decodeComponent(utf8Match.group(1)!);
     }
 
-    final normalMatch = RegExp(r'filename="?([^";]+)"?', caseSensitive: false)
-        .firstMatch(disposition);
+    final normalMatch = RegExp(
+      r'filename="?([^";]+)"?',
+      caseSensitive: false,
+    ).firstMatch(disposition);
     if (normalMatch != null) {
       return normalMatch.group(1);
     }
@@ -710,13 +988,24 @@ class AdminApi {
     }
     return double.tryParse(value.toString());
   }
+
+  int? _toInt(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value.toString());
+  }
+
+  DateTime? _toDateTime(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    return DateTime.tryParse(value.toString());
+  }
 }
-
-
-
-
-
-
-
-
-

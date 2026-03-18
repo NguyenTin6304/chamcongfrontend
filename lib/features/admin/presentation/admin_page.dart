@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -8,10 +8,7 @@ import '../data/admin_api.dart';
 import 'group_admin_page.dart';
 
 class AdminPage extends StatefulWidget {
-  const AdminPage({
-    required this.email,
-    super.key,
-  });
+  const AdminPage({required this.email, super.key});
 
   final String email;
 
@@ -49,10 +46,12 @@ class _AdminPageState extends State<AdminPage> {
   bool _loadingUsers = false;
   bool _creatingEmployee = false;
   bool _downloadingReport = false;
+  bool _loadingExceptions = false;
 
   ActiveRuleResult? _activeRule;
   List<EmployeeLite> _employees = const [];
   List<UserLite> _users = const [];
+  List<AttendanceExceptionItem> _exceptions = const [];
 
   int? _newEmployeeUserId;
   int? _expandedEmployeeId;
@@ -60,6 +59,10 @@ class _AdminPageState extends State<AdminPage> {
   DateTime? _reportToDate;
   int? _reportEmployeeId;
   bool _reportIncludeEmpty = false;
+
+  String _exceptionTypeFilter = 'MISSED_CHECKOUT';
+  String? _exceptionStatusFilter = 'OPEN';
+  final Set<int> _updatingExceptionIds = {};
 
   String? _error;
   String? _info;
@@ -71,9 +74,10 @@ class _AdminPageState extends State<AdminPage> {
       _loadingUsers ||
       _creatingEmployee ||
       _downloadingReport ||
+      _loadingExceptions ||
       _assigningEmployeeIds.isNotEmpty ||
-      _deletingEmployeeIds.isNotEmpty;
-
+      _deletingEmployeeIds.isNotEmpty ||
+      _updatingExceptionIds.isNotEmpty;
 
   @override
   void initState() {
@@ -126,6 +130,7 @@ class _AdminPageState extends State<AdminPage> {
     await _loadActiveRule();
     await _loadUsers();
     await _loadEmployees();
+    await _loadExceptions();
   }
 
   Future<void> _loadActiveRule() async {
@@ -155,8 +160,10 @@ class _AdminPageState extends State<AdminPage> {
           _startTimeController.text = (rule.startTime ?? '08:00');
           _graceMinutesController.text = (rule.graceMinutes ?? 30).toString();
           _endTimeController.text = (rule.endTime ?? '17:30');
-          _checkoutGraceMinutesController.text = (rule.checkoutGraceMinutes ?? 0).toString();
-          _cutoffMinutesController.text = (rule.crossDayCutoffMinutes ?? 240).toString();
+          _checkoutGraceMinutesController.text =
+              (rule.checkoutGraceMinutes ?? 0).toString();
+          _cutoffMinutesController.text = (rule.crossDayCutoffMinutes ?? 240)
+              .toString();
         } else {
           _startTimeController.text = '08:00';
           _graceMinutesController.text = '30';
@@ -200,7 +207,8 @@ class _AdminPageState extends State<AdminPage> {
 
       setState(() {
         _users = users;
-        if (_newEmployeeUserId != null && !_users.any((u) => u.id == _newEmployeeUserId)) {
+        if (_newEmployeeUserId != null &&
+            !_users.any((u) => u.id == _newEmployeeUserId)) {
           _newEmployeeUserId = null;
         }
       });
@@ -222,7 +230,9 @@ class _AdminPageState extends State<AdminPage> {
 
   void _syncSelectedUsers(List<EmployeeLite> employees) {
     final ids = employees.map((e) => e.id).toSet();
-    final removed = _selectedUserByEmployee.keys.where((id) => !ids.contains(id)).toList();
+    final removed = _selectedUserByEmployee.keys
+        .where((id) => !ids.contains(id))
+        .toList();
     for (final id in removed) {
       _selectedUserByEmployee.remove(id);
     }
@@ -251,10 +261,12 @@ class _AdminPageState extends State<AdminPage> {
       setState(() {
         _employees = employees;
         _syncSelectedUsers(employees);
-        if (_reportEmployeeId != null && !_employees.any((e) => e.id == _reportEmployeeId)) {
+        if (_reportEmployeeId != null &&
+            !_employees.any((e) => e.id == _reportEmployeeId)) {
           _reportEmployeeId = null;
         }
-        if (_expandedEmployeeId != null && !_employees.any((e) => e.id == _expandedEmployeeId)) {
+        if (_expandedEmployeeId != null &&
+            !_employees.any((e) => e.id == _expandedEmployeeId)) {
           _expandedEmployeeId = null;
         }
       });
@@ -289,12 +301,18 @@ class _AdminPageState extends State<AdminPage> {
     final startTimeRaw = _startTimeController.text.trim();
     final graceMinutes = int.tryParse(_graceMinutesController.text.trim());
     final endTimeRaw = _endTimeController.text.trim();
-    final checkoutGraceMinutes = int.tryParse(_checkoutGraceMinutesController.text.trim());
+    final checkoutGraceMinutes = int.tryParse(
+      _checkoutGraceMinutesController.text.trim(),
+    );
     final cutoffMinutes = int.tryParse(_cutoffMinutesController.text.trim());
 
     final startMatch = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(startTimeRaw);
-    final startHour = startMatch == null ? null : int.tryParse(startMatch.group(1)!);
-    final startMinute = startMatch == null ? null : int.tryParse(startMatch.group(2)!);
+    final startHour = startMatch == null
+        ? null
+        : int.tryParse(startMatch.group(1)!);
+    final startMinute = startMatch == null
+        ? null
+        : int.tryParse(startMatch.group(2)!);
     final validStartTime =
         startHour != null &&
         startMinute != null &&
@@ -305,7 +323,9 @@ class _AdminPageState extends State<AdminPage> {
 
     final endMatch = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(endTimeRaw);
     final endHour = endMatch == null ? null : int.tryParse(endMatch.group(1)!);
-    final endMinute = endMatch == null ? null : int.tryParse(endMatch.group(2)!);
+    final endMinute = endMatch == null
+        ? null
+        : int.tryParse(endMatch.group(2)!);
     final validEndTime =
         endHour != null &&
         endMinute != null &&
@@ -328,7 +348,8 @@ class _AdminPageState extends State<AdminPage> {
         cutoffMinutes < 0 ||
         cutoffMinutes > 720) {
       setState(() {
-        _error = 'Dữ liệu rule không hợp lệ. Kiểm tra lat/lng/radius/start_time/end_time (HH:mm), grace và cutoff (0-720 phút).';
+        _error =
+            'Dữ liệu rule không hợp lệ. Kiểm tra lat/lng/radius/start_time/end_time (HH:mm), grace và cutoff (0-720 phút).';
       });
       return;
     }
@@ -362,7 +383,8 @@ class _AdminPageState extends State<AdminPage> {
         _lngController.text = updated.longitude.toStringAsFixed(6);
         _radiusController.text = updated.radiusM.toString();
         _startTimeController.text = updated.startTime ?? startTimeRaw;
-        _graceMinutesController.text = (updated.graceMinutes ?? graceMinutes).toString();
+        _graceMinutesController.text = (updated.graceMinutes ?? graceMinutes)
+            .toString();
         _endTimeController.text = updated.endTime ?? endTimeRaw;
         _checkoutGraceMinutesController.text =
             (updated.checkoutGraceMinutes ?? checkoutGraceMinutes).toString();
@@ -387,8 +409,13 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<UserLite> _unassignedUsers() {
-    final assignedIds = _employees.map((e) => e.userId).whereType<int>().toSet();
-    return _users.where((u) => !assignedIds.contains(u.id)).toList(growable: false);
+    final assignedIds = _employees
+        .map((e) => e.userId)
+        .whereType<int>()
+        .toSet();
+    return _users
+        .where((u) => !assignedIds.contains(u.id))
+        .toList(growable: false);
   }
 
   List<DropdownMenuItem<int?>> _createEmployeeUserItems() {
@@ -482,7 +509,7 @@ class _AdminPageState extends State<AdminPage> {
             ? 'Đã tạo employee ${created.code}.'
             : 'Đã tạo employee ${created.code} và gán user_id=${created.userId}.';
       });
-      
+
       await _loadUsers();
       await _loadEmployees();
     } catch (error) {
@@ -501,7 +528,10 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _assignEmployee(EmployeeLite employee, {int? overrideUserId}) async {
+  Future<void> _assignEmployee(
+    EmployeeLite employee, {
+    int? overrideUserId,
+  }) async {
     final token = _token;
     if (token == null || token.isEmpty) {
       setState(() {
@@ -530,13 +560,15 @@ class _AdminPageState extends State<AdminPage> {
       }
 
       setState(() {
-        _employees = _employees.map((e) => e.id == updated.id ? updated : e).toList(growable: false);
+        _employees = _employees
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList(growable: false);
         _selectedUserByEmployee[updated.id] = updated.userId;
         _info = updated.userId == null
             ? 'Đã bỏ gán user khỏi ${updated.code}.'
             : 'Đã gán user_id=${updated.userId} cho ${updated.code}.';
       });
-      
+
       await _loadUsers();
     } catch (error) {
       if (!mounted) {
@@ -607,7 +639,9 @@ class _AdminPageState extends State<AdminPage> {
       }
 
       setState(() {
-        _employees = _employees.where((x) => x.id != employee.id).toList(growable: false);
+        _employees = _employees
+            .where((x) => x.id != employee.id)
+            .toList(growable: false);
         _selectedUserByEmployee.remove(employee.id);
         if (_reportEmployeeId == employee.id) {
           _reportEmployeeId = null;
@@ -645,7 +679,9 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   Future<void> _pickReportDate({required bool isFrom}) async {
-    final initial = isFrom ? (_reportFromDate ?? DateTime.now()) : (_reportToDate ?? DateTime.now());
+    final initial = isFrom
+        ? (_reportFromDate ?? DateTime.now())
+        : (_reportToDate ?? DateTime.now());
 
     final picked = await showDatePicker(
       context: context,
@@ -676,7 +712,9 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    if (_reportFromDate != null && _reportToDate != null && _reportFromDate!.isAfter(_reportToDate!)) {
+    if (_reportFromDate != null &&
+        _reportToDate != null &&
+        _reportFromDate!.isAfter(_reportToDate!)) {
       setState(() {
         _error = 'Khoảng ngày không hợp lệ: from phải <= to.';
       });
@@ -698,7 +736,10 @@ class _AdminPageState extends State<AdminPage> {
         includeEmpty: _reportIncludeEmpty,
       );
 
-      final savedPath = await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
+      final savedPath = await saveBytesAsFile(
+        bytes: report.bytes,
+        fileName: report.fileName,
+      );
 
       if (!mounted) {
         return;
@@ -723,6 +764,305 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  Future<void> _loadExceptions() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _loadingExceptions = true;
+      _error = null;
+    });
+
+    try {
+      final items = await _adminApi.listAttendanceExceptions(
+        token: token,
+        exceptionType: _exceptionTypeFilter,
+        statusFilter: _exceptionStatusFilter,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _exceptions = items;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = 'Tải danh sách exception thất bại: $error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingExceptions = false;
+        });
+      }
+    }
+  }
+
+  DateTime? _parseExceptionDateTimeInput(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final match = RegExp(
+      r'^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$',
+    ).firstMatch(value);
+    if (match == null) {
+      return null;
+    }
+
+    final year = int.tryParse(match.group(1)!);
+    final month = int.tryParse(match.group(2)!);
+    final day = int.tryParse(match.group(3)!);
+    final hour = int.tryParse(match.group(4)!);
+    final minute = int.tryParse(match.group(5)!);
+    if (year == null ||
+        month == null ||
+        day == null ||
+        hour == null ||
+        minute == null) {
+      return null;
+    }
+
+    return DateTime(year, month, day, hour, minute);
+  }
+
+  String _formatExceptionDateTime(DateTime? value) {
+    if (value == null) {
+      return '-';
+    }
+    return DateFormat('dd/MM/yyyy HH:mm').format(value.toLocal());
+  }
+
+  Future<void> _resolveException(AttendanceExceptionItem item) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'Thiếu token đăng nhập. Hãy đăng nhập lại.';
+      });
+      return;
+    }
+
+    final noteController = TextEditingController(text: item.note ?? '');
+    final timeController = TextEditingController(
+      text: item.actualCheckoutTime == null
+          ? ''
+          : DateFormat(
+              'yyyy-MM-dd HH:mm',
+            ).format(item.actualCheckoutTime!.toLocal()),
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Resolve exception'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${item.employeeCode} - ${item.fullName} | ${_dateFormat.format(item.workDate)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: timeController,
+                  decoration: _decoration(
+                    'Giờ checkout thực tế (yyyy-MM-dd HH:mm, optional)',
+                    Icons.access_time,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: noteController,
+                  maxLines: 3,
+                  decoration: _decoration(
+                    'Ghi chú xử lý (optional)',
+                    Icons.note_alt_outlined,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Resolve'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      noteController.dispose();
+      timeController.dispose();
+      return;
+    }
+
+    final rawTime = timeController.text.trim();
+    final parsedLocal = _parseExceptionDateTimeInput(rawTime);
+    if (rawTime.isNotEmpty && parsedLocal == null) {
+      noteController.dispose();
+      timeController.dispose();
+      _showSnack('Sai định dạng thời gian. Dùng yyyy-MM-dd HH:mm');
+      return;
+    }
+
+    setState(() {
+      _updatingExceptionIds.add(item.id);
+      _error = null;
+      _info = null;
+    });
+
+    try {
+      final updated = await _adminApi.resolveAttendanceException(
+        token: token,
+        exceptionId: item.id,
+        note: noteController.text.trim().isEmpty
+            ? null
+            : noteController.text.trim(),
+        actualCheckoutTime: parsedLocal?.toUtc(),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _exceptions = _exceptions
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList(growable: false);
+        _info = 'Đã resolve exception #${updated.id}.';
+      });
+      await _loadExceptions();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = 'Resolve exception thất bại: $error';
+      });
+    } finally {
+      noteController.dispose();
+      timeController.dispose();
+      if (mounted) {
+        setState(() {
+          _updatingExceptionIds.remove(item.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _reopenException(AttendanceExceptionItem item) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'Thiếu token đăng nhập. Hãy đăng nhập lại.';
+      });
+      return;
+    }
+
+    final noteController = TextEditingController(text: item.note ?? '');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Reopen exception'),
+          content: SizedBox(
+            width: 500,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${item.employeeCode} - ${item.fullName} | ${_dateFormat.format(item.workDate)}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: noteController,
+                  maxLines: 3,
+                  decoration: _decoration(
+                    'Ghi chú reopen (optional)',
+                    Icons.note_alt_outlined,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Hủy'),
+            ),
+            FilledButton.tonal(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Reopen'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      noteController.dispose();
+      return;
+    }
+
+    setState(() {
+      _updatingExceptionIds.add(item.id);
+      _error = null;
+      _info = null;
+    });
+
+    try {
+      final updated = await _adminApi.reopenAttendanceException(
+        token: token,
+        exceptionId: item.id,
+        note: noteController.text.trim().isEmpty
+            ? null
+            : noteController.text.trim(),
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _exceptions = _exceptions
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList(growable: false);
+        _info = 'Đã reopen exception #${updated.id}.';
+      });
+      await _loadExceptions();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = 'Reopen exception thất bại: $error';
+      });
+    } finally {
+      noteController.dispose();
+      if (mounted) {
+        setState(() {
+          _updatingExceptionIds.remove(item.id);
+        });
+      }
+    }
+  }
+
   Future<void> _logout() async {
     await _tokenStorage.clearToken();
     if (!mounted) {
@@ -731,12 +1071,14 @@ class _AdminPageState extends State<AdminPage> {
 
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
+
   void _showSnack(String text) {
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
+
   Future<void> _openGroupAdmin() async {
     final token = _token;
     if (token == null || token.isEmpty) {
@@ -746,9 +1088,9 @@ class _AdminPageState extends State<AdminPage> {
       return;
     }
 
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GroupAdminPage(token: token)),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => GroupAdminPage(token: token)));
 
     if (!mounted) {
       return;
@@ -757,6 +1099,7 @@ class _AdminPageState extends State<AdminPage> {
     await _loadEmployees();
     await _loadUsers();
   }
+
   Widget _buildBanner({required String text, required bool isError}) {
     final color = isError ? Colors.red : Colors.blue;
     final icon = isError ? Icons.error_outline : Icons.info_outline;
@@ -815,10 +1158,7 @@ class _AdminPageState extends State<AdminPage> {
 
   List<DropdownMenuItem<int?>> _userItemsForEmployee(EmployeeLite employee) {
     final items = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(
-        value: null,
-        child: Text('Không gán user'),
-      ),
+      const DropdownMenuItem<int?>(value: null, child: Text('Không gán user')),
     ];
 
     for (final u in _users) {
@@ -879,7 +1219,9 @@ class _AdminPageState extends State<AdminPage> {
                       children: [
                         Text('${e.code} - ${e.fullName}'),
                         Text(
-                          e.userId == null ? 'Chưa gán user' : 'user_id hiện tại=${e.userId}',
+                          e.userId == null
+                              ? 'Chưa gán user'
+                              : 'user_id hiện tại=${e.userId}',
                           style: TextStyle(color: Colors.grey.shade700),
                         ),
                       ],
@@ -915,7 +1257,10 @@ class _AdminPageState extends State<AdminPage> {
                         ? const SizedBox(
                             width: 14,
                             height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.link),
                     label: const Text('Lưu gán'),
@@ -950,6 +1295,93 @@ class _AdminPageState extends State<AdminPage> {
       ),
     );
   }
+
+  Widget _buildExceptionRow(AttendanceExceptionItem e) {
+    final busy = _updatingExceptionIds.contains(e.id);
+    final statusColor = e.status == 'OPEN' ? Colors.orange : Colors.green;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${e.employeeCode} - ${e.fullName}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Chip(
+                label: Text(e.status),
+                labelStyle: TextStyle(color: statusColor),
+                backgroundColor: statusColor.withValues(alpha: 0.1),
+                side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Ngày công: ${_dateFormat.format(e.workDate)} | Type: ${e.exceptionType}',
+          ),
+          Text(
+            'Check-in gốc: ${_formatExceptionDateTime(e.sourceCheckinTime)}',
+          ),
+          Text(
+            'Checkout thực tế: ${_formatExceptionDateTime(e.actualCheckoutTime)}',
+          ),
+          if (e.resolvedAt != null)
+            Text(
+              'Resolved: ${_formatExceptionDateTime(e.resolvedAt)}'
+              '${e.resolvedByEmail == null ? '' : ' bởi ${e.resolvedByEmail}'}',
+            ),
+          if (e.note != null && e.note!.trim().isNotEmpty)
+            Text('Note: ${e.note}'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (e.status == 'OPEN')
+                FilledButton.icon(
+                  onPressed: busy ? null : () => _resolveException(e),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.task_alt),
+                  label: const Text('Resolve'),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: busy ? null : () => _reopenException(e),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.undo),
+                  label: const Text('Reopen'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1016,20 +1448,33 @@ class _AdminPageState extends State<AdminPage> {
                       children: [
                         const Text(
                           'Rule hiện tại',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         if (_activeRule == null)
                           const Text('Chưa có active rule')
                         else ...[
-                          Text('Latitude: ${_activeRule!.latitude.toStringAsFixed(6)}'),
-                          Text('Longitude: ${_activeRule!.longitude.toStringAsFixed(6)}'),
+                          Text(
+                            'Latitude: ${_activeRule!.latitude.toStringAsFixed(6)}',
+                          ),
+                          Text(
+                            'Longitude: ${_activeRule!.longitude.toStringAsFixed(6)}',
+                          ),
                           Text('Radius: ${_activeRule!.radiusM} m'),
                           Text('Start time: ${_activeRule!.startTime ?? '-'}'),
-                          Text('Grace vào: ${_activeRule!.graceMinutes ?? '-'} phút'),
+                          Text(
+                            'Grace vào: ${_activeRule!.graceMinutes ?? '-'} phút',
+                          ),
                           Text('End time: ${_activeRule!.endTime ?? '-'}'),
-                          Text('Grace về: ${_activeRule!.checkoutGraceMinutes ?? '-'} phút'),
-                          Text('Cutoff: ${_activeRule!.crossDayCutoffMinutes ?? '-'} phút (từ 00:00)'),
+                          Text(
+                            'Grace về: ${_activeRule!.checkoutGraceMinutes ?? '-'} phút',
+                          ),
+                          Text(
+                            'Cutoff: ${_activeRule!.crossDayCutoffMinutes ?? '-'} phút (từ 00:00)',
+                          ),
                         ],
                       ],
                     ),
@@ -1043,50 +1488,77 @@ class _AdminPageState extends State<AdminPage> {
                       children: [
                         TextField(
                           controller: _latController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: true,
+                          ),
                           decoration: _decoration('Latitude', Icons.place),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _lngController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                          decoration: _decoration('Longitude', Icons.place_outlined),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: true,
+                          ),
+                          decoration: _decoration(
+                            'Longitude',
+                            Icons.place_outlined,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _radiusController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Radius (m)', Icons.straighten),
+                          decoration: _decoration(
+                            'Radius (m)',
+                            Icons.straighten,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _startTimeController,
                           keyboardType: TextInputType.datetime,
-                          decoration: _decoration('Start time (HH:mm)', Icons.schedule),
+                          decoration: _decoration(
+                            'Start time (HH:mm)',
+                            Icons.schedule,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _graceMinutesController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Grace minutes (check-in)', Icons.timer_outlined),
+                          decoration: _decoration(
+                            'Grace minutes (check-in)',
+                            Icons.timer_outlined,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _endTimeController,
                           keyboardType: TextInputType.datetime,
-                          decoration: _decoration('End time (HH:mm)', Icons.access_time_filled_outlined),
+                          decoration: _decoration(
+                            'End time (HH:mm)',
+                            Icons.access_time_filled_outlined,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _checkoutGraceMinutesController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Grace minutes (check-out)', Icons.timer_off_outlined),
+                          decoration: _decoration(
+                            'Grace minutes (check-out)',
+                            Icons.timer_off_outlined,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _cutoffMinutesController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Cutoff (minutes from 00:00)', Icons.nightlight_round),
+                          decoration: _decoration(
+                            'Cutoff (minutes from 00:00)',
+                            Icons.nightlight_round,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
@@ -1098,10 +1570,15 @@ class _AdminPageState extends State<AdminPage> {
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
                                 : const Icon(Icons.save),
-                            label: Text(_savingRule ? 'Đang lưu...' : 'Cập nhật Rule'),
+                            label: Text(
+                              _savingRule ? 'Đang lưu...' : 'Cập nhật Rule',
+                            ),
                           ),
                         ),
                       ],
@@ -1117,7 +1594,10 @@ class _AdminPageState extends State<AdminPage> {
                       children: [
                         const Text(
                           'Xuất Excel chấm công',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -1125,14 +1605,22 @@ class _AdminPageState extends State<AdminPage> {
                           runSpacing: 10,
                           children: [
                             OutlinedButton.icon(
-                              onPressed: _downloadingReport ? null : () => _pickReportDate(isFrom: true),
+                              onPressed: _downloadingReport
+                                  ? null
+                                  : () => _pickReportDate(isFrom: true),
                               icon: const Icon(Icons.event),
-                              label: Text('Từ ngày: ${_dateLabel(_reportFromDate)}'),
+                              label: Text(
+                                'Từ ngày: ${_dateLabel(_reportFromDate)}',
+                              ),
                             ),
                             OutlinedButton.icon(
-                              onPressed: _downloadingReport ? null : () => _pickReportDate(isFrom: false),
+                              onPressed: _downloadingReport
+                                  ? null
+                                  : () => _pickReportDate(isFrom: false),
                               icon: const Icon(Icons.event_available),
-                              label: Text('Đến ngày: ${_dateLabel(_reportToDate)}'),
+                              label: Text(
+                                'Đến ngày: ${_dateLabel(_reportToDate)}',
+                              ),
                             ),
                             OutlinedButton.icon(
                               onPressed: _downloadingReport
@@ -1152,7 +1640,10 @@ class _AdminPageState extends State<AdminPage> {
                         DropdownButtonFormField<int?>(
                           initialValue: _reportEmployeeId,
                           isExpanded: true,
-                          decoration: _decoration('Lọc theo nhân viên (optional)', Icons.groups_2_outlined),
+                          decoration: _decoration(
+                            'Lọc theo nhân viên (optional)',
+                            Icons.groups_2_outlined,
+                          ),
                           items: _employeeReportItems(),
                           onChanged: _downloadingReport
                               ? null
@@ -1173,7 +1664,9 @@ class _AdminPageState extends State<AdminPage> {
                                     _reportIncludeEmpty = value ?? false;
                                   });
                                 },
-                          title: const Text('include_empty (xuất file dù không có dữ liệu)'),
+                          title: const Text(
+                            'include_empty (xuất file dù không có dữ liệu)',
+                          ),
                           controlAffinity: ListTileControlAffinity.leading,
                         ),
                         const SizedBox(height: 8),
@@ -1181,15 +1674,24 @@ class _AdminPageState extends State<AdminPage> {
                           width: double.infinity,
                           height: 44,
                           child: FilledButton.icon(
-                            onPressed: _downloadingReport ? null : _downloadReport,
+                            onPressed: _downloadingReport
+                                ? null
+                                : _downloadReport,
                             icon: _downloadingReport
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
                                 : const Icon(Icons.download),
-                            label: Text(_downloadingReport ? 'Đang tải file...' : 'Tải Excel'),
+                            label: Text(
+                              _downloadingReport
+                                  ? 'Đang tải file...'
+                                  : 'Tải Excel',
+                            ),
                           ),
                         ),
                       ],
@@ -1207,8 +1709,137 @@ class _AdminPageState extends State<AdminPage> {
                           children: [
                             const Expanded(
                               child: Text(
+                                'Quản trị exception chấm công',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Text('${_exceptions.length} bản ghi'),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: _loadingExceptions
+                                  ? null
+                                  : _loadExceptions,
+                              icon: _loadingExceptions
+                                  ? const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.refresh, size: 16),
+                              label: const Text('Tải exception'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            SizedBox(
+                              width: 240,
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _exceptionTypeFilter,
+                                decoration: _decoration(
+                                  'Loại exception',
+                                  Icons.category_outlined,
+                                ),
+                                items: const [
+                                  DropdownMenuItem<String>(
+                                    value: 'MISSED_CHECKOUT',
+                                    child: Text('MISSED_CHECKOUT'),
+                                  ),
+                                  DropdownMenuItem<String>(
+                                    value: 'AUTO_CLOSED',
+                                    child: Text('AUTO_CLOSED'),
+                                  ),
+                                ],
+                                onChanged: _loadingExceptions
+                                    ? null
+                                    : (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        setState(() {
+                                          _exceptionTypeFilter = value;
+                                        });
+                                      },
+                              ),
+                            ),
+                            SizedBox(
+                              width: 220,
+                              child: DropdownButtonFormField<String?>(
+                                initialValue: _exceptionStatusFilter,
+                                decoration: _decoration(
+                                  'Trạng thái',
+                                  Icons.rule_outlined,
+                                ),
+                                items: const [
+                                  DropdownMenuItem<String?>(
+                                    value: 'OPEN',
+                                    child: Text('OPEN'),
+                                  ),
+                                  DropdownMenuItem<String?>(
+                                    value: 'RESOLVED',
+                                    child: Text('RESOLVED'),
+                                  ),
+                                  DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('Tất cả'),
+                                  ),
+                                ],
+                                onChanged: _loadingExceptions
+                                    ? null
+                                    : (value) {
+                                        setState(() {
+                                          _exceptionStatusFilter = value;
+                                        });
+                                      },
+                              ),
+                            ),
+                            FilledButton.icon(
+                              onPressed: _loadingExceptions
+                                  ? null
+                                  : _loadExceptions,
+                              icon: const Icon(Icons.filter_alt_outlined),
+                              label: const Text('Lọc'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        if (_loadingExceptions)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 8),
+                            child: LinearProgressIndicator(minHeight: 2),
+                          ),
+                        if (_exceptions.isEmpty)
+                          const Text('Không có exception theo bộ lọc hiện tại.')
+                        else
+                          ..._exceptions.take(30).map(_buildExceptionRow),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
                                 'Nhân viên',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                             Text('${_employees.length} bản ghi'),
@@ -1217,14 +1848,18 @@ class _AdminPageState extends State<AdminPage> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Expanded(child: Text('Users khả dụng: ${_users.length}')),
+                            Expanded(
+                              child: Text('Users khả dụng: ${_users.length}'),
+                            ),
                             TextButton.icon(
                               onPressed: _loadingUsers ? null : _loadUsers,
                               icon: _loadingUsers
                                   ? const SizedBox(
                                       width: 12,
                                       height: 12,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
                                   : const Icon(Icons.refresh, size: 16),
                               label: const Text('Tải users'),
@@ -1245,24 +1880,36 @@ class _AdminPageState extends State<AdminPage> {
                         const SizedBox(height: 8),
                         const Text(
                           'Tạo employee + gán user',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: _employeeCodeController,
                           textCapitalization: TextCapitalization.characters,
-                          decoration: _decoration('Mã nhân viên (VD: NV006)', Icons.badge_outlined),
+                          decoration: _decoration(
+                            'Mã nhân viên (VD: NV006)',
+                            Icons.badge_outlined,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _employeeNameController,
-                          decoration: _decoration('Họ tên nhân viên', Icons.person),
+                          decoration: _decoration(
+                            'Họ tên nhân viên',
+                            Icons.person,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<int?>(
                           initialValue: _newEmployeeUserId,
                           isExpanded: true,
-                          decoration: _decoration('Chọn user để gán ngay (optional)', Icons.link),
+                          decoration: _decoration(
+                            'Chọn user để gán ngay (optional)',
+                            Icons.link,
+                          ),
                           items: _createEmployeeUserItems(),
                           onChanged: _creatingEmployee
                               ? null
@@ -1277,15 +1924,24 @@ class _AdminPageState extends State<AdminPage> {
                           width: double.infinity,
                           height: 44,
                           child: FilledButton.icon(
-                            onPressed: _creatingEmployee ? null : _createEmployee,
+                            onPressed: _creatingEmployee
+                                ? null
+                                : _createEmployee,
                             icon: _creatingEmployee
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
                                   )
                                 : const Icon(Icons.person_add_alt_1),
-                            label: Text(_creatingEmployee ? 'Đang tạo...' : 'Tạo employee'),
+                            label: Text(
+                              _creatingEmployee
+                                  ? 'Đang tạo...'
+                                  : 'Tạo employee',
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1314,9 +1970,3 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 }
-
-
-
-
-
-
