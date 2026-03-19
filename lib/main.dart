@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 
+import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
+import 'features/auth/presentation/reset_password_page.dart';
 
 void main() {
   runApp(const MainApp());
@@ -33,8 +35,9 @@ class MainApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginPage(),
+        '/forgot-password': (context) => const ForgotPasswordPage(),
+        '/reset-password': (context) => const ResetPasswordPage(),
       },
     );
   }
 }
-

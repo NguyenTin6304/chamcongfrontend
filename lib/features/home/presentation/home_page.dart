@@ -308,6 +308,59 @@ class _HomePageState extends State<HomePage> {
     return _vnDateFormat.format(parsed);
   }
 
+  String? _warningMessage(String warningCode, String warningDate) {
+    switch (warningCode) {
+      case 'MISSED_CHECKOUT':
+        return 'Bạn quên checkout ngày $warningDate. Hệ thống đã ghi nhận ngoại lệ, hôm nay bạn vẫn có thể check-in bình thường.';
+      case 'AUTO_CLOSED':
+        return 'Phiên ngày $warningDate đã được hệ thống tự đóng tại cutoff. Nếu cần chỉnh giờ checkout thực tế, hãy liên hệ admin.';
+      default:
+        return null;
+    }
+  }
+
+  Color _warningColor(String warningCode) {
+    switch (warningCode) {
+      case 'AUTO_CLOSED':
+        return Colors.blue;
+      case 'MISSED_CHECKOUT':
+      default:
+        return Colors.orange;
+    }
+  }
+
+  Widget? _buildWarningBanner(String warningCode, String warningDate) {
+    final message = _warningMessage(warningCode, warningDate);
+    if (message == null) {
+      return null;
+    }
+
+    final tone = _warningColor(warningCode);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: tone),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: tone.withValues(alpha: 0.95),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   String _formatLocalAsVn(DateTime? value) {
     if (value == null) {
@@ -631,8 +684,9 @@ class _HomePageState extends State<HomePage> {
     final groups = _buildGroupedHistory(_history);
     final hasGps = _position != null;
     final lastTimingNotice = _lastAction == null ? null : _timingNotice(_lastAction!);
-    final missedCheckoutWarning = (_status?.warningCode ?? '').toUpperCase() == 'MISSED_CHECKOUT';
-    final missedCheckoutDate = _formatWarningDate(_status?.warningDate);
+    final warningCode = (_status?.warningCode ?? '').toUpperCase();
+    final warningDate = _formatWarningDate(_status?.warningDate);
+    final warningBanner = warningCode.isEmpty ? null : _buildWarningBanner(warningCode, warningDate);
 
     return Scaffold(
       appBar: AppBar(
@@ -667,31 +721,8 @@ class _HomePageState extends State<HomePage> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
-                if (missedCheckoutWarning) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Bạn quên checkout ngày $missedCheckoutDate. Hệ thống đã ghi nhận ngoại lệ, hôm nay bạn vẫn có thể check-in bình thường.',
-                            style: TextStyle(
-                              color: Colors.orange.shade900,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                if (warningBanner != null) ...[
+                  warningBanner,
                   const SizedBox(height: 12),
                 ],
                 Card(
@@ -890,6 +921,8 @@ class _AttendanceDayGroup {
   final DateTime? dayDate;
   final List<_AttendancePair> items;
 }
+
+
 
 
 

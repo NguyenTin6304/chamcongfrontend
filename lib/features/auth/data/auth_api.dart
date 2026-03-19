@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+﻿import 'dart:async';
+import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
@@ -47,16 +48,19 @@ class UserMeResult {
 class AuthApi {
   const AuthApi();
 
+  static const Duration _requestTimeout = Duration(seconds: 12);
+
   Future<LoginResult> login({
     required String email,
     required String password,
     bool rememberMe = true,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/login');
-    final response = await http.post(
+    final response = await _safePost(
       uri,
-      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password, 'remember_me': rememberMe}),
+      timeoutMessage: 'Đăng nhập quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
 
     final data = _parseJsonMap(response.body);
@@ -70,10 +74,11 @@ class AuthApi {
 
   Future<LoginResult> refresh({required String refreshToken}) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/refresh');
-    final response = await http.post(
+    final response = await _safePost(
       uri,
-      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'refresh_token': refreshToken}),
+      timeoutMessage: 'Làm mới phiên quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
 
     final data = _parseJsonMap(response.body);
@@ -87,10 +92,11 @@ class AuthApi {
 
   Future<void> logout({required String refreshToken}) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/logout');
-    final response = await http.post(
+    final response = await _safePost(
       uri,
-      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'refresh_token': refreshToken}),
+      timeoutMessage: 'Đăng xuất quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
 
     if (response.statusCode == 200) {
@@ -103,11 +109,13 @@ class AuthApi {
 
   Future<UserMeResult> me({required String token}) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/me');
-    final response = await http.get(
+    final response = await _safeGet(
       uri,
       headers: {
         'Authorization': 'Bearer $token',
       },
+      timeoutMessage: 'Lấy hồ sơ quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
 
     final data = _parseJsonMap(response.body);
@@ -128,10 +136,11 @@ class AuthApi {
     required String password,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/register');
-    final response = await http.post(
+    final response = await _safePost(
       uri,
-      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'email': email, 'password': password}),
+      timeoutMessage: 'Đăng ký quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
 
     final data = _parseJsonMap(response.body);
@@ -145,6 +154,42 @@ class AuthApi {
     }
 
     throw Exception(_extractErrorMessage(data, 'Register failed (${response.statusCode})'));
+  }
+
+  Future<http.Response> _safePost(
+    Uri uri, {
+    required String body,
+    required String timeoutMessage,
+    required String networkMessage,
+  }) async {
+    try {
+      return await http
+          .post(
+            uri,
+            headers: const {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
+    } on http.ClientException {
+      throw Exception(networkMessage);
+    }
+  }
+
+  Future<http.Response> _safeGet(
+    Uri uri, {
+    required Map<String, String> headers,
+    required String timeoutMessage,
+    required String networkMessage,
+  }) async {
+    try {
+      return await http.get(uri, headers: headers).timeout(_requestTimeout);
+    } on TimeoutException {
+      throw Exception(timeoutMessage);
+    } on http.ClientException {
+      throw Exception(networkMessage);
+    }
   }
 
   LoginResult _toLoginResult(Map<String, dynamic> data) {
@@ -179,6 +224,12 @@ class AuthApi {
     final detail = data['detail'];
     if (detail is String && detail.isNotEmpty) {
       return detail;
+    }
+    if (detail is Map<String, dynamic>) {
+      final message = detail['message'] as String?;
+      if (message != null && message.isNotEmpty) {
+        return message;
+      }
     }
 
     return fallback;

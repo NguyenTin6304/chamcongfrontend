@@ -192,6 +192,14 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  String _friendlyError(Object error, {required String fallback}) {
+    var message = error.toString().trim();
+    if (message.startsWith('Exception: ')) {
+      message = message.substring('Exception: '.length).trim();
+    }
+    return message.isEmpty ? fallback : message;
+  }
+
   Future<void> _submit() async {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) {
@@ -240,7 +248,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       setState(() {
-        _errorMessage = 'Đăng nhập thất bại: $error';
+        _errorMessage = "Đăng nhập thất bại: ${_friendlyError(error, fallback: 'Không thể đăng nhập lúc này.')}";
       });
     } finally {
       if (mounted) {
@@ -376,6 +384,15 @@ class _LoginPageState extends State<LoginPage> {
                               }
                             },
                           ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _isLoading
+                                  ? null
+                                  : () => Navigator.of(context).pushNamed('/forgot-password'),
+                              child: const Text('Quên mật khẩu?'),
+                            ),
+                          ),
                           CheckboxListTile(
                             contentPadding: EdgeInsets.zero,
                             value: _rememberMe,
@@ -432,4 +449,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
+
+
 
