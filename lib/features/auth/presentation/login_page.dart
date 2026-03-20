@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../core/storage/token_storage.dart';
 import '../../admin/presentation/admin_page.dart';
@@ -384,27 +384,31 @@ class _LoginPageState extends State<LoginPage> {
                               }
                             },
                           ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () => Navigator.of(context).pushNamed('/forgot-password'),
-                              child: const Text('Quên mật khẩu?'),
-                            ),
-                          ),
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: _rememberMe,
-                            onChanged: _isLoading
-                                ? null
-                                : (value) {
-                                    setState(() {
-                                      _rememberMe = value ?? true;
-                                    });
-                                  },
-                            title: const Text('Ghi nhớ đăng nhập'),
-                            controlAffinity: ListTileControlAffinity.leading,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  value: _rememberMe,
+                                  onChanged: _isLoading
+                                      ? null
+                                      : (value) {
+                                          setState(() {
+                                            _rememberMe = value ?? true;
+                                          });
+                                        },
+                                  title: const Text('Ghi nhớ đăng nhập'),
+                                  controlAffinity: ListTileControlAffinity.leading,
+                                  dense: true,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => Navigator.of(context).pushNamed('/forgot-password'),
+                                child: const Text('Quên mật khẩu?'),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 6),
                           SizedBox(
