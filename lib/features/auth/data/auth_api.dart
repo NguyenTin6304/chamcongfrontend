@@ -54,11 +54,22 @@ class AuthApi {
     required String email,
     required String password,
     bool rememberMe = true,
+    String? recaptchaToken,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/login');
+
+    final body = <String, dynamic>{
+      'email': email,
+      'password': password,
+      'remember_me': rememberMe,
+    };
+    if (recaptchaToken != null && recaptchaToken.trim().isNotEmpty) {
+      body['recaptcha_token'] = recaptchaToken.trim();
+    }
+
     final response = await _safePost(
       uri,
-      body: jsonEncode({'email': email, 'password': password, 'remember_me': rememberMe}),
+      body: jsonEncode(body),
       timeoutMessage: 'Đăng nhập quá thời gian. Vui lòng thử lại.',
       networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );

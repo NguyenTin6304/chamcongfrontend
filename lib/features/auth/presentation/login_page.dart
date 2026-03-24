@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../admin/presentation/admin_page.dart';
 import '../../home/presentation/home_page.dart';
 import '../data/auth_api.dart';
+import 'widgets/recaptcha_v2.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -20,10 +22,12 @@ class _LoginPageState extends State<LoginPage> {
 
   final _authApi = const AuthApi();
   final _tokenStorage = TokenStorage();
+  late final RecaptchaV2Controller _recaptchaController;
 
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = true;
+  String? _recaptchaToken;
 
   String? _errorMessage;
   String? _infoMessage;
@@ -31,11 +35,13 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _recaptchaController = createRecaptchaV2Controller();
     _restoreSession();
   }
 
   @override
   void dispose() {
+    _recaptchaController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -151,7 +157,10 @@ class _LoginPageState extends State<LoginPage> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.6),
+        borderSide: BorderSide(
+          color: Theme.of(context).colorScheme.primary,
+          width: 1.6,
+        ),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -192,6 +201,8 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  bool get _recaptchaRequired => AppConfig.recaptchaSiteKey.trim().isNotEmpty;
+
   String _friendlyError(Object error, {required String fallback}) {
     var message = error.toString().trim();
     if (message.startsWith('Exception: ')) {
@@ -203,6 +214,14 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _submit() async {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) {
+      return;
+    }
+
+    if (_recaptchaRequired && (_recaptchaToken == null || _recaptchaToken!.trim().isEmpty)) {
+      setState(() {
+        _errorMessage = 'Vui lòng xác minh reCAPTCHA trước khi đăng nhập.';
+        _infoMessage = null;
+      });
       return;
     }
 
@@ -220,6 +239,7 @@ class _LoginPageState extends State<LoginPage> {
         email: email,
         password: password,
         rememberMe: _rememberMe,
+        recaptchaToken: _recaptchaToken,
       );
 
       await _tokenStorage.saveSession(
@@ -248,8 +268,14 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       setState(() {
-        _errorMessage = "Đăng nhập thất bại: ${_friendlyError(error, fallback: 'Không thể đăng nhập lúc này.')}";
+        _errorMessage =
+            "Đăng nhập thất bại: ${_friendlyError(error, fallback: 'Không thể đăng nhập lúc này.')}";
       });
+
+      if (_recaptchaRequired) {
+        _recaptchaController.reset();
+        _recaptchaToken = null;
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -289,7 +315,9 @@ class _LoginPageState extends State<LoginPage> {
                 padding: const EdgeInsets.all(16),
                 child: Card(
                   elevation: 1,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Form(
@@ -308,12 +336,14 @@ class _LoginPageState extends State<LoginPage> {
                             'Đăng nhập để tiếp tục chấm công.',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.grey.shade700,
-                            ),
+                                  color: Colors.grey.shade700,
+                                ),
                           ),
                           const SizedBox(height: 14),
-                          if (_errorMessage != null) _buildBanner(text: _errorMessage!, isError: true),
-                          if (_infoMessage != null) _buildBanner(text: _infoMessage!, isError: false),
+                          if (_errorMessage != null)
+                            _buildBanner(text: _errorMessage!, isError: true),
+                          if (_infoMessage != null)
+                            _buildBanner(text: _infoMessage!, isError: false),
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
@@ -346,9 +376,9 @@ class _LoginPageState extends State<LoginPage> {
                             controller: _passwordController,
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (value) => {
+                            onFieldSubmitted: (_) {
                               if (!_isLoading) {
-                                _submit()
+                                _submit();
                               }
                             },
                             autofillHints: const [AutofillHints.password],
@@ -362,7 +392,9 @@ class _LoginPageState extends State<LoginPage> {
                                   });
                                 },
                                 icon: Icon(
-                                  _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                  _obscurePassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                               ),
                             ),
@@ -384,6 +416,25 @@ class _LoginPageState extends State<LoginPage> {
                               }
                             },
                           ),
+                          if (_recaptchaRequired) ...[
+                            const SizedBox(height: 12),
+                            buildRecaptchaV2Widget(
+                              siteKey: AppConfig.recaptchaSiteKey.trim(),
+                              controller: _recaptchaController,
+                              onTokenChanged: (token) {
+                                if (!mounted) return;
+                                setState(() {
+                                  _recaptchaToken = token;
+                                  if (token != null &&
+                                      token.isNotEmpty &&
+                                      _errorMessage != null &&
+                                      _errorMessage!.contains('reCAPTCHA')) {
+                                    _errorMessage = null;
+                                  }
+                                });
+                              },
+                            ),
+                          ],
                           Row(
                             children: [
                               Expanded(
@@ -398,14 +449,16 @@ class _LoginPageState extends State<LoginPage> {
                                           });
                                         },
                                   title: const Text('Ghi nhớ đăng nhập'),
-                                  controlAffinity: ListTileControlAffinity.leading,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
                                   dense: true,
                                 ),
                               ),
                               TextButton(
                                 onPressed: _isLoading
                                     ? null
-                                    : () => Navigator.of(context).pushNamed('/forgot-password'),
+                                    : () => Navigator.of(context)
+                                        .pushNamed('/forgot-password'),
                                 child: const Text('Quên mật khẩu?'),
                               ),
                             ],
@@ -425,13 +478,19 @@ class _LoginPageState extends State<LoginPage> {
                                       ),
                                     )
                                   : const Icon(Icons.login),
-                              label: Text(_isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'),
+                              label: Text(
+                                _isLoading
+                                    ? 'Đang đăng nhập...'
+                                    : 'Đăng nhập',
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),
                           TextButton(
                             onPressed: _isLoading ? null : _goToRegister,
-                            child: const Text('Chưa có tài khoản? Tạo tài khoản'),
+                            child: const Text(
+                              'Chưa có tài khoản? Tạo tài khoản',
+                            ),
                           ),
                         ],
                       ),
@@ -453,7 +512,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
-
-
-

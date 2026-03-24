@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -1458,22 +1458,22 @@ class _AdminPageState extends State<AdminPage> {
                           const Text('Chưa có active rule')
                         else ...[
                           Text(
-                            'Latitude: ${_activeRule!.latitude.toStringAsFixed(6)}',
+                            'Vĩ độ: ${_activeRule!.latitude.toStringAsFixed(6)}',
                           ),
                           Text(
-                            'Longitude: ${_activeRule!.longitude.toStringAsFixed(6)}',
+                            'Kinh độ: ${_activeRule!.longitude.toStringAsFixed(6)}',
                           ),
-                          Text('Radius: ${_activeRule!.radiusM} m'),
-                          Text('Start time: ${_activeRule!.startTime ?? '-'}'),
+                          Text('Bán kính: ${_activeRule!.radiusM} m'),
+                          Text('Thời gian bắt đầu: ${_activeRule!.startTime ?? '-'}'),
                           Text(
-                            'Grace vào: ${_activeRule!.graceMinutes ?? '-'} phút',
+                            'Thời gian gia hạn vào: ${_activeRule!.graceMinutes ?? '-'} phút',
                           ),
-                          Text('End time: ${_activeRule!.endTime ?? '-'}'),
+                          Text('Thời gian kết thúc: ${_activeRule!.endTime ?? '-'}'),
                           Text(
-                            'Grace về: ${_activeRule!.checkoutGraceMinutes ?? '-'} phút',
+                            'Thời gian gia hạn về: ${_activeRule!.checkoutGraceMinutes ?? '-'} phút',
                           ),
                           Text(
-                            'Cutoff: ${_activeRule!.crossDayCutoffMinutes ?? '-'} phút (từ 00:00)',
+                            'Thời gian OT đêm: ${_activeRule!.crossDayCutoffMinutes ?? '-'} phút (từ 00:00)',
                           ),
                         ],
                       ],
@@ -1492,7 +1492,7 @@ class _AdminPageState extends State<AdminPage> {
                             decimal: true,
                             signed: true,
                           ),
-                          decoration: _decoration('Latitude', Icons.place),
+                          decoration: _decoration('Vĩ độ', Icons.place),
                         ),
                         const SizedBox(height: 10),
                         TextField(
@@ -1502,7 +1502,7 @@ class _AdminPageState extends State<AdminPage> {
                             signed: true,
                           ),
                           decoration: _decoration(
-                            'Longitude',
+                            'Kinh độ',
                             Icons.place_outlined,
                           ),
                         ),
@@ -1511,7 +1511,7 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _radiusController,
                           keyboardType: TextInputType.number,
                           decoration: _decoration(
-                            'Radius (m)',
+                            'Bán kính (m)',
                             Icons.straighten,
                           ),
                         ),
@@ -1520,7 +1520,7 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _startTimeController,
                           keyboardType: TextInputType.datetime,
                           decoration: _decoration(
-                            'Start time (HH:mm)',
+                            'Thời gian bắt đầu (HH:mm)',
                             Icons.schedule,
                           ),
                         ),
@@ -1529,7 +1529,7 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _graceMinutesController,
                           keyboardType: TextInputType.number,
                           decoration: _decoration(
-                            'Grace minutes (check-in)',
+                            'Thời gian gia hạn vào (phút/checkin)',
                             Icons.timer_outlined,
                           ),
                         ),
@@ -1538,7 +1538,7 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _endTimeController,
                           keyboardType: TextInputType.datetime,
                           decoration: _decoration(
-                            'End time (HH:mm)',
+                            'Thời gian kết thúc (HH:mm)',
                             Icons.access_time_filled_outlined,
                           ),
                         ),
@@ -1547,7 +1547,7 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _checkoutGraceMinutesController,
                           keyboardType: TextInputType.number,
                           decoration: _decoration(
-                            'Grace minutes (check-out)',
+                            'Thời gian gia hạn về (phút-checkout)',
                             Icons.timer_off_outlined,
                           ),
                         ),
@@ -1556,7 +1556,7 @@ class _AdminPageState extends State<AdminPage> {
                           controller: _cutoffMinutesController,
                           keyboardType: TextInputType.number,
                           decoration: _decoration(
-                            'Cutoff (minutes from 00:00)',
+                            'Thời gian OT đêm (phút từ 00:00 trở đi)',
                             Icons.nightlight_round,
                           ),
                         ),
