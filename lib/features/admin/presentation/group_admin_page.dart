@@ -308,28 +308,28 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
 
     if (startRaw.isNotEmpty && startTime == null) {
       setState(() {
-        _error = 'Start time không hợp lệ. Định dạng đúng HH:mm.';
+        _error = 'Thời gian vào (check-in) không hợp lệ. Định dạng đúng HH:mm.';
       });
       return;
     }
 
     if (endRaw.isNotEmpty && endTime == null) {
       setState(() {
-        _error = 'End time không hợp lệ. Định dạng đúng HH:mm.';
+        _error = 'Thời gian ra (check-out) không hợp lệ. Định dạng đúng HH:mm.';
       });
       return;
     }
 
     if (_groupGraceMinutesController.text.trim().isNotEmpty && graceMinutes == null) {
       setState(() {
-        _error = 'Grace minutes (check-in) phải là số >= 0.';
+        _error = 'Thời gian gia hạn vào (check-in) phút phải là số >= 0.';
       });
       return;
     }
 
     if (_groupCheckoutGraceController.text.trim().isNotEmpty && checkoutGraceMinutes == null) {
       setState(() {
-        _error = 'Grace minutes (check-out) phải là số >= 0.';
+        _error = 'Thời gian gia hạn ra (check-out) phút phải là số >= 0.';
       });
       return;
     }
@@ -400,28 +400,28 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
 
     if (startRaw.isNotEmpty && startTime == null) {
       setState(() {
-        _error = 'Start time group không hợp lệ. Định dạng đúng HH:mm.';
+        _error = 'Thời gian vào (check-in) group không hợp lệ. Định dạng đúng HH:mm.';
       });
       return;
     }
 
     if (endRaw.isNotEmpty && endTime == null) {
       setState(() {
-        _error = 'End time group không hợp lệ. Định dạng đúng HH:mm.';
+        _error = 'Thời gian ra (check-out) group không hợp lệ. Định dạng đúng HH:mm.';
       });
       return;
     }
 
     if (_selectedGraceMinutesController.text.trim().isNotEmpty && graceMinutes == null) {
       setState(() {
-        _error = 'Grace minutes (check-in) phải là số >= 0.';
+        _error = 'Thời gian gia hạn vào (check-in) phút phải là số >= 0.';
       });
       return;
     }
 
     if (_selectedCheckoutGraceController.text.trim().isNotEmpty && checkoutGraceMinutes == null) {
       setState(() {
-        _error = 'Grace minutes (check-out) phải là số >= 0.';
+        _error = 'Thời gian gia hạn ra (check-out) phút phải là số >= 0.';
       });
       return;
     }
@@ -709,7 +709,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
 
     if (name.isEmpty || lat == null || lng == null || radius == null || radius <= 0) {
       setState(() {
-        _error = 'Geofence không hợp lệ. Kiểm tra name/lat/lng/radius.';
+        _error = 'Geofence không hợp lệ. Kiểm tra tên/vĩ độ/kinh độ/bán kính.';
       });
       return;
     }
@@ -976,25 +976,25 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                         TextField(
                           controller: _groupStartTimeController,
                           keyboardType: TextInputType.datetime,
-                          decoration: _decoration('Start time (HH:mm)', Icons.schedule),
+                          decoration: _decoration('Thời gian vào (HH:mm)', Icons.schedule),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _groupGraceMinutesController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Grace minutes check-in', Icons.timer_outlined),
+                          decoration: _decoration('Thời gian gia hạn vào (check-in) phút', Icons.timer_outlined),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _groupEndTimeController,
                           keyboardType: TextInputType.datetime,
-                          decoration: _decoration('End time (HH:mm)', Icons.access_time_filled_outlined),
+                          decoration: _decoration('Thời gian ra (HH:mm)', Icons.access_time_filled_outlined),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _groupCheckoutGraceController,
                           keyboardType: TextInputType.number,
-                          decoration: _decoration('Grace minutes check-out', Icons.timer_off_outlined),
+                          decoration: _decoration('Thời gian gia hạn ra (check-out) phút', Icons.timer_off_outlined),
                         ),
                         const SizedBox(height: 10),
                         SizedBox(
@@ -1074,25 +1074,25 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                           TextField(
                             controller: _selectedStartTimeController,
                             keyboardType: TextInputType.datetime,
-                            decoration: _decoration('Start time (HH:mm)', Icons.schedule),
+                            decoration: _decoration('Thời gian vào (HH:mm)', Icons.schedule),
                           ),
                           const SizedBox(height: 10),
                           TextField(
                             controller: _selectedGraceMinutesController,
                             keyboardType: TextInputType.number,
-                            decoration: _decoration('Grace minutes check-in', Icons.timer_outlined),
+                            decoration: _decoration('Thời gian gia hạn vào (check-in) phút', Icons.timer_outlined),
                           ),
                           const SizedBox(height: 10),
                           TextField(
                             controller: _selectedEndTimeController,
                             keyboardType: TextInputType.datetime,
-                            decoration: _decoration('End time (HH:mm)', Icons.access_time_filled_outlined),
+                            decoration: _decoration('Thời gian ra (HH:mm)', Icons.access_time_filled_outlined),
                           ),
                           const SizedBox(height: 10),
                           TextField(
                             controller: _selectedCheckoutGraceController,
                             keyboardType: TextInputType.number,
-                            decoration: _decoration('Grace minutes check-out', Icons.timer_off_outlined),
+                            decoration: _decoration('Thời gian gia hạn ra (check-out) phút', Icons.timer_off_outlined),
                           ),
                           const SizedBox(height: 10),
                           Row(
@@ -1169,19 +1169,19 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                         const SizedBox(height: 10),
                         TextField(
                           controller: _geofenceLatController,
-                          decoration: _decoration('Latitude', Icons.place),
+                          decoration: _decoration('Vĩ độ', Icons.place),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _geofenceLngController,
-                          decoration: _decoration('Longitude', Icons.place_outlined),
+                          decoration: _decoration('Kinh độ', Icons.place_outlined),
                           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _geofenceRadiusController,
-                          decoration: _decoration('Radius (m)', Icons.straighten),
+                          decoration: _decoration('Bán kính (m)', Icons.straighten),
                           keyboardType: TextInputType.number,
                         ),
                         const SizedBox(height: 10),
