@@ -17,6 +17,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final _api = const PasswordResetApi();
 
   bool _isLoading = false;
+  bool _obscureToken = true;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _missingTokenFromLink = false;
@@ -233,6 +234,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           if (_infoMessage != null) _buildBanner(text: _infoMessage!, isError: false),
                           TextFormField(
                             controller: _tokenController,
+                            obscureText: _obscureToken,
+                            enableSuggestions: false,
+                            autocorrect: false,
                             textInputAction: TextInputAction.next,
                             onChanged: (_) {
                               if (_errorMessage != null) {
@@ -244,6 +248,16 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                             decoration: _inputDecoration(
                               label: 'Token reset',
                               icon: Icons.vpn_key_outlined,
+                              suffixIcon: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _obscureToken = !_obscureToken;
+                                  });
+                                },
+                                icon: Icon(
+                                  _obscureToken ? Icons.visibility : Icons.visibility_off,
+                                ),
+                              ),
                             ),
                             validator: (value) {
                               if ((value ?? '').trim().isEmpty) {
