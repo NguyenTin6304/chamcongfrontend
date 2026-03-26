@@ -2,8 +2,6 @@
 
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
-import '../../admin/presentation/admin_page.dart';
-import '../../home/presentation/home_page.dart';
 import '../data/auth_api.dart';
 import 'widgets/recaptcha_v2.dart';
 import 'register_page.dart';
@@ -56,6 +54,7 @@ class _LoginPageState extends State<LoginPage> {
 
     var redirected = false;
 
+    var shouldClearSession = false;
     try {
       final savedEmail = await _tokenStorage.getLastEmail();
       if (savedEmail != null && savedEmail.isNotEmpty) {
@@ -79,8 +78,11 @@ class _LoginPageState extends State<LoginPage> {
 
       try {
         me = await _authApi.me(token: activeAccessToken);
-      } catch (_) {
+      } catch (error) {
         if (refreshToken == null || refreshToken.isEmpty) {
+          if (_shouldClearSessionOnRestoreError(error)) {
+            shouldClearSession = true;
+          }
           rethrow;
         }
 
@@ -104,13 +106,17 @@ class _LoginPageState extends State<LoginPage> {
       redirected = true;
       final profileEmail = me.email.isNotEmpty ? me.email : (savedEmail ?? '');
       _openByRole(role: me.role.toUpperCase(), email: profileEmail);
-    } catch (_) {
-      await _tokenStorage.clearSession(keepLastEmail: true);
+    } catch (error) {
+      if (_shouldClearSessionOnRestoreError(error) || shouldClearSession) {
+        await _tokenStorage.clearSession(keepLastEmail: true);
+      }
       if (!mounted) {
         return;
       }
       setState(() {
-        _infoMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        _infoMessage = (shouldClearSession || _shouldClearSessionOnRestoreError(error))
+            ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+            : 'Không thể khôi phục phiên lúc này. Vui lòng thử tải lại.';
       });
     } finally {
       if (mounted && !redirected) {
@@ -126,15 +132,30 @@ class _LoginPageState extends State<LoginPage> {
     required String email,
   }) {
     if (role == 'ADMIN') {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => AdminPage(email: email)),
+      Navigator.of(context).pushReplacementNamed(
+        '/admin',
+        arguments: {'email': email},
       );
       return;
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => HomePage(email: email)),
+    Navigator.of(context).pushReplacementNamed(
+      '/home',
+      arguments: {'email': email},
     );
+  }
+
+  bool _shouldClearSessionOnRestoreError(Object error) {
+    final msg = _friendlyError(error, fallback: '').toLowerCase();
+    return msg.contains('401') ||
+        msg.contains('403') ||
+        msg.contains('unauthorized') ||
+        msg.contains('forbidden') ||
+        msg.contains('could not validate credentials') ||
+        msg.contains('credentials') ||
+        msg.contains('token không hợp lệ') ||
+        msg.contains('invalid token') ||
+        msg.contains('hết hạn');
   }
 
   InputDecoration _inputDecoration({

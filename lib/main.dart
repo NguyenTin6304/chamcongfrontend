@@ -2,9 +2,11 @@
 
 import 'package:flutter/material.dart';
 
+import 'features/admin/presentation/admin_page.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
+import 'features/home/presentation/home_page.dart';
 
 void main() {
   runApp(const MainApp());
@@ -17,7 +19,20 @@ class MainApp extends StatelessWidget {
     '/login',
     '/forgot-password',
     '/reset-password',
+    '/admin',
+    '/home',
   };
+
+  String _extractEmailArg(RouteSettings settings) {
+    final args = settings.arguments;
+    if (args is Map) {
+      final value = args['email'];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return '';
+  }
 
   String _resolveInitialRouteFromUrl() {
     final fragment = Uri.base.fragment.trim();
@@ -55,6 +70,12 @@ class MainApp extends StatelessWidget {
         break;
       case '/reset-password':
         page = const ResetPasswordPage();
+        break;
+      case '/admin':
+        page = AdminPage(email: _extractEmailArg(settings));
+        break;
+      case '/home':
+        page = HomePage(email: _extractEmailArg(settings));
         break;
       default:
         page = const LoginPage();
