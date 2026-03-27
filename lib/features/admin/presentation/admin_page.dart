@@ -6,6 +6,7 @@ import '../../../core/download/file_downloader.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/admin_api.dart';
 import 'group_admin_page.dart';
+import 'widgets/admin_location_picker.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({required this.email, super.key});
@@ -49,6 +50,7 @@ class _AdminPageState extends State<AdminPage> {
   bool _loadingExceptions = false;
 
   ActiveRuleResult? _activeRule;
+  String? _ruleLocationAddress;
   List<EmployeeLite> _employees = const [];
   List<UserLite> _users = const [];
   List<AttendanceExceptionItem> _exceptions = const [];
@@ -156,6 +158,8 @@ class _AdminPageState extends State<AdminPage> {
         if (rule != null) {
           _latController.text = rule.latitude.toStringAsFixed(6);
           _lngController.text = rule.longitude.toStringAsFixed(6);
+          _ruleLocationAddress =
+              'lat=${rule.latitude.toStringAsFixed(6)}, lng=${rule.longitude.toStringAsFixed(6)}';
           _radiusController.text = rule.radiusM.toString();
           _startTimeController.text = (rule.startTime ?? '08:00');
           _graceMinutesController.text = (rule.graceMinutes ?? 30).toString();
@@ -165,6 +169,9 @@ class _AdminPageState extends State<AdminPage> {
           _cutoffMinutesController.text = (rule.crossDayCutoffMinutes ?? 240)
               .toString();
         } else {
+          _latController.clear();
+          _lngController.clear();
+          _ruleLocationAddress = null;
           _startTimeController.text = '08:00';
           _graceMinutesController.text = '30';
           _endTimeController.text = '17:30';
@@ -186,6 +193,39 @@ class _AdminPageState extends State<AdminPage> {
         });
       }
     }
+  }
+
+  bool _isValidCoordinate(double value, {required bool isLatitude}) {
+    if (isLatitude) {
+      return value >= -90 && value <= 90;
+    }
+    return value >= -180 && value <= 180;
+  }
+
+  bool get _hasValidRuleCoordinates {
+    final lat = double.tryParse(_latController.text.trim());
+    final lng = double.tryParse(_lngController.text.trim());
+    if (lat == null || lng == null) {
+      return false;
+    }
+    return _isValidCoordinate(lat, isLatitude: true) &&
+        _isValidCoordinate(lng, isLatitude: false);
+  }
+
+  void _onRuleLocationChanged(LocationPickerValue value) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _ruleLocationAddress = value.displayName;
+      if (!value.hasValidCoordinates || value.latitude == null || value.longitude == null) {
+        _latController.clear();
+        _lngController.clear();
+        return;
+      }
+      _latController.text = value.latitude!.toStringAsFixed(6);
+      _lngController.text = value.longitude!.toStringAsFixed(6);
+    });
   }
 
   Future<void> _loadUsers() async {
@@ -336,6 +376,8 @@ class _AdminPageState extends State<AdminPage> {
 
     if (lat == null ||
         lng == null ||
+        !_isValidCoordinate(lat, isLatitude: true) ||
+        !_isValidCoordinate(lng, isLatitude: false) ||
         radius == null ||
         radius <= 0 ||
         !validStartTime ||
@@ -1486,27 +1528,28 @@ class _AdminPageState extends State<AdminPage> {
                     padding: const EdgeInsets.all(14),
                     child: Column(
                       children: [
-                        TextField(
-                          controller: _latController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                            signed: true,
-                          ),
-                          decoration: _decoration('Vĩ độ', Icons.place),
+                        AdminLocationPicker(
+                          initialLatitude: double.tryParse(_latController.text.trim()),
+                          initialLongitude: double.tryParse(_lngController.text.trim()),
+                          initialDisplayName: _ruleLocationAddress,
+                          onChanged: _onRuleLocationChanged,
                         ),
                         const SizedBox(height: 10),
-                        TextField(
-                          controller: _lngController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                            signed: true,
+                        if (_ruleLocationAddress != null &&
+                            _ruleLocationAddress!.trim().isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Địa chỉ đã chọn: ${_ruleLocationAddress!}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                          decoration: _decoration(
-                            'Kinh độ',
-                            Icons.place_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
+                        if (_ruleLocationAddress != null &&
+                            _ruleLocationAddress!.trim().isNotEmpty)
+                          const SizedBox(height: 10),
                         TextField(
                           controller: _radiusController,
                           keyboardType: TextInputType.number,
@@ -1565,7 +1608,9 @@ class _AdminPageState extends State<AdminPage> {
                           width: double.infinity,
                           height: 46,
                           child: FilledButton.icon(
-                            onPressed: _savingRule ? null : _saveRule,
+                            onPressed: (_savingRule || !_hasValidRuleCoordinates)
+                                ? null
+                                : _saveRule,
                             icon: _savingRule
                                 ? const SizedBox(
                                     width: 14,

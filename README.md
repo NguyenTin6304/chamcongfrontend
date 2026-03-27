@@ -46,6 +46,8 @@ Backend API đang tích hợp theo chuẩn FastAPI (project backend tách riêng
 ## 3) Công nghệ & package
 - Flutter (Material 3)
 - `http`
+- `flutter_map`
+- `latlong2`
 - `shared_preferences`
 - `geolocator`
 - `intl`
@@ -58,13 +60,22 @@ Backend API đang tích hợp theo chuẩn FastAPI (project backend tách riêng
   - Mặc định: `http://127.0.0.1:8000`
 - `RECAPTCHA_SITE_KEY`
   - Mặc định: rỗng (không bật captcha)
+- `GEOAPIFY_API_KEY`
+  - Mặc định: rỗng (phải truyền qua `--dart-define`)
+- `GEOAPIFY_MAP_STYLE`
+  - Mặc định: `osm-carto`
+- `DEFAULT_MAP_CENTER`
+  - Mặc định: `10.776889,106.700806` (format `lat,lng`)
 
 Ví dụ:
 ```bash
 flutter run -d chrome \
   --web-port=62601 \
   --dart-define=API_BASE_URL=http://127.0.0.1:8000 \
-  --dart-define=RECAPTCHA_SITE_KEY=your_site_key
+  --dart-define=RECAPTCHA_SITE_KEY=your_site_key \
+  --dart-define=GEOAPIFY_API_KEY=your_geoapify_key \
+  --dart-define=GEOAPIFY_MAP_STYLE=osm-carto \
+  --dart-define=DEFAULT_MAP_CENTER=10.776889,106.700806
 ```
 
 ## 5) Chạy local
@@ -76,7 +87,8 @@ flutter pub get
 ### 5.2) Chạy web
 ```bash
 flutter run -d chrome --web-port=62601 \
-  --dart-define=API_BASE_URL=http://127.0.0.1:8000
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000 \
+  --dart-define=GEOAPIFY_API_KEY=your_geoapify_key
 ```
 
 ### 5.3) Chạy Android emulator
@@ -130,4 +142,5 @@ lib/
 ## 9) Lưu ý deploy
 - Không commit secret key reCAPTCHA vào repo.
 - Chỉ để `RECAPTCHA_SITE_KEY` ở frontend; secret key phải verify ở backend.
+- Không hardcode `GEOAPIFY_API_KEY` trong source code; chỉ truyền qua môi trường build/runtime.
 - Nếu deploy frontend tĩnh (Vercel/Cloudflare Pages), toàn bộ logic xác minh captcha vẫn phải chạy ở backend API.

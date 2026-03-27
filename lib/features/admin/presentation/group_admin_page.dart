@@ -4,21 +4,26 @@ import 'package:flutter/material.dart';
 
 import '../../../core/download/file_downloader.dart';
 import '../data/admin_api.dart';
+import 'widgets/admin_location_picker.dart';
 
 class GroupAdminPage extends StatefulWidget {
   const GroupAdminPage({
     required this.token,
+    this.adminApi,
+    this.autoLoad = true,
     super.key,
   });
 
   final String token;
+  final AdminApi? adminApi;
+  final bool autoLoad;
 
   @override
   State<GroupAdminPage> createState() => _GroupAdminPageState();
 }
 
 class _GroupAdminPageState extends State<GroupAdminPage> {
-  final _adminApi = const AdminApi();
+  late final AdminApi _adminApi;
   final _scrollController = ScrollController();
 
   final _groupCodeController = TextEditingController();
@@ -49,6 +54,8 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
 
   int? _selectedGroupId;
   int? _editingGeofenceId;
+  int _locationPickerVersion = 0;
+  String? _selectedGeofenceAddress;
 
   bool _loadingGroups = false;
   bool _loadingGeofences = false;
@@ -76,7 +83,10 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    _adminApi = widget.adminApi ?? const AdminApi();
+    if (widget.autoLoad) {
+      _loadAll();
+    }
   }
 
   @override
@@ -166,6 +176,38 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
     final checkin = '${group.startTime ?? '-'} (+${group.graceMinutes?.toString() ?? '-'}m)';
     final checkout = '${group.endTime ?? '-'} (+${group.checkoutGraceMinutes?.toString() ?? '-'}m)';
     return 'IN $checkin • OUT $checkout';
+  }
+
+  bool _isValidCoordinate(double value, {required bool isLatitude}) {
+    if (isLatitude) {
+      return value >= -90 && value <= 90;
+    }
+    return value >= -180 && value <= 180;
+  }
+
+  bool get _hasValidGeofenceCoordinates {
+    final lat = double.tryParse(_geofenceLatController.text.trim());
+    final lng = double.tryParse(_geofenceLngController.text.trim());
+    if (lat == null || lng == null) {
+      return false;
+    }
+    return _isValidCoordinate(lat, isLatitude: true) && _isValidCoordinate(lng, isLatitude: false);
+  }
+
+  void _onLocationPickerChanged(LocationPickerValue value) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedGeofenceAddress = value.displayName;
+      if (value.latitude == null || value.longitude == null || !value.hasValidCoordinates) {
+        _geofenceLatController.clear();
+        _geofenceLngController.clear();
+        return;
+      }
+      _geofenceLatController.text = value.latitude!.toStringAsFixed(6);
+      _geofenceLngController.text = value.longitude!.toStringAsFixed(6);
+    });
   }
 
   Future<void> _onSelectGroup(int? groupId) async {
@@ -713,6 +755,12 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       });
       return;
     }
+    if (!_isValidCoordinate(lat, isLatitude: true) || !_isValidCoordinate(lng, isLatitude: false)) {
+      setState(() {
+        _error = 'Tọa độ không hợp lệ. Lat phải trong [-90,90], Lng trong [-180,180].';
+      });
+      return;
+    }
 
     setState(() {
       _savingGeofence = true;
@@ -752,6 +800,8 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
         _geofenceLatController.clear();
         _geofenceLngController.clear();
         _geofenceRadiusController.text = '200';
+        _selectedGeofenceAddress = null;
+        _locationPickerVersion++;
         _info = 'Đã lưu geofence.';
       });
 
@@ -1167,18 +1217,26 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                           decoration: _decoration('Tên geofence', Icons.location_on_outlined),
                         ),
                         const SizedBox(height: 10),
-                        TextField(
-                          controller: _geofenceLatController,
-                          decoration: _decoration('Vĩ độ', Icons.place),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                        AdminLocationPicker(
+                          key: ValueKey(_locationPickerVersion),
+                          initialLatitude: double.tryParse(_geofenceLatController.text.trim()),
+                          initialLongitude: double.tryParse(_geofenceLngController.text.trim()),
+                          initialDisplayName: _selectedGeofenceAddress,
+                          onChanged: _onLocationPickerChanged,
                         ),
                         const SizedBox(height: 10),
-                        TextField(
-                          controller: _geofenceLngController,
-                          decoration: _decoration('Kinh độ', Icons.place_outlined),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                        ),
-                        const SizedBox(height: 10),
+                        if (_selectedGeofenceAddress != null &&
+                            _selectedGeofenceAddress!.trim().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              'Địa chỉ đã chọn: ${_selectedGeofenceAddress!}',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         TextField(
                           controller: _geofenceRadiusController,
                           decoration: _decoration('Bán kính (m)', Icons.straighten),
@@ -1189,7 +1247,9 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                           children: [
                             Expanded(
                               child: FilledButton.icon(
-                                onPressed: _savingGeofence ? null : _saveGeofence,
+                                onPressed: (_savingGeofence || !_hasValidGeofenceCoordinates)
+                                    ? null
+                                    : _saveGeofence,
                                 icon: const Icon(Icons.save),
                                 label: Text(_editingGeofenceId == null ? 'Tạo geofence' : 'Lưu geofence'),
                               ),
@@ -1203,6 +1263,8 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                                   _geofenceLatController.clear();
                                   _geofenceLngController.clear();
                                   _geofenceRadiusController.text = '200';
+                                  _selectedGeofenceAddress = null;
+                                  _locationPickerVersion++;
                                 });
                               },
                               child: const Text('Reset'),
@@ -1228,6 +1290,9 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
                                       _geofenceLatController.text = geo.latitude.toStringAsFixed(6);
                                       _geofenceLngController.text = geo.longitude.toStringAsFixed(6);
                                       _geofenceRadiusController.text = geo.radiusM.toString();
+                                      _selectedGeofenceAddress =
+                                          'lat=${geo.latitude.toStringAsFixed(6)}, lng=${geo.longitude.toStringAsFixed(6)}';
+                                      _locationPickerVersion++;
                                     });
                                   },
                                   icon: const Icon(Icons.edit_outlined),
@@ -1320,6 +1385,3 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
     );
   }
 }
-
-
-
