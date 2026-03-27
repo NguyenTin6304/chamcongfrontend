@@ -394,7 +394,7 @@ class _AdminLocationPickerState extends State<AdminLocationPicker> {
                 final item = _suggestions[index];
                 final subtitle = [item.city, item.country]
                     .where((part) => part.trim().isNotEmpty)
-                    .join(' â€¢ ');
+                    .join(' đến từ ');
                 return ListTile(
                   dense: true,
                   title: Text(item.displayName, maxLines: 2, overflow: TextOverflow.ellipsis),
