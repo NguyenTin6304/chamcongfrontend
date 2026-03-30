@@ -41,6 +41,10 @@ class AttendanceActionResult {
     this.fallbackReason,
     this.punctualityStatus,
     this.checkoutStatus,
+    this.riskScore,
+    this.riskLevel,
+    this.riskFlags = const [],
+    this.decision,
   });
 
   final String type;
@@ -54,6 +58,10 @@ class AttendanceActionResult {
   final String? fallbackReason;
   final String? punctualityStatus;
   final String? checkoutStatus;
+  final int? riskScore;
+  final String? riskLevel;
+  final List<String> riskFlags;
+  final String? decision;
 }
 
 class AttendanceLogItem {
@@ -71,6 +79,9 @@ class AttendanceLogItem {
     this.fallbackReason,
     this.punctualityStatus,
     this.checkoutStatus,
+    this.riskScore,
+    this.riskLevel,
+    this.riskFlags = const [],
   });
 
   final int id;
@@ -86,6 +97,28 @@ class AttendanceLogItem {
   final String? fallbackReason;
   final String? punctualityStatus;
   final String? checkoutStatus;
+  final int? riskScore;
+  final String? riskLevel;
+  final List<String> riskFlags;
+}
+
+class AttendanceActionException implements Exception {
+  const AttendanceActionException({
+    required this.message,
+    this.riskScore,
+    this.riskLevel,
+    this.riskFlags = const [],
+    this.decision,
+  });
+
+  final String message;
+  final int? riskScore;
+  final String? riskLevel;
+  final List<String> riskFlags;
+  final String? decision;
+
+  @override
+  String toString() => message;
 }
 
 class AttendanceApi {
@@ -140,6 +173,9 @@ class AttendanceApi {
               fallbackReason: e['fallback_reason'] as String?,
               punctualityStatus: e['punctuality_status'] as String?,
               checkoutStatus: e['checkout_status'] as String?,
+              riskScore: _toInt(e['risk_score']),
+              riskLevel: e['risk_level'] as String?,
+              riskFlags: _toStringList(e['risk_flags']),
             ),
           )
           .toList();
@@ -153,16 +189,34 @@ class AttendanceApi {
     required String token,
     required double lat,
     required double lng,
+    double? accuracyM,
+    DateTime? timestampClient,
   }) {
-    return _doAction(path: '/attendance/checkin', token: token, lat: lat, lng: lng);
+    return _doAction(
+      path: '/attendance/checkin',
+      token: token,
+      lat: lat,
+      lng: lng,
+      accuracyM: accuracyM,
+      timestampClient: timestampClient,
+    );
   }
 
   Future<AttendanceActionResult> checkout({
     required String token,
     required double lat,
     required double lng,
+    double? accuracyM,
+    DateTime? timestampClient,
   }) {
-    return _doAction(path: '/attendance/checkout', token: token, lat: lat, lng: lng);
+    return _doAction(
+      path: '/attendance/checkout',
+      token: token,
+      lat: lat,
+      lng: lng,
+      accuracyM: accuracyM,
+      timestampClient: timestampClient,
+    );
   }
 
   Future<AttendanceActionResult> _doAction({
@@ -170,18 +224,32 @@ class AttendanceApi {
     required String token,
     required double lat,
     required double lng,
+    double? accuracyM,
+    DateTime? timestampClient,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}$path');
+    final payload = <String, dynamic>{
+      'lat': lat,
+      'lng': lng,
+    };
+    if (accuracyM != null) {
+      payload['accuracy_m'] = accuracyM;
+    }
+    if (timestampClient != null) {
+      payload['timestamp_client'] = timestampClient.toUtc().toIso8601String();
+    }
+
     final response = await http.post(
       uri,
       headers: _authHeaders(token),
-      body: jsonEncode({'lat': lat, 'lng': lng}),
+      body: jsonEncode(payload),
     );
 
     final data = _parseJsonMap(response.body);
 
     if (response.statusCode == 200) {
       final log = data['log'] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final responseFlags = _toStringList(data['risk_flags']);
       return AttendanceActionResult(
         type: log['type'] as String? ?? 'UNKNOWN',
         time: log['time'] as String? ?? '',
@@ -194,10 +262,21 @@ class AttendanceApi {
         message: data['message'] as String? ?? 'Success',
         punctualityStatus: log['punctuality_status'] as String?,
         checkoutStatus: log['checkout_status'] as String?,
+        riskScore: _toInt(data['risk_score']) ?? _toInt(log['risk_score']),
+        riskLevel: (data['risk_level'] as String?) ?? (log['risk_level'] as String?),
+        riskFlags: responseFlags.isNotEmpty ? responseFlags : _toStringList(log['risk_flags']),
+        decision: data['decision'] as String?,
       );
     }
 
-    throw Exception(_extractErrorMessage(data, 'Action failed (${response.statusCode})'));
+    final details = _extractErrorDetails(data);
+    throw AttendanceActionException(
+      message: _extractErrorMessage(data, 'Action failed (${response.statusCode})'),
+      riskScore: _toInt(details['risk_score']),
+      riskLevel: details['risk_level'] as String?,
+      riskFlags: _toStringList(details['risk_flags']),
+      decision: details['decision'] as String?,
+    );
   }
 
   Map<String, String> _authHeaders(String token) {
@@ -242,6 +321,37 @@ class AttendanceApi {
     }
 
     return fallback;
+  }
+
+  Map<String, dynamic> _extractErrorDetails(Map<String, dynamic> data) {
+    final error = data['error'];
+    if (error is Map<String, dynamic>) {
+      final details = error['details'];
+      if (details is Map<String, dynamic>) {
+        return details;
+      }
+    }
+    return const <String, dynamic>{};
+  }
+
+  List<String> _toStringList(dynamic value) {
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return const <String>[];
+  }
+
+  int? _toInt(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value.toString());
   }
 
   double? _toDouble(dynamic value) {

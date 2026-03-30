@@ -62,7 +62,7 @@ class _AdminPageState extends State<AdminPage> {
   int? _reportEmployeeId;
   bool _reportIncludeEmpty = false;
 
-  String _exceptionTypeFilter = 'MISSED_CHECKOUT';
+  String _exceptionTypeFilter = 'SUSPECTED_LOCATION_SPOOF';
   String? _exceptionStatusFilter = 'OPEN';
   final Set<int> _updatingExceptionIds = {};
 
@@ -1786,14 +1786,19 @@ class _AdminPageState extends State<AdminPage> {
                           runSpacing: 10,
                           children: [
                             SizedBox(
-                              width: 240,
+                              width: 300,
                               child: DropdownButtonFormField<String>(
                                 initialValue: _exceptionTypeFilter,
+                                isExpanded: true,
                                 decoration: _decoration(
                                   'Loại exception',
                                   Icons.category_outlined,
                                 ),
                                 items: const [
+                                  DropdownMenuItem<String>(
+                                    value: 'SUSPECTED_LOCATION_SPOOF',
+                                    child: Text('SUSPECTED_SPOOF'),
+                                  ),
                                   DropdownMenuItem<String>(
                                     value: 'MISSED_CHECKOUT',
                                     child: Text('MISSED_CHECKOUT'),

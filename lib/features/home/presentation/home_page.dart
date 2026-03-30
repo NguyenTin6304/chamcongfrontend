@@ -42,6 +42,7 @@ class _HomePageState extends State<HomePage> {
 
   AttendanceStatusResult? _status;
   AttendanceActionResult? _lastAction;
+  AttendanceActionException? _lastActionError;
   List<AttendanceLogItem> _history = const [];
 
   bool get _isAnyLoading =>
@@ -220,11 +221,19 @@ class _HomePageState extends State<HomePage> {
       }
 
       final result = isCheckin
-          ? await _attendanceApi.checkin(token: token, lat: position.latitude, lng: position.longitude)
+          ? await _attendanceApi.checkin(
+              token: token,
+              lat: position.latitude,
+              lng: position.longitude,
+              accuracyM: position.accuracy > 0 ? position.accuracy : null,
+              timestampClient: DateTime.now().toUtc(),
+            )
           : await _attendanceApi.checkout(
               token: token,
               lat: position.latitude,
               lng: position.longitude,
+              accuracyM: position.accuracy > 0 ? position.accuracy : null,
+              timestampClient: DateTime.now().toUtc(),
             );
 
       if (!mounted) {
@@ -233,6 +242,7 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _lastAction = result;
+        _lastActionError = null;
       });
 
       final timingNotice = _timingNotice(result);
@@ -241,6 +251,14 @@ class _HomePageState extends State<HomePage> {
       );
       await _refreshStatus(showSnack: false);
       await _refreshHistory(showSnack: false);
+    } on AttendanceActionException catch (error) {
+      if (mounted) {
+        setState(() {
+          _lastAction = null;
+          _lastActionError = error;
+        });
+      }
+      _showSnack('${isCheckin ? 'Check-in' : 'Check-out'} thất bại: ${error.message}');
     } catch (error) {
       _showSnack('${isCheckin ? 'Check-in' : 'Check-out'} thất bại: $error');
     } finally {
@@ -414,6 +432,72 @@ class _HomePageState extends State<HomePage> {
       default:
         return status;
     }
+  }
+
+  Color _riskTone(String? level) {
+    switch ((level ?? '').toUpperCase()) {
+      case 'HIGH':
+        return Colors.red;
+      case 'MEDIUM':
+        return Colors.orange;
+      case 'LOW':
+        return Colors.green;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  String _riskDecisionLabel(String? decision) {
+    switch ((decision ?? '').toUpperCase()) {
+      case 'BLOCK':
+        return 'Từ chối chấm công';
+      case 'ALLOW_WITH_EXCEPTION':
+        return 'Cho phép nhưng tạo ngoại lệ';
+      case 'ALLOW':
+        return 'Cho phép';
+      default:
+        return '-';
+    }
+  }
+
+  Widget _buildRiskCard() {
+    final result = _lastAction;
+    final error = _lastActionError;
+
+    final score = result?.riskScore ?? error?.riskScore;
+    final level = result?.riskLevel ?? error?.riskLevel;
+    final decision = result?.decision ?? error?.decision;
+    final flags = result?.riskFlags ?? error?.riskFlags ?? const <String>[];
+
+    if (score == null && (flags.isEmpty) && (decision == null || decision.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+
+    final tone = _riskTone(level);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Risk: ${level ?? '-'} | Score: ${score?.toString() ?? '-'}',
+            style: TextStyle(color: tone, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text('Decision: ${_riskDecisionLabel(decision)}'),
+          if (flags.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Flags: ${flags.join(', ')}'),
+          ],
+        ],
+      ),
+    );
   }
 
   Color _stateColor(String? state) {
@@ -852,6 +936,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                         const SizedBox(height: 6),
                         Text('Message: ${_lastAction?.message ?? '-'}'),
+                        _buildRiskCard(),
                       ],
                     ),
                   ),

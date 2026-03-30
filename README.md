@@ -1,4 +1,5 @@
 ﻿# Birdle - Ứng dụng chấm công (Flutter)
+Lệnh chạy flutter run -d chrome --web-port=62601 --dart-define=API_BASE_URL=http://127.0.0.1:8000 --dart-define=GEOAPIFY_API_KEY=YOUR_KEY 
 
 ## 1) Tổng quan
 Đây là frontend Flutter cho hệ thống chấm công theo GPS/geofence.
