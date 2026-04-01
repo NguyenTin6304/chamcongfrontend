@@ -2579,6 +2579,7 @@ class _AdminPageState extends State<AdminPage> {
     switch (status.toLowerCase()) {
       case 'on_time':
       case 'ontime':
+      case 'early':
         return 'Đúng giờ';
       case 'late':
         return 'Đi muộn';
@@ -2586,8 +2587,18 @@ class _AdminPageState extends State<AdminPage> {
       case 'outofrange':
       case 'oor':
         return 'Ngoài vùng';
+      case 'complete':
+        return 'Đầy đủ';
+      case 'missed_checkout':
+        return 'Thiếu checkout';
+      case 'absent':
+        return 'Vắng mặt';
+      case 'pending_timesheet':
+        return 'Chờ duyệt';
+      case 'missing_checkin_anomaly':
+        return 'Bất thường';
       default:
-        return 'Không rõ';
+        return status;
     }
   }
 
@@ -2598,7 +2609,12 @@ class _AdminPageState extends State<AdminPage> {
       case 'out_of_range':
       case 'outofrange':
       case 'oor':
+      case 'absent':
+      case 'missing_checkin_anomaly':
         return const Color(0xFFDC2626);
+      case 'missed_checkout':
+      case 'pending_timesheet':
+        return const Color(0xFFD97706);
       default:
         return const Color(0xFF16A34A);
     }
@@ -3759,7 +3775,7 @@ class _AdminPageState extends State<AdminPage> {
                     : _formatThousands(summary.checkedIn),
                 subText: summary == null
                     ? null
-                    : 'T? l?? ${_formatPercent(summary.attendanceRatePercent)}%',
+                    : 'Tỷ lệ ${_formatPercent(summary.attendanceRatePercent)}%',
                 subColor: const Color(0xFF16A34A),
                 icon: Icons.check_circle_outline,
                 iconColor: const Color(0xFF16A34A),

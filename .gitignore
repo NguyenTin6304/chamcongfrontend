@@ -46,3 +46,6 @@ app.*.map.json
 /android/app/release
 .vercel
 .env*.local
+
+CLAUDE.md
+CODEBASE_OVERVIEW.md
