@@ -1,17 +1,46 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart' hide Path;
+import 'dart:math' as math;
 
+import '../../../core/config/app_config.dart';
 import '../../../core/download/file_downloader.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../widgets/common/admin_sidebar.dart';
+import '../../../widgets/common/admin_topbar.dart';
+import '../../../widgets/common/kpi_card.dart';
+import '../../../widgets/common/status_badge.dart';
 import '../data/admin_api.dart';
+import 'admin_shell.dart';
 import 'group_admin_page.dart';
 import 'widgets/admin_location_picker.dart';
+part 'attendance_logs/widgets/attendance_detail_modal.dart';
+part 'attendance_logs/widgets/attendance_filter_bar.dart';
+part 'attendance_logs/widgets/attendance_stat_cards.dart';
+part 'attendance_logs/widgets/attendance_table.dart';
+part 'employees/widgets/employee_edit_panel.dart';
+part 'employees/widgets/employee_table.dart';
+part 'groups/widgets/group_card.dart';
+part 'groups/widgets/group_card_grid.dart';
+part 'groups/widgets/group_create_panel.dart';
+part 'groups/widgets/unassigned_panel.dart';
+part 'geofences/widgets/geofence_config_form.dart';
+part 'geofences/widgets/geofence_list.dart';
+part 'geofences/widgets/geofence_map.dart';
+part 'reports/widgets/attendance_heatmap.dart';
+part 'reports/widgets/group_performance_chart.dart';
+part 'reports/widgets/status_donut_chart.dart';
+part 'reports/widgets/top_late_list.dart';
+part 'reports/widgets/trend_line_chart.dart';
 
 class AdminPage extends StatefulWidget {
-  const AdminPage({required this.email, super.key});
+  const AdminPage({required this.email, this.initialSection, super.key});
 
   final String email;
+  final String? initialSection;
 
   @override
   State<AdminPage> createState() => _AdminPageState();
@@ -34,10 +63,31 @@ class _AdminPageState extends State<AdminPage> {
 
   final _employeeCodeController = TextEditingController();
   final _employeeNameController = TextEditingController();
+  final _searchController = TextEditingController();
+  final _logsSearchController = TextEditingController();
+  final _employeesSearchController = TextEditingController();
+  final _groupsSearchController = TextEditingController();
+  final _geofenceSearchController = TextEditingController();
+  final _zoneNameController = TextEditingController();
+  final _zoneLatController = TextEditingController();
+  final _zoneLngController = TextEditingController();
+  final _zoneRadiusController = TextEditingController();
+  final _zoneAddressController = TextEditingController();
+  final _zoneStartTimeController = TextEditingController();
+  final _zoneEndTimeController = TextEditingController();
+  final _zoneOvertimeStartController = TextEditingController();
+  final MapController _geofenceMapController = MapController();
 
   final Set<int> _assigningEmployeeIds = {};
   final Set<int> _deletingEmployeeIds = {};
   final Map<int, int?> _selectedUserByEmployee = {};
+  final _dashboardSectionKey = GlobalKey();
+  final _logsSectionKey = GlobalKey();
+  final _employeesSectionKey = GlobalKey();
+  final _groupsSectionKey = GlobalKey();
+  final _reportsSectionKey = GlobalKey();
+  final _exceptionsSectionKey = GlobalKey();
+  final _settingsSectionKey = GlobalKey();
 
   String? _token;
 
@@ -48,12 +98,41 @@ class _AdminPageState extends State<AdminPage> {
   bool _creatingEmployee = false;
   bool _downloadingReport = false;
   bool _loadingExceptions = false;
+  bool _loadingDashboardSummary = false;
+  bool _loadingDashboardLogs = false;
+  bool _loadingDashboardWeekly = false;
+  bool _loadingDashboardGeofences = false;
+  bool _loadingDashboardExceptions = false;
+  bool _loadingDashboardGroups = false;
+  bool _loadingGroupGeofenceCards = false;
+  bool _savingGroup = false;
+  bool _deletingGroup = false;
+  bool _searchingGeofencePlaces = false;
+  bool _reversingGeofenceAddress = false;
+  bool _savingGeofenceConfig = false;
+  bool _deletingGeofenceConfig = false;
+  bool _exportingDashboardCsv = false;
+  bool _loadingReportsSummary = false;
+  bool _loadingReportsTrends = false;
+  bool _loadingReportsLogs = false;
+  bool _loadingReportsLateTop = false;
+  bool _exportingReportsExcel = false;
 
   ActiveRuleResult? _activeRule;
   String? _ruleLocationAddress;
   List<EmployeeLite> _employees = const [];
   List<UserLite> _users = const [];
   List<AttendanceExceptionItem> _exceptions = const [];
+  DashboardSummaryResult? _dashboardSummary;
+  List<DashboardAttendanceLogItem> _dashboardLogs = const [];
+  List<DashboardWeeklyTrendItem> _dashboardWeekly = const [];
+  List<DashboardGeofenceItem> _dashboardGeofences = const [];
+  List<DashboardExceptionItem> _dashboardExceptions = const [];
+  List<GroupLite> _dashboardGroups = const [];
+  DashboardSummaryResult? _reportsSummary;
+  List<DashboardWeeklyTrendItem> _reportsTrends = const [];
+  List<DashboardAttendanceLogItem> _reportsLogs = const [];
+  List<DashboardAttendanceLogItem> _reportsLateTop = const [];
 
   int? _newEmployeeUserId;
   int? _expandedEmployeeId;
@@ -61,10 +140,41 @@ class _AdminPageState extends State<AdminPage> {
   DateTime? _reportToDate;
   int? _reportEmployeeId;
   bool _reportIncludeEmpty = false;
+  final DateTime _dashboardDate = DateTime.now();
+  int? _dashboardGroupId;
+  String _dashboardStatus = 'all';
+  DateTime _reportsMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  int? _reportsGroupId;
+  String _reportsStatus = 'all';
+  String _reportsType = 'overview';
+  String _reportsTrendPeriod = 'day';
+  bool _reportsLoadedOnce = false;
+  DateTime _logsFromDate = DateTime.now();
+  DateTime _logsToDate = DateTime.now();
+  String _logsSearch = '';
+  int _logsPage = 1;
+  int _logsPageSize = 10;
+  int? _employeesGroupId;
+  String _employeesStatus = 'all';
+  int _employeesPage = 1;
+  int _employeesPageSize = 10;
+  String _groupsSearch = '';
+  String _groupsStatus = 'all';
+  final Map<int, List<GroupGeofenceLite>> _groupGeofencesByGroupId = {};
+  DashboardGeofenceItem? _selectedGeofence;
+  LatLng? _newGeofencePoint;
+  double _geofenceMapZoom = 14;
+  List<GeoPlaceSuggestion> _geofencePlaceSuggestions = const [];
+  bool _zoneOvertimeEnabled = false;
+  bool _zoneActive = true;
+  final Set<int> _zoneAssignedGroupIds = {};
 
   String _exceptionTypeFilter = 'SUSPECTED_LOCATION_SPOOF';
   String? _exceptionStatusFilter = 'OPEN';
   final Set<int> _updatingExceptionIds = {};
+  _AdminShellNav _activeNav = _AdminShellNav.dashboard;
+  _AdminShellNav? _hoveredNav;
+  final Set<int> _dashboardUpdatingExceptionIds = {};
 
   String? _error;
   String? _info;
@@ -77,19 +187,65 @@ class _AdminPageState extends State<AdminPage> {
       _creatingEmployee ||
       _downloadingReport ||
       _loadingExceptions ||
+      _loadingDashboardSummary ||
+      _loadingDashboardLogs ||
+      _loadingDashboardWeekly ||
+      _loadingDashboardGeofences ||
+      _loadingDashboardExceptions ||
+      _loadingDashboardGroups ||
+      _loadingGroupGeofenceCards ||
+      _savingGroup ||
+      _deletingGroup ||
+      _savingGeofenceConfig ||
+      _deletingGeofenceConfig ||
+      _exportingDashboardCsv ||
+      _loadingReportsSummary ||
+      _loadingReportsTrends ||
+      _loadingReportsLogs ||
+      _loadingReportsLateTop ||
+      _exportingReportsExcel ||
       _assigningEmployeeIds.isNotEmpty ||
       _deletingEmployeeIds.isNotEmpty ||
-      _updatingExceptionIds.isNotEmpty;
+      _updatingExceptionIds.isNotEmpty ||
+      _dashboardUpdatingExceptionIds.isNotEmpty;
 
   @override
   void initState() {
     super.initState();
+    _activeNav = _initialNavFromSection(widget.initialSection);
     _startTimeController.text = '08:00';
     _graceMinutesController.text = '30';
     _endTimeController.text = '17:30';
     _checkoutGraceMinutesController.text = '0';
     _cutoffMinutesController.text = '240';
+    _zoneRadiusController.text = '200';
+    _zoneStartTimeController.text = '08:00';
+    _zoneEndTimeController.text = '17:30';
+    _zoneOvertimeStartController.text = '18:00';
     _bootstrap();
+  }
+
+  _AdminShellNav _initialNavFromSection(String? section) {
+    switch (section) {
+      case 'attendance':
+      case 'logs':
+        return _AdminShellNav.logs;
+      case 'employees':
+        return _AdminShellNav.employees;
+      case 'groups':
+        return _AdminShellNav.groups;
+      case 'geofences':
+        return _AdminShellNav.geofences;
+      case 'reports':
+        return _AdminShellNav.reports;
+      case 'exceptions':
+        return _AdminShellNav.exceptions;
+      case 'settings':
+        return _AdminShellNav.settings;
+      case 'dashboard':
+      default:
+        return _AdminShellNav.dashboard;
+    }
   }
 
   @override
@@ -105,6 +261,19 @@ class _AdminPageState extends State<AdminPage> {
     _cutoffMinutesController.dispose();
     _employeeCodeController.dispose();
     _employeeNameController.dispose();
+    _searchController.dispose();
+    _logsSearchController.dispose();
+    _employeesSearchController.dispose();
+    _groupsSearchController.dispose();
+    _geofenceSearchController.dispose();
+    _zoneNameController.dispose();
+    _zoneLatController.dispose();
+    _zoneLngController.dispose();
+    _zoneRadiusController.dispose();
+    _zoneAddressController.dispose();
+    _zoneStartTimeController.dispose();
+    _zoneEndTimeController.dispose();
+    _zoneOvertimeStartController.dispose();
     super.dispose();
   }
 
@@ -133,6 +302,11 @@ class _AdminPageState extends State<AdminPage> {
     await _loadUsers();
     await _loadEmployees();
     await _loadExceptions();
+    await _loadDashboardGroups();
+    await _loadDashboardData();
+    if (_activeNav == _AdminShellNav.reports) {
+      await _refreshReportsOnly();
+    }
   }
 
   Future<void> _loadActiveRule() async {
@@ -218,7 +392,9 @@ class _AdminPageState extends State<AdminPage> {
     }
     setState(() {
       _ruleLocationAddress = value.displayName;
-      if (!value.hasValidCoordinates || value.latitude == null || value.longitude == null) {
+      if (!value.hasValidCoordinates ||
+          value.latitude == null ||
+          value.longitude == null) {
         _latController.clear();
         _lngController.clear();
         return;
@@ -282,7 +458,11 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  Future<void> _loadEmployees() async {
+  Future<void> _loadEmployees({
+    String? query,
+    int? groupId,
+    String? status,
+  }) async {
     final token = _token;
     if (token == null || token.isEmpty) {
       return;
@@ -294,7 +474,12 @@ class _AdminPageState extends State<AdminPage> {
     });
 
     try {
-      final employees = await _adminApi.listEmployees(token);
+      final employees = await _adminApi.listEmployees(
+        token,
+        query: query,
+        groupId: groupId,
+        status: status,
+      );
       if (!mounted) {
         return;
       }
@@ -309,14 +494,19 @@ class _AdminPageState extends State<AdminPage> {
             !_employees.any((e) => e.id == _expandedEmployeeId)) {
           _expandedEmployeeId = null;
         }
+        final pages = _employeesTotalPages;
+        if (_employeesPage > pages) {
+          _employeesPage = pages;
+        }
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _error = 'Tải danh sách nhân viên thất bại: $error';
+        _error = 'Không thể tải danh sách nhân viên.';
       });
+      _showSnack('Không thể tải danh sách nhân viên.');
     } finally {
       if (mounted) {
         setState(() {
@@ -548,8 +738,8 @@ class _AdminPageState extends State<AdminPage> {
         _selectedUserByEmployee[created.id] = created.userId;
         _expandedEmployeeId = created.id;
         _info = created.userId == null
-            ? 'Đã tạo employee ${created.code}.'
-            : 'Đã tạo employee ${created.code} và gán user_id=${created.userId}.';
+            ? 'Đã tạo nhân viên ${created.code}.'
+            : 'Đã tạo nhân viên ${created.code} và gán user_id=${created.userId}.';
       });
 
       await _loadUsers();
@@ -691,9 +881,9 @@ class _AdminPageState extends State<AdminPage> {
         if (_expandedEmployeeId == employee.id) {
           _expandedEmployeeId = null;
         }
-        _info = 'Đã xóa employee ${employee.code}.';
+        _info = 'Đã xóa nhân viên ${employee.code}.';
       });
-      _showSnack('Đã xóa employee ${employee.code}.');
+      _showSnack('Đã xóa nhân viên ${employee.code}.');
 
       await _loadUsers();
     } catch (error) {
@@ -986,7 +1176,7 @@ class _AdminPageState extends State<AdminPage> {
         _exceptions = _exceptions
             .map((e) => e.id == updated.id ? updated : e)
             .toList(growable: false);
-        _info = 'Đã resolve exception #${updated.id}.';
+        _info = 'Đã xử lý ngoại lệ #${updated.id}.';
       });
       await _loadExceptions();
     } catch (error) {
@@ -994,7 +1184,7 @@ class _AdminPageState extends State<AdminPage> {
         return;
       }
       setState(() {
-        _error = 'Resolve exception thất bại: $error';
+        _error = 'Xử lý ngoại lệ thất bại: $error';
       });
     } finally {
       noteController.dispose();
@@ -1036,7 +1226,7 @@ class _AdminPageState extends State<AdminPage> {
                   controller: noteController,
                   maxLines: 3,
                   decoration: _decoration(
-                    'Ghi chú reopen (optional)',
+                    'Ghi chú mở lại (tuỳ chọn)',
                     Icons.note_alt_outlined,
                   ),
                 ),
@@ -1046,7 +1236,7 @@ class _AdminPageState extends State<AdminPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Hủy'),
+              child: const Text('Huỷ'),
             ),
             FilledButton.tonal(
               onPressed: () => Navigator.of(context).pop(true),
@@ -1085,7 +1275,7 @@ class _AdminPageState extends State<AdminPage> {
         _exceptions = _exceptions
             .map((e) => e.id == updated.id ? updated : e)
             .toList(growable: false);
-        _info = 'Đã reopen exception #${updated.id}.';
+        _info = 'Đã mở lại ngoại lệ #${updated.id}.';
       });
       await _loadExceptions();
     } catch (error) {
@@ -1093,7 +1283,7 @@ class _AdminPageState extends State<AdminPage> {
         return;
       }
       setState(() {
-        _error = 'Reopen exception thất bại: $error';
+        _error = 'Mở lại ngoại lệ thất bại: $error';
       });
     } finally {
       noteController.dispose();
@@ -1200,7 +1390,7 @@ class _AdminPageState extends State<AdminPage> {
 
   List<DropdownMenuItem<int?>> _userItemsForEmployee(EmployeeLite employee) {
     final items = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(value: null, child: Text('Không gán user')),
+      const DropdownMenuItem<int?>(value: null, child: Text('Không gán user')),
     ];
 
     for (final u in _users) {
@@ -1424,24 +1614,2770 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Demo'),
-        actions: [
-          IconButton(
-            onPressed: _isAnyLoading ? null : _refreshAll,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Tải lại',
+  String _pageTitleForNav(_AdminShellNav nav) {
+    switch (nav) {
+      case _AdminShellNav.dashboard:
+        return 'Bảng điều khiển';
+      case _AdminShellNav.logs:
+        return 'Nhật ký chấm công';
+      case _AdminShellNav.employees:
+        return 'Nhân viên';
+      case _AdminShellNav.groups:
+        return 'Nhóm';
+      case _AdminShellNav.geofences:
+        return 'Vùng địa lý';
+      case _AdminShellNav.reports:
+        return 'Báo cáo';
+      case _AdminShellNav.exceptions:
+        return 'Ngoại lệ';
+      case _AdminShellNav.settings:
+        return 'Cài đặt';
+    }
+  }
+
+  String _vietnameseDateLabel() {
+    const weekdays = <int, String>{
+      DateTime.monday: 'Thứ hai',
+      DateTime.tuesday: 'Thứ ba',
+      DateTime.wednesday: 'Thứ tư',
+      DateTime.thursday: 'Thứ năm',
+      DateTime.friday: 'Thứ sáu',
+      DateTime.saturday: 'Thứ bảy',
+      DateTime.sunday: 'Chủ nhật',
+    };
+    final now = DateTime.now();
+    final day = weekdays[now.weekday] ?? '';
+    final date = DateFormat('dd/MM/yyyy').format(now);
+    return '$day, $date';
+  }
+
+  String _displayNameFromEmail() {
+    final trimmed = widget.email.trim();
+    if (trimmed.isEmpty) {
+      return 'Quản trị viên';
+    }
+    final prefix = trimmed.split('@').first.trim();
+    if (prefix.isEmpty) {
+      return 'Quản trị viên';
+    }
+    return prefix;
+  }
+
+  List<_ShellNavEntry> _shellNavItems() {
+    final pending = _dashboardExceptions.isNotEmpty
+        ? _dashboardExceptions.length
+        : _exceptions.where((e) => e.status == 'OPEN').length;
+    return [
+      const _ShellNavEntry(
+        nav: _AdminShellNav.dashboard,
+        icon: Icons.dashboard_outlined,
+        label: 'Bảng điều khiển',
+      ),
+      const _ShellNavEntry(
+        nav: _AdminShellNav.logs,
+        icon: Icons.receipt_long_outlined,
+        label: 'Nhật ký chấm công',
+      ),
+      const _ShellNavEntry(
+        nav: _AdminShellNav.employees,
+        icon: Icons.people_outline,
+        label: 'Nhân viên',
+      ),
+      const _ShellNavEntry(
+        nav: _AdminShellNav.groups,
+        icon: Icons.groups_2_outlined,
+        label: 'Nhóm',
+      ),
+      const _ShellNavEntry(
+        nav: _AdminShellNav.geofences,
+        icon: Icons.map_outlined,
+        label: 'Vùng địa lý',
+      ),
+      const _ShellNavEntry(
+        nav: _AdminShellNav.reports,
+        icon: Icons.bar_chart_outlined,
+        label: 'Báo cáo',
+      ),
+      _ShellNavEntry(
+        nav: _AdminShellNav.exceptions,
+        icon: Icons.error_outline,
+        label: 'Ngoại lệ',
+        badgeCount: pending,
+      ),
+      const _ShellNavEntry(
+        nav: _AdminShellNav.settings,
+        icon: Icons.settings_outlined,
+        label: 'Cài đặt',
+      ),
+    ];
+  }
+
+  Future<void> _onShellNavTap(_AdminShellNav nav) async {
+    setState(() {
+      _activeNav = nav;
+    });
+    if (nav == _AdminShellNav.employees) {
+      await _refreshEmployeesOnly();
+      return;
+    }
+    if (nav == _AdminShellNav.groups) {
+      await _refreshGroupsOnly();
+      return;
+    }
+    if (nav == _AdminShellNav.geofences) {
+      await _refreshGeofencesOnly();
+      return;
+    }
+    if (nav == _AdminShellNav.reports) {
+      if (!_reportsLoadedOnce) {
+        await _refreshReportsOnly();
+      }
+    }
+  }
+
+  Widget _buildSidebar() {
+    final name = _displayNameFromEmail();
+    final avatarText = name.isNotEmpty ? name[0].toUpperCase() : 'A';
+    final items = _shellNavItems()
+        .map(
+          (item) => AdminSidebarItem<_AdminShellNav>(
+            value: item.nav,
+            icon: item.icon,
+            label: item.label,
+            badgeCount: item.badgeCount,
+            withDividerBefore: item.nav == _AdminShellNav.settings,
           ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Đăng xuất',
+        )
+        .toList(growable: false);
+
+    return AdminSidebar<_AdminShellNav>(
+      items: items,
+      selected: _activeNav,
+      hovered: _hoveredNav,
+      displayName: name,
+      avatarText: avatarText,
+      roleLabel: 'Quản trị viên',
+      onTap: (nav) {
+        _onShellNavTap(nav);
+      },
+      onHoverChanged: (nav) {
+        setState(() {
+          _hoveredNav = nav;
+        });
+      },
+    );
+  }
+
+  Widget _buildTopbar() {
+    final title = _pageTitleForNav(_activeNav);
+    final name = _displayNameFromEmail();
+    final avatarText = name.isNotEmpty ? name[0].toUpperCase() : 'A';
+
+    return AdminTopbar(
+      title: title,
+      dateLabel: _vietnameseDateLabel(),
+      searchController: _searchController,
+      avatarText: avatarText,
+      onAvatarTap: _logout,
+    );
+  }
+
+  Future<void> _loadDashboardGroups() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    setState(() {
+      _loadingDashboardGroups = true;
+    });
+    try {
+      final groups = await _adminApi.listGroups(token);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardGroups = groups;
+        if (_dashboardGroupId != null &&
+            !_dashboardGroups.any((g) => g.id == _dashboardGroupId)) {
+          _dashboardGroupId = null;
+        }
+        if (_reportsGroupId != null &&
+            !_dashboardGroups.any((g) => g.id == _reportsGroupId)) {
+          _reportsGroupId = null;
+        }
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể tải danh sách nhóm.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDashboardGroups = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDashboardData() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await Future.wait([
+      _loadDashboardSummary(token),
+      _loadDashboardLogs(token),
+      _loadDashboardWeekly(token),
+      _loadDashboardGeofences(token),
+      _loadDashboardExceptions(token),
+    ]);
+  }
+
+  Future<void> _loadDashboardSummary(String token) async {
+    setState(() {
+      _loadingDashboardSummary = true;
+    });
+    try {
+      final data = await _adminApi.getDashboardSummary(
+        token: token,
+        date: _dashboardDate,
+        groupId: _dashboardGroupId,
+        status: _dashboardStatus,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardSummary = data;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardSummary = null;
+      });
+      _showSnack('Không thể tải số liệu tổng quan.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDashboardSummary = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDashboardLogs(String token) async {
+    setState(() {
+      _loadingDashboardLogs = true;
+    });
+    try {
+      final rows = await _adminApi.listDashboardAttendanceLogs(
+        token: token,
+        fromDate: _logsFromDate,
+        toDate: _logsToDate,
+        groupId: _dashboardGroupId,
+        status: _dashboardStatus,
+        search: _logsSearch,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardLogs = rows;
+        final pages = rows.isEmpty
+            ? 1
+            : ((rows.length - 1) ~/ _logsPageSize) + 1;
+        if (_logsPage > pages) {
+          _logsPage = pages;
+        }
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardLogs = const [];
+      });
+      _showSnack('Không thể tải nhật ký chấm công.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDashboardLogs = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDashboardWeekly(String token) async {
+    setState(() {
+      _loadingDashboardWeekly = true;
+    });
+    try {
+      final rows = await _adminApi.getDashboardWeeklyTrends(
+        token: token,
+        date: _dashboardDate,
+        groupId: _dashboardGroupId,
+        status: _dashboardStatus,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardWeekly = rows;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardWeekly = const [];
+      });
+      _showSnack('Không thể tải xu hướng chấm công tuần.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDashboardWeekly = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDashboardGeofences(String token) async {
+    setState(() {
+      _loadingDashboardGeofences = true;
+    });
+    try {
+      final rows = await _adminApi.listDashboardGeofences(token: token);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardGeofences = rows;
+      });
+      _syncSelectedGeofence();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardGeofences = const [];
+        _selectedGeofence = null;
+      });
+      _showSnack('Không thể tải danh sách vùng địa lý.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDashboardGeofences = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadDashboardExceptions(String token) async {
+    setState(() {
+      _loadingDashboardExceptions = true;
+    });
+    try {
+      final rows = await _adminApi.listDashboardExceptions(token: token);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardExceptions = rows;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardExceptions = const [];
+      });
+      _showSnack('Không thể tải ngoại lệ chờ duyệt.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingDashboardExceptions = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _onDashboardFilterChanged() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await Future.wait([
+      _loadDashboardSummary(token),
+      _loadDashboardLogs(token),
+      _loadDashboardWeekly(token),
+    ]);
+  }
+
+  DateTime get _reportsFromDate =>
+      DateTime(_reportsMonth.year, _reportsMonth.month, 1);
+
+  DateTime get _reportsToDate =>
+      DateTime(_reportsMonth.year, _reportsMonth.month + 1, 0);
+
+  Future<void> _refreshReportsOnly() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await Future.wait([
+      _loadReportsSummary(token),
+      _loadReportsTrends(token),
+      _loadReportsLogs(token),
+      _loadReportsTopLate(token),
+    ]);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _reportsLoadedOnce = true;
+    });
+  }
+
+  Future<void> _loadReportsSummary(String token) async {
+    setState(() {
+      _loadingReportsSummary = true;
+    });
+    try {
+      final data = await _adminApi.getDashboardSummary(
+        token: token,
+        date: _reportsFromDate,
+        groupId: _reportsGroupId,
+        status: _reportsStatus,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsSummary = data;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsSummary = null;
+      });
+      _showSnack('Khong the tai tong quan bao cao.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingReportsSummary = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadReportsTrends(String token) async {
+    setState(() {
+      _loadingReportsTrends = true;
+    });
+    try {
+      final data = await _adminApi.getDashboardWeeklyTrends(
+        token: token,
+        date: _reportsFromDate,
+        groupId: _reportsGroupId,
+        status: _reportsStatus,
+        period: _reportsTrendPeriod,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsTrends = data;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsTrends = const [];
+      });
+      _showSnack('Khong the tai xu huong cham cong.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingReportsTrends = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadReportsLogs(String token) async {
+    setState(() {
+      _loadingReportsLogs = true;
+    });
+    try {
+      final rows = await _adminApi.listDashboardAttendanceLogs(
+        token: token,
+        fromDate: _reportsFromDate,
+        toDate: _reportsToDate,
+        groupId: _reportsGroupId,
+        status: _reportsStatus,
+        limit: 4000,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsLogs = rows;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsLogs = const [];
+      });
+      _showSnack('Khong the tai du lieu bao cao.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingReportsLogs = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadReportsTopLate(String token) async {
+    setState(() {
+      _loadingReportsLateTop = true;
+    });
+    try {
+      final rows = await _adminApi.listDashboardAttendanceLogs(
+        token: token,
+        fromDate: _reportsFromDate,
+        toDate: _reportsToDate,
+        groupId: _reportsGroupId,
+        status: 'late',
+        sort: 'count',
+        limit: 5,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsLateTop = rows;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reportsLateTop = const [];
+      });
+      _showSnack('Khong the tai top nhan vien vao muon.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingReportsLateTop = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _onReportsFilterChanged() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await Future.wait([
+      _loadReportsSummary(token),
+      _loadReportsTrends(token),
+      _loadReportsLogs(token),
+      _loadReportsTopLate(token),
+    ]);
+  }
+
+  Future<void> _onReportsTrendPeriodChanged(String period) async {
+    setState(() {
+      _reportsTrendPeriod = period;
+    });
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await _loadReportsTrends(token);
+  }
+
+  Future<void> _shiftReportsMonth(int delta) async {
+    setState(() {
+      _reportsMonth = DateTime(_reportsMonth.year, _reportsMonth.month + delta);
+    });
+    await _onReportsFilterChanged();
+  }
+
+  Future<void> _exportReportsExcel() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phien dang nhap da het han.');
+      return;
+    }
+    setState(() {
+      _exportingReportsExcel = true;
+    });
+    try {
+      final report = await _adminApi.downloadAttendanceReport(
+        token: token,
+        fromDate: _reportsFromDate,
+        toDate: _reportsToDate,
+        groupId: _reportsGroupId,
+      );
+      await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Xuat bao cao Excel thanh cong.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Khong the xuat bao cao Excel. Vui long thu lai.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exportingReportsExcel = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshLogsOnly() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await _loadDashboardLogs(token);
+  }
+
+  Future<void> _refreshEmployeesOnly() async {
+    await _loadEmployees();
+  }
+
+  String _userEmailById(int? userId) {
+    if (userId == null) {
+      return '--';
+    }
+    for (final user in _users) {
+      if (user.id == userId) {
+        return user.email;
+      }
+    }
+    return '--';
+  }
+
+  String _employeeStatusLabel(EmployeeLite employee) {
+    return _isEmployeeActive(employee) ? 'Hoạt động' : 'Không hoạt động';
+  }
+
+  Future<void> _showEmployeeDetail(EmployeeLite employee) async {
+    await _showEmployeeDetailDialog(employee);
+  }
+
+  Future<void> _showEmployeeEditPanel(EmployeeLite employee) async {
+    await _showEmployeeEditPanelDialog(employee);
+  }
+
+  Future<void> _showEmployeesActionMenu(
+    EmployeeLite employee,
+    Offset position,
+  ) async {
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: const [
+        PopupMenuItem<String>(value: 'group', child: Text('Đổi nhóm')),
+        PopupMenuItem<String>(value: 'disable', child: Text('Vô hiệu hoá')),
+        PopupMenuItem<String>(value: 'delete', child: Text('Xoá')),
+      ],
+    );
+    if (selected == 'group') {
+      await _showEmployeeEditPanel(employee);
+      return;
+    }
+    if (selected == 'disable') {
+      await _assignEmployee(employee, overrideUserId: null);
+      await _refreshEmployeesOnly();
+      return;
+    }
+    if (selected == 'delete') {
+      await _confirmDeleteEmployee(employee);
+    }
+  }
+
+  Future<void> _showCreateEmployeeDialog() async {
+    final codeController = TextEditingController();
+    final nameController = TextEditingController();
+    int? selectedGroupId;
+    int? selectedUserId;
+    var creating = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> onCreate() async {
+              final token = _token;
+              if (token == null || token.isEmpty) {
+                _showSnack('Phiên đăng nhập đã hết hạn.');
+                return;
+              }
+              final code = codeController.text.trim();
+              final fullName = nameController.text.trim();
+              if (code.isEmpty || fullName.isEmpty) {
+                _showSnack('Vui lòng nhập mã nhân viên và họ tên.');
+                return;
+              }
+              setDialogState(() {
+                creating = true;
+              });
+              try {
+                final created = await _adminApi.createEmployee(
+                  token: token,
+                  code: code,
+                  fullName: fullName,
+                  userId: selectedUserId,
+                  groupId: selectedGroupId,
+                );
+                if (!mounted) {
+                  return;
+                }
+                setState(() {
+                  _employees = [
+                    created,
+                    ..._employees.where((e) => e.id != created.id),
+                  ];
+                });
+                await _refreshEmployeesOnly();
+                _showSnack('Đã thêm nhân viên mới.');
+                if (!context.mounted) {
+                  return;
+                }
+                Navigator.of(context).pop();
+              } catch (_) {
+                if (!mounted) {
+                  return;
+                }
+                _showSnack('Không thể thêm nhân viên.');
+              } finally {
+                if (mounted) {
+                  setDialogState(() {
+                    creating = false;
+                  });
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Thêm nhân viên'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: codeController,
+                      decoration: _decoration(
+                        'Mã nhân viên *',
+                        Icons.badge_outlined,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: nameController,
+                      decoration: _decoration('Họ tên *', Icons.person_outline),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int?>(
+                      initialValue: selectedGroupId,
+                      decoration: _decoration('Nhóm', Icons.groups_2_outlined),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('Chưa phân nhóm'),
+                        ),
+                        ..._dashboardGroups.map(
+                          (group) => DropdownMenuItem<int?>(
+                            value: group.id,
+                            child: Text(group.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedGroupId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int?>(
+                      initialValue: selectedUserId,
+                      decoration: _decoration(
+                        'Liên kết tài khoản',
+                        Icons.link_outlined,
+                      ),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('Không liên kết'),
+                        ),
+                        ..._users.map(
+                          (user) => DropdownMenuItem<int?>(
+                            value: user.id,
+                            child: Text('${user.email} (${user.role})'),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedUserId = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: creating
+                      ? null
+                      : () => Navigator.of(context).pop(),
+                  child: const Text('Huỷ'),
+                ),
+                ElevatedButton(
+                  onPressed: creating ? null : onCreate,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: creating
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Thêm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    codeController.dispose();
+    nameController.dispose();
+  }
+
+  Future<void> _exportDashboardCsv() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+    setState(() {
+      _exportingDashboardCsv = true;
+    });
+    try {
+      final result = await _adminApi.exportDashboardExcel(
+        token: token,
+        fromDate: _dashboardDate,
+        toDate: _dashboardDate,
+        groupId: _dashboardGroupId,
+        status: _dashboardStatus,
+      );
+      await saveBytesAsFile(bytes: result.bytes, fileName: result.fileName);
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Xuất CSV thành công.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể xuất CSV. Vui lòng thử lại.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exportingDashboardCsv = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleDashboardExceptionAction({
+    required DashboardExceptionItem item,
+    required bool approve,
+  }) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+    if (_dashboardUpdatingExceptionIds.contains(item.id)) {
+      return;
+    }
+
+    final previous = _dashboardExceptions;
+    setState(() {
+      _dashboardUpdatingExceptionIds.add(item.id);
+      _dashboardExceptions = _dashboardExceptions
+          .where((e) => e.id != item.id)
+          .toList(growable: false);
+    });
+    try {
+      if (approve) {
+        await _adminApi.approveDashboardException(
+          token: token,
+          exceptionId: item.id,
+        );
+      } else {
+        await _adminApi.rejectDashboardException(
+          token: token,
+          exceptionId: item.id,
+        );
+      }
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        approve ? 'Đã duyệt ngoại lệ.' : 'Đã chuyển ngoại lệ sang xem lại.',
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardExceptions = previous;
+      });
+      _showSnack('Không thể cập nhật ngoại lệ.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _dashboardUpdatingExceptionIds.remove(item.id);
+        });
+      }
+    }
+  }
+
+  String _dashboardStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'on_time':
+      case 'ontime':
+        return 'Đúng giờ';
+      case 'late':
+        return 'Đi muộn';
+      case 'out_of_range':
+      case 'outofrange':
+      case 'oor':
+        return 'Ngoài vùng';
+      default:
+        return 'Không rõ';
+    }
+  }
+
+  Color _dashboardStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'late':
+        return const Color(0xFFD97706);
+      case 'out_of_range':
+      case 'outofrange':
+      case 'oor':
+        return const Color(0xFFDC2626);
+      default:
+        return const Color(0xFF16A34A);
+    }
+  }
+
+  String _formatPercent(double value) {
+    return value.toStringAsFixed(1).replaceAll('.0', '');
+  }
+
+  String _formatThousands(int value) {
+    final chars = value.toString().split('');
+    final out = <String>[];
+    for (var i = 0; i < chars.length; i++) {
+      out.add(chars[i]);
+      final remain = chars.length - i - 1;
+      if (remain > 0 && remain % 3 == 0) {
+        out.add('.');
+      }
+    }
+    return out.join();
+  }
+
+  List<DropdownMenuItem<int?>> _dashboardGroupItems() {
+    final items = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(value: null, child: Text('Tất cả nhóm')),
+    ];
+    for (final g in _dashboardGroups) {
+      items.add(DropdownMenuItem<int?>(value: g.id, child: Text(g.name)));
+    }
+    return items;
+  }
+
+  int get _logsTotalCount => _dashboardLogs.length;
+
+  int get _logsTotalPages {
+    if (_logsTotalCount == 0) {
+      return 1;
+    }
+    return ((_logsTotalCount - 1) ~/ _logsPageSize) + 1;
+  }
+
+  List<DashboardAttendanceLogItem> get _logsCurrentPageItems {
+    if (_dashboardLogs.isEmpty) {
+      return const [];
+    }
+    final start = (_logsPage - 1) * _logsPageSize;
+    if (start >= _dashboardLogs.length) {
+      return const [];
+    }
+    final end = (start + _logsPageSize).clamp(0, _dashboardLogs.length);
+    return _dashboardLogs.sublist(start, end);
+  }
+
+  bool _isEmployeeActive(EmployeeLite employee) {
+    if (employee.active != null) {
+      return employee.active!;
+    }
+    return employee.userId != null;
+  }
+
+  String _employeeGroupName(EmployeeLite employee) {
+    if (employee.groupName != null && employee.groupName!.trim().isNotEmpty) {
+      return employee.groupName!;
+    }
+    if (employee.groupId == null) {
+      return 'Chưa phân nhóm';
+    }
+    for (final group in _dashboardGroups) {
+      if (group.id == employee.groupId) {
+        return group.name;
+      }
+    }
+    return 'Nhóm #${employee.groupId}';
+  }
+
+  List<EmployeeLite> get _employeesView {
+    var list = _employees.toList(growable: false);
+    if (_employeesGroupId != null) {
+      list = list
+          .where((e) => e.groupId == _employeesGroupId)
+          .toList(growable: false);
+    }
+    if (_employeesStatus == 'active') {
+      list = list.where(_isEmployeeActive).toList(growable: false);
+    } else if (_employeesStatus == 'inactive') {
+      list = list.where((e) => !_isEmployeeActive(e)).toList(growable: false);
+    }
+    return list;
+  }
+
+  int get _employeesTotalCount => _employeesView.length;
+
+  int get _employeesTotalPages {
+    if (_employeesTotalCount == 0) {
+      return 1;
+    }
+    return ((_employeesTotalCount - 1) ~/ _employeesPageSize) + 1;
+  }
+
+  List<EmployeeLite> get _employeesCurrentPageItems {
+    final rows = _employeesView;
+    if (rows.isEmpty) {
+      return const [];
+    }
+    final start = (_employeesPage - 1) * _employeesPageSize;
+    if (start >= rows.length) {
+      return const [];
+    }
+    final end = (start + _employeesPageSize).clamp(0, rows.length);
+    return rows.sublist(start, end);
+  }
+
+  List<GroupLite> get _groupsView {
+    var list = _dashboardGroups.toList(growable: false);
+    final query = _groupsSearch.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      list = list
+          .where((g) {
+            final name = g.name.toLowerCase();
+            final code = g.code.toLowerCase();
+            return name.contains(query) || code.contains(query);
+          })
+          .toList(growable: false);
+    }
+    if (_groupsStatus == 'active') {
+      list = list.where((g) => g.active).toList(growable: false);
+    } else if (_groupsStatus == 'inactive') {
+      list = list.where((g) => !g.active).toList(growable: false);
+    }
+    return list;
+  }
+
+  List<EmployeeLite> get _unassignedGroupEmployees {
+    return _employees.where((e) => e.groupId == null).toList(growable: false);
+  }
+
+  int get _unassignedGroupCount => _unassignedGroupEmployees.length;
+
+  Future<void> _refreshGroupsOnly() async {
+    await _loadDashboardGroups();
+    await _loadGroupGeofenceCards();
+    await _loadEmployees();
+  }
+
+  Future<void> _loadGroupGeofenceCards() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    final groups = _dashboardGroups;
+    if (groups.isEmpty) {
+      setState(() {
+        _groupGeofencesByGroupId.clear();
+      });
+      return;
+    }
+    setState(() {
+      _loadingGroupGeofenceCards = true;
+    });
+    try {
+      final entries = await Future.wait(
+        groups.map((group) async {
+          try {
+            final items = await _adminApi.listGroupGeofences(
+              token: token,
+              groupId: group.id,
+            );
+            return MapEntry(group.id, items);
+          } catch (_) {
+            return MapEntry(group.id, const <GroupGeofenceLite>[]);
+          }
+        }),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _groupGeofencesByGroupId
+          ..clear()
+          ..addEntries(entries);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingGroupGeofenceCards = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshGeofencesOnly() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    await Future.wait([
+      _loadDashboardGeofences(token),
+      _loadDashboardGroups(),
+      _loadEmployees(),
+    ]);
+    _syncSelectedGeofence();
+  }
+
+  void _syncSelectedGeofence() {
+    if (!mounted) {
+      return;
+    }
+    if (_dashboardGeofences.isEmpty) {
+      setState(() {
+        _selectedGeofence = null;
+      });
+      return;
+    }
+    if (_selectedGeofence == null) {
+      _selectGeofenceForEdit(_dashboardGeofences.first, moveMap: false);
+      return;
+    }
+    DashboardGeofenceItem? refreshed;
+    for (final item in _dashboardGeofences) {
+      if (item.id == _selectedGeofence!.id) {
+        refreshed = item;
+        break;
+      }
+    }
+    if (refreshed == null) {
+      _selectGeofenceForEdit(_dashboardGeofences.first, moveMap: false);
+      return;
+    }
+    _selectGeofenceForEdit(refreshed, moveMap: false);
+  }
+
+  void _selectGeofenceForEdit(
+    DashboardGeofenceItem item, {
+    bool moveMap = true,
+  }) {
+    _zoneNameController.text = item.name;
+    _zoneLatController.text = (item.latitude ?? AppConfig.defaultMapCenterLat)
+        .toStringAsFixed(6);
+    _zoneLngController.text = (item.longitude ?? AppConfig.defaultMapCenterLng)
+        .toStringAsFixed(6);
+    _zoneRadiusController.text = (item.radiusMeters ?? 200).toString();
+    _zoneAddressController.text = item.address ?? '';
+    _zoneStartTimeController.text = item.startTime ?? '08:00';
+    _zoneEndTimeController.text = item.endTime ?? '17:30';
+    _zoneOvertimeEnabled = item.overtimeEnabled ?? false;
+    _zoneOvertimeStartController.text = item.overtimeStartTime ?? '18:00';
+    _zoneActive = item.active;
+    _zoneAssignedGroupIds
+      ..clear()
+      ..addAll(item.groupId == null ? const <int>[] : <int>[item.groupId!]);
+    setState(() {
+      _selectedGeofence = item;
+      _newGeofencePoint = null;
+    });
+    if (moveMap && item.latitude != null && item.longitude != null) {
+      _geofenceMapController.move(
+        LatLng(item.latitude!, item.longitude!),
+        _geofenceMapZoom,
+      );
+    }
+  }
+
+  Future<void> _searchGeofencePlaces(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _geofencePlaceSuggestions = const [];
+      });
+      return;
+    }
+    setState(() {
+      _searchingGeofencePlaces = true;
+    });
+    try {
+      final result = await _adminApi.searchGeoapifyPlaces(query: q);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _geofencePlaceSuggestions = result;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _searchingGeofencePlaces = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _reverseZoneAddress() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      return;
+    }
+    final lat = double.tryParse(_zoneLatController.text.trim());
+    final lng = double.tryParse(_zoneLngController.text.trim());
+    if (lat == null || lng == null) {
+      return;
+    }
+    setState(() {
+      _reversingGeofenceAddress = true;
+    });
+    try {
+      final address = await _adminApi.reverseGeocodeAddress(
+        token: token,
+        latitude: lat,
+        longitude: lng,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (address != null && address.isNotEmpty) {
+        setState(() {
+          _zoneAddressController.text = address;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _reversingGeofenceAddress = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _onGeofenceMapTap(LatLng point) async {
+    setState(() {
+      _newGeofencePoint = point;
+      _zoneLatController.text = point.latitude.toStringAsFixed(6);
+      _zoneLngController.text = point.longitude.toStringAsFixed(6);
+    });
+    _showSnack('Đã chọn điểm mới trên bản đồ.');
+    await _reverseZoneAddress();
+  }
+
+  Future<void> _pickZoneTime(TextEditingController controller) async {
+    final now = TimeOfDay.now();
+    final current = controller.text.trim();
+    final match = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(current);
+    final initial = match == null
+        ? now
+        : TimeOfDay(
+            hour: int.tryParse(match.group(1)!) ?? now.hour,
+            minute: int.tryParse(match.group(2)!) ?? now.minute,
+          );
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null || !mounted) {
+      return;
+    }
+    controller.text =
+        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _saveGeofenceConfig() async {
+    final token = _token;
+    final selected = _selectedGeofence;
+    if (token == null || token.isEmpty || selected == null) {
+      _showSnack('Không thể lưu cấu hình vùng.');
+      return;
+    }
+    final name = _zoneNameController.text.trim();
+    final lat = double.tryParse(_zoneLatController.text.trim());
+    final lng = double.tryParse(_zoneLngController.text.trim());
+    final radius = int.tryParse(_zoneRadiusController.text.trim());
+    if (name.isEmpty || lat == null || lng == null || radius == null) {
+      _showSnack('Vui lòng nhập đầy đủ thông tin vùng địa lý.');
+      return;
+    }
+    setState(() {
+      _savingGeofenceConfig = true;
+    });
+    try {
+      final updated = await _adminApi.updateGeofence(
+        token: token,
+        geofenceId: selected.id,
+        name: name,
+        latitude: lat,
+        longitude: lng,
+        radiusMeters: radius.clamp(10, 2000),
+        active: _zoneActive,
+        startTime: _zoneStartTimeController.text.trim(),
+        endTime: _zoneEndTimeController.text.trim(),
+        overtimeEnabled: _zoneOvertimeEnabled,
+        overtimeStartTime: _zoneOvertimeEnabled
+            ? _zoneOvertimeStartController.text.trim()
+            : null,
+        groupIds: _zoneAssignedGroupIds.toList(growable: false),
+        address: _zoneAddressController.text.trim(),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardGeofences = _dashboardGeofences
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList(growable: false);
+      });
+      _selectGeofenceForEdit(updated);
+      _showSnack('Đã cập nhật vùng địa lý.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể cập nhật vùng địa lý.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingGeofenceConfig = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteSelectedGeofence() async {
+    final token = _token;
+    final selected = _selectedGeofence;
+    if (token == null || token.isEmpty || selected == null) {
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xoá vùng địa lý'),
+        content: Text('Bạn có chắc muốn xoá "${selected.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Xoá'),
           ),
         ],
       ),
+    );
+    if (ok != true) {
+      return;
+    }
+    setState(() {
+      _deletingGeofenceConfig = true;
+    });
+    try {
+      await _adminApi.deleteGeofence(token: token, geofenceId: selected.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dashboardGeofences = _dashboardGeofences
+            .where((e) => e.id != selected.id)
+            .toList(growable: false);
+      });
+      _syncSelectedGeofence();
+      _showSnack('Đã xoá vùng địa lý.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể xoá vùng địa lý.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingGeofenceConfig = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _assignEmployeeToGroup(
+    EmployeeLite employee,
+    int? groupId,
+  ) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+    try {
+      final updated = await _adminApi.assignEmployeeGroup(
+        token: token,
+        employeeId: employee.id,
+        groupId: groupId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _employees = _employees
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList(growable: false);
+      });
+      _showSnack('Đã cập nhật nhóm cho nhân viên.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể cập nhật nhóm cho nhân viên.');
+    }
+  }
+
+  Future<void> _deleteGroupItem(GroupLite group) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xoá nhóm'),
+        content: Text('Bạn có chắc muốn xoá nhóm "${group.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Xoá'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) {
+      return;
+    }
+    setState(() {
+      _deletingGroup = true;
+    });
+    try {
+      await _adminApi.deleteGroup(token: token, groupId: group.id);
+      if (!mounted) {
+        return;
+      }
+      await _refreshGroupsOnly();
+      _showSnack('Đã xoá nhóm.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể xoá nhóm.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingGroup = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showGroupActionsMenu(GroupLite group, Offset position) async {
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: const [
+        PopupMenuItem<String>(value: 'edit', child: Text('Chỉnh sửa')),
+        PopupMenuItem<String>(value: 'delete', child: Text('Xoá')),
+      ],
+    );
+    if (selected == 'edit') {
+      await _showGroupEditorPanel(group: group);
+      return;
+    }
+    if (selected == 'delete') {
+      await _deleteGroupItem(group);
+    }
+  }
+
+  Future<void> _showGroupEditorPanel({GroupLite? group}) async {
+    await _showGroupEditorPanelExtracted(group: group);
+  }
+
+  Future<void> _pickLogsDate({required bool isFrom}) async {
+    final initial = isFrom ? _logsFromDate : _logsToDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      if (isFrom) {
+        _logsFromDate = picked;
+      } else {
+        _logsToDate = picked;
+      }
+      if (_logsFromDate.isAfter(_logsToDate)) {
+        if (isFrom) {
+          _logsToDate = picked;
+        } else {
+          _logsFromDate = picked;
+        }
+      }
+      _logsPage = 1;
+    });
+    await _refreshLogsOnly();
+  }
+
+  Future<void> _exportAttendanceLogsCsv() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+    setState(() {
+      _exportingDashboardCsv = true;
+    });
+    try {
+      final report = await _adminApi.downloadAttendanceReport(
+        token: token,
+        fromDate: _logsFromDate,
+        toDate: _logsToDate,
+        groupId: _dashboardGroupId,
+      );
+      await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Xuất CSV thành công.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể xuất CSV. Vui lòng thử lại.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _exportingDashboardCsv = false;
+        });
+      }
+    }
+  }
+
+  StatusBadgeType _badgeTypeForStatus(String status) {
+    final normalized = status.toLowerCase();
+    if (normalized.contains('late')) {
+      return StatusBadgeType.late;
+    }
+    if (normalized.contains('early')) {
+      return StatusBadgeType.early;
+    }
+    if (normalized.contains('overtime') || normalized.contains('ot')) {
+      return StatusBadgeType.overtime;
+    }
+    if (normalized.contains('out')) {
+      return StatusBadgeType.outOfRange;
+    }
+    if (normalized.contains('exception')) {
+      return StatusBadgeType.exception;
+    }
+    return StatusBadgeType.onTime;
+  }
+
+  Future<void> _showAttendanceLogDetail(DashboardAttendanceLogItem item) async {
+    await _showAttendanceLogDetailModal(item);
+  }
+
+  Widget _buildAttendanceLogsPage() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildAttendanceStatCards(),
+        const SizedBox(height: 16),
+        _buildAttendanceLogsFilterCard(),
+        const SizedBox(height: 16),
+        _buildAttendanceLogsTableCard(),
+      ],
+    );
+  }
+
+  Widget _buildAttendanceLogsFilterCard() {
+    return _buildAttendanceFilterBarCard();
+  }
+
+  Widget _buildAttendanceLogsTableCard() {
+    return _buildAttendanceTableCard();
+  }
+
+  Widget _buildAttendanceLogsSkeleton() {
+    return _buildAttendanceTableSkeleton();
+  }
+
+  Widget _buildLogsPagination() {
+    return _buildAttendancePagination();
+  }
+
+  Widget _buildEmployeesPage() {
+    final total = _employees.length;
+    final active = _employees.where(_isEmployeeActive).length;
+    final inactive = total - active;
+
+    return Column(
+      key: _employeesSectionKey,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: 250,
+              child: KpiCard(
+                label: 'Tổng nhân viên',
+                value: _loadingEmployees ? '--' : _formatThousands(total),
+                icon: Icons.groups_outlined,
+                iconColor: AppColors.primary,
+                loading: _loadingEmployees,
+              ),
+            ),
+            SizedBox(
+              width: 250,
+              child: KpiCard(
+                label: 'Đang hoạt động',
+                value: _loadingEmployees ? '--' : _formatThousands(active),
+                icon: Icons.check_circle_outline,
+                iconColor: AppColors.success,
+                valueColor: AppColors.success,
+                loading: _loadingEmployees,
+              ),
+            ),
+            SizedBox(
+              width: 250,
+              child: KpiCard(
+                label: 'Không hoạt động',
+                value: _loadingEmployees ? '--' : _formatThousands(inactive),
+                icon: Icons.pause_circle_outline,
+                iconColor: AppColors.textMuted,
+                valueColor: AppColors.textMuted,
+                loading: _loadingEmployees,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildEmployeesToolbarCard(),
+        const SizedBox(height: 16),
+        _buildEmployeesTableCard(),
+      ],
+    );
+  }
+
+  Widget _buildEmployeesToolbarCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          SizedBox(
+            width: 320,
+            child: TextField(
+              controller: _employeesSearchController,
+              onSubmitted: (_) {
+                setState(() {
+                  _employeesPage = 1;
+                });
+                _refreshEmployeesOnly();
+              },
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Tìm nhân viên...',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                suffixIcon: IconButton(
+                  onPressed: _loadingEmployees
+                      ? null
+                      : () {
+                          setState(() {
+                            _employeesPage = 1;
+                          });
+                          _refreshEmployeesOnly();
+                        },
+                  icon: const Icon(Icons.search),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 180,
+            child: DropdownButtonFormField<int?>(
+              initialValue: _employeesGroupId,
+              decoration: _decoration('Nhóm', Icons.groups_2_outlined),
+              items: [
+                const DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('Tất cả nhóm'),
+                ),
+                ..._dashboardGroups.map(
+                  (group) => DropdownMenuItem<int?>(
+                    value: group.id,
+                    child: Text(group.name),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _employeesGroupId = value;
+                  _employeesPage = 1;
+                });
+                _refreshEmployeesOnly();
+              },
+            ),
+          ),
+          SizedBox(
+            width: 180,
+            child: DropdownButtonFormField<String>(
+              initialValue: _employeesStatus,
+              decoration: _decoration('Trạng thái', Icons.rule_outlined),
+              items: const [
+                DropdownMenuItem<String>(value: 'all', child: Text('Tất cả')),
+                DropdownMenuItem<String>(
+                  value: 'active',
+                  child: Text('Hoạt động'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'inactive',
+                  child: Text('Không hoạt động'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setState(() {
+                  _employeesStatus = value;
+                  _employeesPage = 1;
+                });
+                _refreshEmployeesOnly();
+              },
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _downloadingReport ? null : _downloadReport,
+            icon: _downloadingReport
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.file_download_outlined),
+            label: const Text('Xuất danh sách'),
+          ),
+          ElevatedButton.icon(
+            onPressed: _showCreateEmployeeDialog,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.person_add_alt_1),
+            label: const Text('Thêm nhân viên'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployeesTableCard() {
+    return _buildEmployeeTableCardExtracted();
+  }
+
+  Widget _buildEmployeesTableSkeleton() {
+    return _buildEmployeeTableSkeletonExtracted();
+  }
+
+  Widget _buildEmployeesPagination() {
+    return _buildEmployeesPaginationExtracted();
+  }
+
+  Widget _buildGroupsPage() {
+    return _buildGroupsPageExtracted();
+  }
+
+  Widget _buildGroupsToolbarCard() {
+    return _buildGroupsToolbarCardExtracted();
+  }
+
+  Widget _buildGroupsGridCard() {
+    return _buildGroupsGridCardExtracted();
+  }
+
+  Widget _buildGroupCard(GroupLite group, int index) {
+    return _buildGroupCardExtracted(group, index);
+  }
+
+  Widget _buildGroupMiniStat(String label, String value) {
+    return _buildGroupMiniStatExtracted(label, value);
+  }
+
+  Widget _buildUnassignedGroupPanel() {
+    return _buildUnassignedGroupPanelExtracted();
+  }
+
+  Color _colorForGeofenceIndex(int index) {
+    const palette = <Color>[
+      AppColors.primary,
+      AppColors.success,
+      AppColors.warning,
+      AppColors.danger,
+      AppColors.overtime,
+      AppColors.earlyTeal,
+    ];
+    return palette[index % palette.length];
+  }
+
+  Widget _buildGeofencesPage() {
+    return _buildGeofencesPageExtracted();
+  }
+
+  Widget _buildGeofenceMapCard() {
+    return _buildGeofenceMapCardExtracted();
+  }
+
+  Widget _buildGeofenceSidePanel() {
+    return _buildGeofenceSidePanelExtracted();
+  }
+
+  Widget _buildGeofenceConfigForm(DashboardGeofenceItem selected) {
+    return _buildGeofenceConfigFormExtracted(selected);
+  }
+
+  double _parseTotalHours(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty || raw == '--') {
+      return 0;
+    }
+    if (raw.contains(':')) {
+      final parts = raw.split(':');
+      if (parts.length == 2) {
+        final h = int.tryParse(parts[0]) ?? 0;
+        final m = int.tryParse(parts[1]) ?? 0;
+        return h + (m / 60);
+      }
+    }
+    return double.tryParse(raw.replaceAll(',', '.')) ?? 0;
+  }
+
+  double _reportsTotalHours() {
+    var total = 0.0;
+    for (final row in _reportsLogs) {
+      total += _parseTotalHours(row.totalHours);
+    }
+    return total;
+  }
+
+  int _countByBadgeType(
+    List<DashboardAttendanceLogItem> rows,
+    StatusBadgeType type,
+  ) {
+    return rows
+        .where((row) => _badgeTypeForStatus(row.attendanceStatus) == type)
+        .length;
+  }
+
+  List<_ReportCountItem> _reportsTopLateItems() {
+    final source = _reportsLateTop.isNotEmpty
+        ? _reportsLateTop
+        : _reportsLogs
+              .where(
+                (row) =>
+                    _badgeTypeForStatus(row.attendanceStatus) ==
+                    StatusBadgeType.late,
+              )
+              .toList(growable: false);
+    final map = <String, _ReportCountItem>{};
+    for (final row in source) {
+      final key = '${row.employeeCode}_${row.employeeName}';
+      final current = map[key];
+      final nextCount = row.entryCount ?? 1;
+      if (current == null) {
+        map[key] = _ReportCountItem(
+          name: row.employeeName,
+          code: row.employeeCode,
+          count: nextCount,
+        );
+      } else {
+        map[key] = _ReportCountItem(
+          name: current.name,
+          code: current.code,
+          count: current.count + nextCount,
+        );
+      }
+    }
+    final list = map.values.toList(growable: false);
+    list.sort((a, b) => b.count.compareTo(a.count));
+    return list.take(5).toList(growable: false);
+  }
+
+  List<_ReportGroupPerformanceItem> _reportsGroupPerformanceItems() {
+    final map = <String, _ReportGroupPerformanceItem>{};
+    for (final row in _reportsLogs) {
+      final key = row.departmentName.trim().isEmpty
+          ? 'Chưa xác định'
+          : row.departmentName;
+      final type = _badgeTypeForStatus(row.attendanceStatus);
+      final current =
+          map[key] ??
+          _ReportGroupPerformanceItem(
+            groupName: key,
+            onTime: 0,
+            late: 0,
+            outOfRange: 0,
+          );
+      map[key] = current.copyWith(
+        onTime: current.onTime + (type == StatusBadgeType.onTime ? 1 : 0),
+        late: current.late + (type == StatusBadgeType.late ? 1 : 0),
+        outOfRange:
+            current.outOfRange + (type == StatusBadgeType.outOfRange ? 1 : 0),
+      );
+    }
+    final rows = map.values.toList(growable: false);
+    rows.sort((a, b) => b.total.compareTo(a.total));
+    return rows.take(6).toList(growable: false);
+  }
+
+  Map<DateTime, int> _reportsHeatmapCounts() {
+    final map = <DateTime, int>{};
+    for (final row in _reportsLogs) {
+      final date = row.workDate;
+      if (date == null) {
+        continue;
+      }
+      if (date.year != _reportsMonth.year ||
+          date.month != _reportsMonth.month) {
+        continue;
+      }
+      final key = DateTime(date.year, date.month, date.day);
+      map[key] = (map[key] ?? 0) + 1;
+    }
+    return map;
+  }
+
+  Future<void> _onReportsTypeChanged(String value) async {
+    setState(() {
+      _reportsType = value;
+    });
+  }
+
+  Widget _buildReportsPage() {
+    return _buildReportsPageExtracted();
+  }
+
+  Widget _buildReportsTypeTabsCard() {
+    return _buildReportsTypeTabsCardExtracted();
+  }
+
+  Widget _buildReportsFilterCard() {
+    return _buildReportsFilterCardExtracted();
+  }
+
+  Widget _buildReportsTrendCard() {
+    return _buildReportsTrendCardExtracted();
+  }
+
+  Widget _buildReportsStatusDonutCard({
+    required int onTimeCount,
+    required int lateCount,
+    required int outOfRangeCount,
+    required int overtimeCount,
+  }) {
+    return _buildReportsStatusDonutCardExtracted(
+      onTimeCount: onTimeCount,
+      lateCount: lateCount,
+      outOfRangeCount: outOfRangeCount,
+      overtimeCount: overtimeCount,
+    );
+  }
+
+  Widget _buildTopLateEmployeesCard() {
+    return _buildTopLateEmployeesCardExtracted();
+  }
+
+  Widget _buildGroupPerformanceCard() {
+    return _buildGroupPerformanceCardExtracted();
+  }
+
+  Color _heatmapCellColor({required double ratio, required bool weekend}) {
+    if (ratio <= 0) {
+      return weekend
+          ? AppColors.textMuted.withValues(alpha: 0.14)
+          : AppColors.bgPage;
+    }
+    final base = Color.lerp(
+      AppColors.bgPage,
+      AppColors.success.withValues(alpha: 0.95),
+      ratio.clamp(0, 1),
+    )!;
+    if (!weekend) {
+      return base;
+    }
+    return Color.lerp(base, AppColors.textMuted.withValues(alpha: 0.25), 0.2)!;
+  }
+
+  Widget _buildReportsHeatmapCard() {
+    return _buildReportsHeatmapCardExtracted();
+  }
+
+  Widget _buildDashboardContent() {
+    final summary = _dashboardSummary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: 230,
+              child: KpiCard(
+                label: 'Tổng nhân viên',
+                value: summary == null
+                    ? '--'
+                    : _formatThousands(summary.totalEmployees),
+                subText: summary == null
+                    ? null
+                    : '+${_formatPercent(summary.employeeGrowthPercent)}% tháng này',
+                subColor: const Color(0xFF16A34A),
+                icon: Icons.people_outline,
+                iconColor: const Color(0xFF1A56DB),
+                loading: _loadingDashboardSummary,
+              ),
+            ),
+            SizedBox(
+              width: 230,
+              child: KpiCard(
+                label: 'Đã điểm danh',
+                value: summary == null
+                    ? '--'
+                    : _formatThousands(summary.checkedIn),
+                subText: summary == null
+                    ? null
+                    : 'T? l?? ${_formatPercent(summary.attendanceRatePercent)}%',
+                subColor: const Color(0xFF16A34A),
+                icon: Icons.check_circle_outline,
+                iconColor: const Color(0xFF16A34A),
+                loading: _loadingDashboardSummary,
+              ),
+            ),
+            SizedBox(
+              width: 230,
+              child: KpiCard(
+                label: 'Điểm danh muộn',
+                value: summary == null
+                    ? '--'
+                    : _formatThousands(summary.lateCount),
+                subText: summary == null
+                    ? null
+                    : '${_formatPercent(summary.lateRatePercent)}% tổng số',
+                valueColor: const Color(0xFFD97706),
+                subColor: const Color(0xFFD97706),
+                icon: Icons.schedule,
+                iconColor: const Color(0xFFD97706),
+                loading: _loadingDashboardSummary,
+              ),
+            ),
+            SizedBox(
+              width: 230,
+              child: KpiCard(
+                label: 'Ngoài vùng',
+                value: summary == null
+                    ? '--'
+                    : _formatThousands(summary.outOfRangeCount),
+                subText: 'Cần xem lại',
+                valueColor: const Color(0xFFDC2626),
+                subColor: const Color(0xFFDC2626),
+                icon: Icons.location_off,
+                iconColor: const Color(0xFFDC2626),
+                loading: _loadingDashboardSummary,
+              ),
+            ),
+            SizedBox(
+              width: 230,
+              child: KpiCard(
+                label: 'Vùng địa lý',
+                value: summary == null
+                    ? '--'
+                    : _formatThousands(summary.geofenceCount),
+                subText: summary == null
+                    ? null
+                    : '${_formatThousands(summary.inactiveGeofenceCount)} không hoạt động',
+                subColor: const Color(0xFF64748B),
+                icon: Icons.map_outlined,
+                iconColor: const Color(0xFF7C3AED),
+                loading: _loadingDashboardSummary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildAttendanceTableCard(),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 980) {
+              return Column(
+                children: [
+                  _buildWeeklyChartCard(),
+                  const SizedBox(height: 16),
+                  _buildGeofenceListCard(),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 6, child: _buildWeeklyChartCard()),
+                const SizedBox(width: 16),
+                Expanded(flex: 4, child: _buildGeofenceListCard()),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildExceptionsCard(),
+      ],
+    );
+  }
+
+  Widget _buildAttendanceTableCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 190,
+                  child: DropdownButtonFormField<int?>(
+                    key: ValueKey<int?>(_dashboardGroupId),
+                    initialValue: _dashboardGroupId,
+                    decoration: _decoration(
+                      'Tất cả nhóm',
+                      Icons.group_outlined,
+                    ),
+                    items: _dashboardGroupItems(),
+                    onChanged: (value) {
+                      setState(() {
+                        _dashboardGroupId = value;
+                      });
+                      _onDashboardFilterChanged();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 150,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey<String>(_dashboardStatus),
+                    initialValue: _dashboardStatus,
+                    decoration: _decoration('Trạng thái', Icons.rule_outlined),
+                    items: const [
+                      DropdownMenuItem<String>(
+                        value: 'all',
+                        child: Text('Tất cả'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'on_time',
+                        child: Text('Đúng giờ'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'late',
+                        child: Text('Đi muộn'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'out_of_range',
+                        child: Text('Ngoài vùng'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        _dashboardStatus = value;
+                      });
+                      _onDashboardFilterChanged();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  DateFormat('dd/MM/yyyy').format(_dashboardDate),
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton(
+                  onPressed: _exportingDashboardCsv
+                      ? null
+                      : _exportDashboardCsv,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A56DB),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _exportingDashboardCsv
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Xuất CSV'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (_loadingDashboardLogs) _buildDashboardLogSkeleton(),
+            if (!_loadingDashboardLogs && _dashboardLogs.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(child: Text('Chưa có dữ liệu hôm nay')),
+              ),
+            if (!_loadingDashboardLogs && _dashboardLogs.isNotEmpty)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(
+                    const Color(0xFFF8FAFC),
+                  ),
+                  columns: const [
+                    DataColumn(label: Text('Nhân viên')),
+                    DataColumn(label: Text('Phòng ban')),
+                    DataColumn(label: Text('Giờ vào')),
+                    DataColumn(label: Text('Trạng thái vị trí')),
+                    DataColumn(label: Text('Trạng thái')),
+                    DataColumn(label: Text('Thao tác')),
+                  ],
+                  rows: _dashboardLogs
+                      .map((row) {
+                        final statusColor = _dashboardStatusColor(
+                          row.attendanceStatus,
+                        );
+                        final inRange = row.locationStatus == 'inside';
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(row.employeeName),
+                                  Text(
+                                    row.employeeCode,
+                                    style: const TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DataCell(Text(row.departmentName)),
+                            DataCell(
+                              Text(
+                                row.checkInTime,
+                                style: TextStyle(color: statusColor),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                children: [
+                                  Icon(
+                                    inRange
+                                        ? Icons.location_on_outlined
+                                        : Icons.location_off_outlined,
+                                    size: 16,
+                                    color: inRange
+                                        ? const Color(0xFF16A34A)
+                                        : const Color(0xFFDC2626),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    inRange ? 'Trong vùng' : 'Ngoài vùng',
+                                    style: TextStyle(
+                                      color: inRange
+                                          ? const Color(0xFF16A34A)
+                                          : const Color(0xFFDC2626),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            DataCell(
+                              _StatusBadge(
+                                label: _dashboardStatusLabel(
+                                  row.attendanceStatus,
+                                ),
+                                color: statusColor,
+                              ),
+                            ),
+                            const DataCell(Icon(Icons.more_horiz, size: 18)),
+                          ],
+                        );
+                      })
+                      .toList(growable: false),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardLogSkeleton() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+        columns: const [
+          DataColumn(label: Text('Nhân viên')),
+          DataColumn(label: Text('Phòng ban')),
+          DataColumn(label: Text('Giờ vào')),
+          DataColumn(label: Text('Trạng thái vị trí')),
+          DataColumn(label: Text('Trạng thái')),
+          DataColumn(label: Text('Thao tác')),
+        ],
+        rows: List.generate(
+          3,
+          (_) => const DataRow(
+            cells: [
+              DataCell(_SkeletonCell(width: 130)),
+              DataCell(_SkeletonCell(width: 80)),
+              DataCell(_SkeletonCell(width: 48)),
+              DataCell(_SkeletonCell(width: 88)),
+              DataCell(_SkeletonCell(width: 72)),
+              DataCell(_SkeletonCell(width: 30)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyChartCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Xu hướng chấm công hàng tuần',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                _LegendDot(color: Color(0xFF16A34A), label: 'Đúng giờ'),
+                SizedBox(width: 14),
+                _LegendDot(color: Color(0xFFD97706), label: 'Đi muộn'),
+                SizedBox(width: 14),
+                _LegendDot(color: Color(0xFFDC2626), label: 'Ngoài vùng'),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _MockWeeklyChart(
+              data: _dashboardWeekly,
+              loading: _loadingDashboardWeekly,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGeofenceListCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Khu vực địa lý đang hoạt động',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _openGroupAdmin,
+                  child: const Text('Xem bản đồ →'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (_loadingDashboardGeofences)
+              ...List<Widget>.generate(
+                3,
+                (_) => const Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: _SkeletonRow(),
+                ),
+              ),
+            if (!_loadingDashboardGeofences && _dashboardGeofences.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text('Chưa có khu vực địa lý.'),
+              ),
+            if (!_loadingDashboardGeofences)
+              ..._dashboardGeofences.map((item) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.location_on_outlined, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              '${item.memberCount} thành viên',
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: item.active
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFF94A3B8),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            const SizedBox(height: 4),
+            _DashedBorderButton(
+              onTap: _openGroupAdmin,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add, size: 18, color: Color(0xFF334155)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Thêm khu vực mới',
+                    style: TextStyle(
+                      color: Color(0xFF334155),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExceptionsCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Các ngoại lệ gần đây',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            if (_loadingDashboardExceptions)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+            if (!_loadingDashboardExceptions && _dashboardExceptions.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Text('Không có ngoại lệ đang chờ duyệt.'),
+              ),
+            if (!_loadingDashboardExceptions)
+              ..._dashboardExceptions.map((item) {
+                final busy = _dashboardUpdatingExceptionIds.contains(item.id);
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: const Color(0xFFE2E8F0),
+                        child: Text(
+                          item.initials,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              item.reason,
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        item.timeLabel,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: busy
+                            ? null
+                            : () => _handleDashboardExceptionAction(
+                                item: item,
+                                approve: true,
+                              ),
+                        borderRadius: BorderRadius.circular(999),
+                        child: const _StatusBadge(
+                          label: 'Chờ duyệt',
+                          color: Color(0xFFD97706),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: busy
+                            ? null
+                            : () => _handleDashboardExceptionAction(
+                                item: item,
+                                approve: false,
+                              ),
+                        borderRadius: BorderRadius.circular(999),
+                        child: const _StatusBadge(
+                          label: 'Xem lại',
+                          color: Color(0xFF1A56DB),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () => _onShellNavTap(_AdminShellNav.exceptions),
+              child: const Text('Xem tất cả ngoại lệ quản trị →'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContentByNav() {
+    switch (_activeNav) {
+      case _AdminShellNav.dashboard:
+        return _buildDashboardContent();
+      case _AdminShellNav.logs:
+        return _buildAttendanceLogsPage();
+      case _AdminShellNav.employees:
+        return _buildEmployeesPage();
+      case _AdminShellNav.groups:
+        return _buildGroupsPage();
+      case _AdminShellNav.geofences:
+        return _buildGeofencesPage();
+      case _AdminShellNav.reports:
+        return _buildReportsPage();
+      case _AdminShellNav.exceptions:
+        return _buildExceptionsCard();
+      case _AdminShellNav.settings:
+        return const SizedBox.shrink();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminShell(
+      sidebar: _buildSidebar(),
+      topbar: _buildTopbar(),
       body: Stack(
         children: [
           RefreshIndicator(
@@ -1452,559 +4388,11 @@ class _AdminPageState extends State<AdminPage> {
               primary: false,
               physics: const ClampingScrollPhysics(),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.zero,
               children: [
-                Text(
-                  'Xin chào Admin: ${widget.email}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 12),
                 if (_error != null) _buildBanner(text: _error!, isError: true),
                 if (_info != null) _buildBanner(text: _info!, isError: false),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Quản lý Group/Geofence + gán group cho employee',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: _openGroupAdmin,
-                          icon: const Icon(Icons.map_outlined),
-                          label: const Text('Mở'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Rule hiện tại',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        if (_activeRule == null)
-                          const Text('Chưa có active rule')
-                        else ...[
-                          Text(
-                            'Vĩ độ: ${_activeRule!.latitude.toStringAsFixed(6)}',
-                          ),
-                          Text(
-                            'Kinh độ: ${_activeRule!.longitude.toStringAsFixed(6)}',
-                          ),
-                          Text('Bán kính: ${_activeRule!.radiusM} m'),
-                          Text('Thời gian bắt đầu: ${_activeRule!.startTime ?? '-'}'),
-                          Text(
-                            'Thời gian gia hạn vào: ${_activeRule!.graceMinutes ?? '-'} phút',
-                          ),
-                          Text('Thời gian kết thúc: ${_activeRule!.endTime ?? '-'}'),
-                          Text(
-                            'Thời gian gia hạn về: ${_activeRule!.checkoutGraceMinutes ?? '-'} phút',
-                          ),
-                          Text(
-                            'Thời gian OT đêm: ${_activeRule!.crossDayCutoffMinutes ?? '-'} phút (từ 00:00)',
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      children: [
-                        AdminLocationPicker(
-                          initialLatitude: double.tryParse(_latController.text.trim()),
-                          initialLongitude: double.tryParse(_lngController.text.trim()),
-                          initialDisplayName: _ruleLocationAddress,
-                          onChanged: _onRuleLocationChanged,
-                        ),
-                        const SizedBox(height: 10),
-                        if (_ruleLocationAddress != null &&
-                            _ruleLocationAddress!.trim().isNotEmpty)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Địa chỉ đã chọn: ${_ruleLocationAddress!}',
-                              style: TextStyle(
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        if (_ruleLocationAddress != null &&
-                            _ruleLocationAddress!.trim().isNotEmpty)
-                          const SizedBox(height: 10),
-                        TextField(
-                          controller: _radiusController,
-                          keyboardType: TextInputType.number,
-                          decoration: _decoration(
-                            'Bán kính (m)',
-                            Icons.straighten,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _startTimeController,
-                          keyboardType: TextInputType.datetime,
-                          decoration: _decoration(
-                            'Thời gian bắt đầu (HH:mm)',
-                            Icons.schedule,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _graceMinutesController,
-                          keyboardType: TextInputType.number,
-                          decoration: _decoration(
-                            'Thời gian gia hạn vào (phút/checkin)',
-                            Icons.timer_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _endTimeController,
-                          keyboardType: TextInputType.datetime,
-                          decoration: _decoration(
-                            'Thời gian kết thúc (HH:mm)',
-                            Icons.access_time_filled_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _checkoutGraceMinutesController,
-                          keyboardType: TextInputType.number,
-                          decoration: _decoration(
-                            'Thời gian gia hạn về (phút-checkout)',
-                            Icons.timer_off_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _cutoffMinutesController,
-                          keyboardType: TextInputType.number,
-                          decoration: _decoration(
-                            'Thời gian OT đêm (phút từ 00:00 trở đi)',
-                            Icons.nightlight_round,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 46,
-                          child: FilledButton.icon(
-                            onPressed: (_savingRule || !_hasValidRuleCoordinates)
-                                ? null
-                                : _saveRule,
-                            icon: _savingRule
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.save),
-                            label: Text(
-                              _savingRule ? 'Đang lưu...' : 'Cập nhật Rule',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Xuất Excel chấm công',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: _downloadingReport
-                                  ? null
-                                  : () => _pickReportDate(isFrom: true),
-                              icon: const Icon(Icons.event),
-                              label: Text(
-                                'Từ ngày: ${_dateLabel(_reportFromDate)}',
-                              ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _downloadingReport
-                                  ? null
-                                  : () => _pickReportDate(isFrom: false),
-                              icon: const Icon(Icons.event_available),
-                              label: Text(
-                                'Đến ngày: ${_dateLabel(_reportToDate)}',
-                              ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _downloadingReport
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _reportFromDate = null;
-                                        _reportToDate = null;
-                                      });
-                                    },
-                              icon: const Icon(Icons.clear),
-                              label: const Text('Bỏ lọc ngày'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        DropdownButtonFormField<int?>(
-                          initialValue: _reportEmployeeId,
-                          isExpanded: true,
-                          decoration: _decoration(
-                            'Lọc theo nhân viên (optional)',
-                            Icons.groups_2_outlined,
-                          ),
-                          items: _employeeReportItems(),
-                          onChanged: _downloadingReport
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    _reportEmployeeId = value;
-                                  });
-                                },
-                        ),
-                        const SizedBox(height: 8),
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          value: _reportIncludeEmpty,
-                          onChanged: _downloadingReport
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    _reportIncludeEmpty = value ?? false;
-                                  });
-                                },
-                          title: const Text(
-                            'include_empty (xuất file dù không có dữ liệu)',
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: FilledButton.icon(
-                            onPressed: _downloadingReport
-                                ? null
-                                : _downloadReport,
-                            icon: _downloadingReport
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.download),
-                            label: Text(
-                              _downloadingReport
-                                  ? 'Đang tải file...'
-                                  : 'Tải Excel',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Quản trị exception chấm công',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Text('${_exceptions.length} bản ghi'),
-                            const SizedBox(width: 8),
-                            TextButton.icon(
-                              onPressed: _loadingExceptions
-                                  ? null
-                                  : _loadExceptions,
-                              icon: _loadingExceptions
-                                  ? const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.refresh, size: 16),
-                              label: const Text('Tải exception'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            SizedBox(
-                              width: 300,
-                              child: DropdownButtonFormField<String>(
-                                initialValue: _exceptionTypeFilter,
-                                isExpanded: true,
-                                decoration: _decoration(
-                                  'Loại exception',
-                                  Icons.category_outlined,
-                                ),
-                                items: const [
-                                  DropdownMenuItem<String>(
-                                    value: 'SUSPECTED_LOCATION_SPOOF',
-                                    child: Text('SUSPECTED_SPOOF'),
-                                  ),
-                                  DropdownMenuItem<String>(
-                                    value: 'MISSED_CHECKOUT',
-                                    child: Text('MISSED_CHECKOUT'),
-                                  ),
-                                  DropdownMenuItem<String>(
-                                    value: 'AUTO_CLOSED',
-                                    child: Text('AUTO_CLOSED'),
-                                  ),
-                                ],
-                                onChanged: _loadingExceptions
-                                    ? null
-                                    : (value) {
-                                        if (value == null) {
-                                          return;
-                                        }
-                                        setState(() {
-                                          _exceptionTypeFilter = value;
-                                        });
-                                      },
-                              ),
-                            ),
-                            SizedBox(
-                              width: 220,
-                              child: DropdownButtonFormField<String?>(
-                                initialValue: _exceptionStatusFilter,
-                                decoration: _decoration(
-                                  'Trạng thái',
-                                  Icons.rule_outlined,
-                                ),
-                                items: const [
-                                  DropdownMenuItem<String?>(
-                                    value: 'OPEN',
-                                    child: Text('OPEN'),
-                                  ),
-                                  DropdownMenuItem<String?>(
-                                    value: 'RESOLVED',
-                                    child: Text('RESOLVED'),
-                                  ),
-                                  DropdownMenuItem<String?>(
-                                    value: null,
-                                    child: Text('Tất cả'),
-                                  ),
-                                ],
-                                onChanged: _loadingExceptions
-                                    ? null
-                                    : (value) {
-                                        setState(() {
-                                          _exceptionStatusFilter = value;
-                                        });
-                                      },
-                              ),
-                            ),
-                            FilledButton.icon(
-                              onPressed: _loadingExceptions
-                                  ? null
-                                  : _loadExceptions,
-                              icon: const Icon(Icons.filter_alt_outlined),
-                              label: const Text('Lọc'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        if (_loadingExceptions)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 8),
-                            child: LinearProgressIndicator(minHeight: 2),
-                          ),
-                        if (_exceptions.isEmpty)
-                          const Text('Không có exception theo bộ lọc hiện tại.')
-                        else
-                          ..._exceptions.take(30).map(_buildExceptionRow),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Nhân viên',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Text('${_employees.length} bản ghi'),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text('Users khả dụng: ${_users.length}'),
-                            ),
-                            TextButton.icon(
-                              onPressed: _loadingUsers ? null : _loadUsers,
-                              icon: _loadingUsers
-                                  ? const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.refresh, size: 16),
-                              label: const Text('Tải users'),
-                            ),
-                          ],
-                        ),
-                        if (_loadingUsers)
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 6),
-                            child: LinearProgressIndicator(minHeight: 2),
-                          ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Nếu vừa tạo user mới, bấm "Tải users" để cập nhật danh sách rồi gán employee.',
-                        ),
-                        const SizedBox(height: 12),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Tạo employee + gán user',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _employeeCodeController,
-                          textCapitalization: TextCapitalization.characters,
-                          decoration: _decoration(
-                            'Mã nhân viên (VD: NV006)',
-                            Icons.badge_outlined,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _employeeNameController,
-                          decoration: _decoration(
-                            'Họ tên nhân viên',
-                            Icons.person,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        DropdownButtonFormField<int?>(
-                          initialValue: _newEmployeeUserId,
-                          isExpanded: true,
-                          decoration: _decoration(
-                            'Chọn user để gán ngay (optional)',
-                            Icons.link,
-                          ),
-                          items: _createEmployeeUserItems(),
-                          onChanged: _creatingEmployee
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    _newEmployeeUserId = value;
-                                  });
-                                },
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: FilledButton.icon(
-                            onPressed: _creatingEmployee
-                                ? null
-                                : _createEmployee,
-                            icon: _creatingEmployee
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.person_add_alt_1),
-                            label: Text(
-                              _creatingEmployee
-                                  ? 'Đang tạo...'
-                                  : 'Tạo employee',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Divider(),
-                        const SizedBox(height: 8),
-                        if (_employees.isEmpty)
-                          const Text('Chưa có dữ liệu nhân viên.')
-                        else
-                          ..._employees.take(50).map(_buildEmployeeRow),
-                      ],
-                    ),
-                  ),
-                ),
+                _buildContentByNav(),
               ],
             ),
           ),
@@ -2019,4 +4407,704 @@ class _AdminPageState extends State<AdminPage> {
       ),
     );
   }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
+class _MockWeeklyChart extends StatelessWidget {
+  const _MockWeeklyChart({required this.data, required this.loading});
+
+  final List<DashboardWeeklyTrendItem> data;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    const maxY = 80.0;
+    final chartData = loading
+        ? const [
+            DashboardWeeklyTrendItem(
+              day: 'Thứ 2',
+              onTime: 24,
+              late: 24,
+              outOfRange: 24,
+            ),
+            DashboardWeeklyTrendItem(
+              day: 'Thứ 3',
+              onTime: 24,
+              late: 24,
+              outOfRange: 24,
+            ),
+            DashboardWeeklyTrendItem(
+              day: 'Thứ 4',
+              onTime: 24,
+              late: 24,
+              outOfRange: 24,
+            ),
+            DashboardWeeklyTrendItem(
+              day: 'Thứ 5',
+              onTime: 24,
+              late: 24,
+              outOfRange: 24,
+            ),
+            DashboardWeeklyTrendItem(
+              day: 'Thứ 6',
+              onTime: 24,
+              late: 24,
+              outOfRange: 24,
+            ),
+          ]
+        : data;
+
+    return SizedBox(
+      height: 240,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 26,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Text(
+                  '80',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                Text(
+                  '60',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                Text(
+                  '40',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                Text(
+                  '20',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+                Text(
+                  '0',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: chartData.map((item) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final h = constraints.maxHeight;
+                              return Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: List.generate(
+                                        5,
+                                        (_) => Container(
+                                          height: 1,
+                                          color: const Color(0xFFF1F5F9),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
+                                      children: [
+                                        _MiniBar(
+                                          height: h * (item.onTime / maxY),
+                                          color: const Color(0xFF16A34A),
+                                          loading: loading,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        _MiniBar(
+                                          height: h * (item.late / maxY),
+                                          color: const Color(0xFFD97706),
+                                          loading: loading,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        _MiniBar(
+                                          height: h * (item.outOfRange / maxY),
+                                          color: const Color(0xFFDC2626),
+                                          loading: loading,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          item.day,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniBar extends StatelessWidget {
+  const _MiniBar({
+    required this.height,
+    required this.color,
+    required this.loading,
+  });
+
+  final double height;
+  final Color color;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final bar = Container(
+      width: 10,
+      height: height.clamp(8.0, 220.0),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
+    if (!loading) {
+      return bar;
+    }
+    return _PulsingOpacity(child: bar);
+  }
+}
+
+class _PulsingOpacity extends StatefulWidget {
+  const _PulsingOpacity({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_PulsingOpacity> createState() => _PulsingOpacityState();
+}
+
+class _PulsingOpacityState extends State<_PulsingOpacity>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1).animate(_controller),
+      child: widget.child,
+    );
+  }
+}
+
+class _DashedBorderButton extends StatelessWidget {
+  const _DashedBorderButton({required this.child, required this.onTap});
+
+  final Widget child;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DashedRRectPainter(color: const Color(0xFFCBD5E1), radius: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedRRectPainter extends CustomPainter {
+  _DashedRRectPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+    final path = Path()..addRRect(rrect);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    const dashWidth = 6.0;
+    const dashSpace = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = (distance + dashWidth)
+            .clamp(0.0, metric.length)
+            .toDouble();
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.radius != radius;
+  }
+}
+
+class _SkeletonCell extends StatefulWidget {
+  const _SkeletonCell({required this.width});
+
+  final double width;
+
+  @override
+  State<_SkeletonCell> createState() => _SkeletonCellState();
+}
+
+class _SkeletonCellState extends State<_SkeletonCell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.45, end: 1).animate(_controller),
+      child: Container(
+        width: widget.width,
+        height: 12,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE2E8F0),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonRow extends StatelessWidget {
+  const _SkeletonRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: const Row(
+        children: [
+          _SkeletonCell(width: 34),
+          SizedBox(width: 10),
+          Expanded(child: _SkeletonCell(width: 120)),
+          SizedBox(width: 10),
+          _SkeletonCell(width: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportCountItem {
+  const _ReportCountItem({
+    required this.name,
+    required this.code,
+    required this.count,
+  });
+
+  final String name;
+  final String code;
+  final int count;
+}
+
+class _ReportGroupPerformanceItem {
+  const _ReportGroupPerformanceItem({
+    required this.groupName,
+    required this.onTime,
+    required this.late,
+    required this.outOfRange,
+  });
+
+  final String groupName;
+  final int onTime;
+  final int late;
+  final int outOfRange;
+
+  int get total => onTime + late + outOfRange;
+
+  _ReportGroupPerformanceItem copyWith({
+    int? onTime,
+    int? late,
+    int? outOfRange,
+  }) {
+    return _ReportGroupPerformanceItem(
+      groupName: groupName,
+      onTime: onTime ?? this.onTime,
+      late: late ?? this.late,
+      outOfRange: outOfRange ?? this.outOfRange,
+    );
+  }
+}
+
+class _DonutSegmentData {
+  const _DonutSegmentData({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+}
+
+class _DonutChartPainter extends CustomPainter {
+  _DonutChartPainter({required this.segments, required this.total});
+
+  final List<_DonutSegmentData> segments;
+  final int total;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = math.min(size.width, size.height) * 0.17;
+    final rect = Rect.fromCircle(
+      center: Offset(size.width / 2, size.height / 2),
+      radius: math.min(size.width, size.height) / 2 - stroke / 2,
+    );
+    final bgPaint = Paint()
+      ..color = AppColors.bgPage
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+    canvas.drawArc(rect, 0, math.pi * 2, false, bgPaint);
+
+    if (total <= 0) {
+      return;
+    }
+
+    var start = -math.pi / 2;
+    for (final segment in segments) {
+      if (segment.count <= 0) {
+        continue;
+      }
+      final sweep = (segment.count / total) * math.pi * 2;
+      final paint = Paint()
+        ..color = segment.color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.butt;
+      canvas.drawArc(rect, start, sweep, false, paint);
+      start += sweep;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
+    if (oldDelegate.total != total ||
+        oldDelegate.segments.length != segments.length) {
+      return true;
+    }
+    for (var i = 0; i < segments.length; i++) {
+      if (segments[i].count != oldDelegate.segments[i].count ||
+          segments[i].color != oldDelegate.segments[i].color) {
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
+class _ReportsLineChart extends StatelessWidget {
+  const _ReportsLineChart({required this.data, required this.loading});
+
+  final List<DashboardWeeklyTrendItem> data;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final chartData = loading
+        ? const [
+            DashboardWeeklyTrendItem(
+              day: '1',
+              onTime: 40,
+              late: 20,
+              outOfRange: 10,
+            ),
+            DashboardWeeklyTrendItem(
+              day: '2',
+              onTime: 35,
+              late: 16,
+              outOfRange: 9,
+            ),
+            DashboardWeeklyTrendItem(
+              day: '3',
+              onTime: 50,
+              late: 14,
+              outOfRange: 8,
+            ),
+            DashboardWeeklyTrendItem(
+              day: '4',
+              onTime: 42,
+              late: 18,
+              outOfRange: 10,
+            ),
+            DashboardWeeklyTrendItem(
+              day: '5',
+              onTime: 56,
+              late: 15,
+              outOfRange: 6,
+            ),
+          ]
+        : data;
+
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border, width: 0.5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: CustomPaint(
+              painter: _ReportsLineChartPainter(
+                data: chartData,
+                loading: loading,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: chartData
+              .map(
+                (e) => Expanded(
+                  child: Center(
+                    child: Text(
+                      e.day,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportsLineChartPainter extends CustomPainter {
+  _ReportsLineChartPainter({required this.data, required this.loading});
+
+  final List<DashboardWeeklyTrendItem> data;
+  final bool loading;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = AppColors.bgPage
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var i = 0; i < 5; i++) {
+      final y = (size.height - 16) * (i / 4) + 8;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    if (data.isEmpty) {
+      return;
+    }
+    final maxValue = data
+        .map((e) => math.max(e.onTime, math.max(e.late, e.outOfRange)))
+        .reduce(math.max)
+        .toDouble()
+        .clamp(10, 1000);
+
+    final onTimePoints = <Offset>[];
+    final latePoints = <Offset>[];
+    final outPoints = <Offset>[];
+
+    final stepX = data.length <= 1
+        ? size.width
+        : size.width / (data.length - 1);
+    for (var i = 0; i < data.length; i++) {
+      final x = stepX * i;
+      onTimePoints.add(
+        Offset(
+          x,
+          size.height - ((data[i].onTime / maxValue) * (size.height - 16)) - 8,
+        ),
+      );
+      latePoints.add(
+        Offset(
+          x,
+          size.height - ((data[i].late / maxValue) * (size.height - 16)) - 8,
+        ),
+      );
+      outPoints.add(
+        Offset(
+          x,
+          size.height -
+              ((data[i].outOfRange / maxValue) * (size.height - 16)) -
+              8,
+        ),
+      );
+    }
+
+    _drawLine(canvas, onTimePoints, AppColors.success, loading);
+    _drawLine(canvas, latePoints, AppColors.warning, loading);
+    _drawLine(canvas, outPoints, AppColors.danger, loading);
+  }
+
+  void _drawLine(
+    Canvas canvas,
+    List<Offset> points,
+    Color color,
+    bool loading,
+  ) {
+    if (points.length < 2) {
+      return;
+    }
+    final linePaint = Paint()
+      ..color = loading ? color.withValues(alpha: 0.5) : color
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = linePaint.color;
+    for (final point in points) {
+      canvas.drawCircle(point, 2.5, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ReportsLineChartPainter oldDelegate) {
+    return oldDelegate.loading != loading || oldDelegate.data != data;
+  }
+}
+
+enum _AdminShellNav {
+  dashboard,
+  logs,
+  employees,
+  groups,
+  geofences,
+  reports,
+  exceptions,
+  settings,
+}
+
+class _ShellNavEntry {
+  const _ShellNavEntry({
+    required this.nav,
+    required this.icon,
+    required this.label,
+    this.badgeCount = 0,
+  });
+
+  final _AdminShellNav nav;
+  final IconData icon;
+  final String label;
+  final int badgeCount;
 }

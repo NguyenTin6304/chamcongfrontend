@@ -1,12 +1,20 @@
-﻿import 'dart:ui' show PointerDeviceKind;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
-import 'features/admin/presentation/admin_page.dart';
+import 'core/theme/app_colors.dart';
+import 'features/admin/presentation/admin_extra_screens.dart' as legacy_admin;
+import 'features/admin/presentation/attendance_logs/attendance_logs_screen.dart';
+import 'features/admin/presentation/dashboard/dashboard_screen.dart';
+import 'features/admin/presentation/employees/employees_screen.dart';
+import 'features/admin/presentation/geofences/geofences_screen.dart';
+import 'features/admin/presentation/groups/groups_screen.dart';
+import 'features/admin/presentation/reports/reports_screen.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
 import 'features/home/presentation/home_page.dart';
+import 'screens/admin/settings/settings_screen.dart' as admin_settings;
 
 void main() {
   runApp(const MainApp());
@@ -20,6 +28,13 @@ class MainApp extends StatelessWidget {
     '/forgot-password',
     '/reset-password',
     '/admin',
+    '/admin/attendance',
+    '/admin/employees',
+    '/admin/groups',
+    '/admin/geofences',
+    '/admin/reports',
+    '/admin/exceptions',
+    '/admin/settings',
     '/home',
   };
 
@@ -72,7 +87,28 @@ class MainApp extends StatelessWidget {
         page = const ResetPasswordPage();
         break;
       case '/admin':
-        page = AdminPage(email: _extractEmailArg(settings));
+        page = DashboardScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/attendance':
+        page = AttendanceLogsScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/employees':
+        page = EmployeesScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/groups':
+        page = GroupsScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/geofences':
+        page = GeofencesScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/reports':
+        page = ReportsScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/exceptions':
+        page = legacy_admin.ExceptionsScreen(email: _extractEmailArg(settings));
+        break;
+      case '/admin/settings':
+        page = const admin_settings.SettingsScreen();
         break;
       case '/home':
         page = HomePage(email: _extractEmailArg(settings));
@@ -89,7 +125,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Chấm Công App',
+      title: 'Chấm Công App',
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         dragDevices: {
           PointerDeviceKind.touch,
@@ -101,7 +137,8 @@ class MainApp extends StatelessWidget {
         scrollbars: true,
       ),
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
+        scaffoldBackgroundColor: AppColors.bgPage,
         useMaterial3: true,
       ),
       initialRoute: _resolveInitialRouteFromUrl(),

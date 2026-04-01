@@ -75,7 +75,12 @@ class _FakeAdminApi extends AdminApi {
   }
 
   @override
-  Future<List<EmployeeLite>> listEmployees(String token) async {
+  Future<List<EmployeeLite>> listEmployees(
+    String token, {
+    int? groupId,
+    String? query,
+    String? status,
+  }) async {
     return employees;
   }
 
