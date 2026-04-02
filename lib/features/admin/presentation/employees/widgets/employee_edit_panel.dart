@@ -102,6 +102,9 @@ extension _EmployeeEditPanelX on _AdminPageState {
                 setPanelState(() {
                   saving = true;
                 });
+                // Capture navigator before async gap — context may be stale
+                // after await if the dialog was dismissed via barrier tap.
+                final nav = Navigator.of(context);
                 try {
                   final updated = await _adminApi.patchEmployee(
                     token: token,
@@ -109,32 +112,31 @@ extension _EmployeeEditPanelX on _AdminPageState {
                     fullName: fullNameController.text.trim(),
                     groupId: selectedGroupId,
                     userId: selectedUserId,
-                    email: emailController.text.trim(),
-                    phone: phoneController.text.trim(),
-                    departmentName: departmentController.text.trim(),
-                    role: selectedRole,
-                    active: active,
                   );
                   if (!mounted) {
                     return;
                   }
+                  // Update parent list before closing.
                   setState(() {
                     _employees = _employees
                         .map((e) => e.id == updated.id ? updated : e)
                         .toList(growable: false);
                   });
+                  // Pop first — do NOT call setPanelState here. Calling
+                  // setPanelState after parent setState schedules two
+                  // concurrent rebuilds that can leave InheritedElement
+                  // _dependents in an inconsistent state and trigger the
+                  // _dependents.isEmpty assertion.
+                  nav.pop();
+                  // Snack shown after pop; _showSnack uses parent context.
                   _showSnack('Đã lưu thay đổi nhân viên.');
-                  if (!context.mounted) {
-                    return;
-                  }
-                  Navigator.of(context).pop();
                 } catch (_) {
+                  // Only touch dialog state if it is still in the tree.
                   if (!mounted) {
                     return;
                   }
                   _showSnack('Không thể lưu thay đổi nhân viên.');
-                } finally {
-                  if (mounted) {
+                  if (context.mounted) {
                     setPanelState(() {
                       saving = false;
                     });
@@ -308,33 +310,7 @@ extension _EmployeeEditPanelX on _AdminPageState {
                                   });
                                 },
                               ),
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<int?>(
-                                initialValue: selectedUserId,
-                                decoration: _decoration(
-                                  'Tài khoản liên kết',
-                                  Icons.link_outlined,
-                                ),
-                                items: [
-                                  const DropdownMenuItem<int?>(
-                                    value: null,
-                                    child: Text('Không liên kết'),
-                                  ),
-                                  ...users.map(
-                                    (user) => DropdownMenuItem<int?>(
-                                      value: user.id,
-                                      child: Text(
-                                        '${user.email} (${user.role})',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setPanelState(() {
-                                    selectedUserId = value;
-                                  });
-                                },
-                              ),
+                              
                               const SizedBox(height: 10),
                               SwitchListTile(
                                 value: active,

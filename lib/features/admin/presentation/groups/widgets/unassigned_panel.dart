@@ -52,11 +52,12 @@ extension _UnassignedPanelX on _AdminPageState {
               'Tất cả nhân viên đã được phân công nhóm.',
               style: TextStyle(color: AppColors.textMuted),
             )
-          else
+          else ...[
             Wrap(
               spacing: 10,
               runSpacing: 10,
               children: employees
+                  .take(4)
                   .map((employee) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
@@ -105,6 +106,24 @@ extension _UnassignedPanelX on _AdminPageState {
                   })
                   .toList(growable: false),
             ),
+            if (employees.length > 4) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _activeNav = _AdminShellNav.employees;
+                    _employeesGroupId = null;
+                    _employeesStatus = 'all';
+                    _employeesPage = 1;
+                  });
+                },
+                child: Text(
+                  'Xem thêm ${employees.length - 4} người khác...',
+                  style: const TextStyle(color: AppColors.primary),
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );

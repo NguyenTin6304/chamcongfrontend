@@ -47,4 +47,12 @@ class AppColors {
   static const Color employeeActiveText = Color(0xFF166634);
   static const Color employeeInactiveBg = Color(0xFFFEE2E2);
   static const Color employeeInactiveText = Color(0xFF991B1B);
+
+  static const Color exceptionTabAllBg = Color(0xFFEFF6FF);
+  static const Color exceptionTabAllText = Color(0xFF1E40AF);
+  static const Color exceptionTabAllBorder = Color(0xFFBFDBFE);
+  static const Color exceptionTabPendingBorder = Color(0xFFFDE68A);
+  static const Color exceptionTabApprovedBorder = Color(0xFFBBF7D0);
+  static const Color exceptionTabRejectedBorder = Color(0xFFFECACA);
+  static const Color exceptionCardMutedBg = Color(0xFFFAFAFA);
 }

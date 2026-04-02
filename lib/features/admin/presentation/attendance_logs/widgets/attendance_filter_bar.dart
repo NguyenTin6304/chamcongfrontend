@@ -33,7 +33,7 @@ extension _AttendanceFilterBarX on _AdminPageState {
             ),
           ),
           SizedBox(
-            width: 180,
+            width: 250,
             child: DropdownButtonFormField<int?>(
               key: ValueKey<int?>(_dashboardGroupId),
               initialValue: _dashboardGroupId,

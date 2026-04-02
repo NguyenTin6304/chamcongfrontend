@@ -26,6 +26,7 @@ extension _GeofenceMapX on _AdminPageState {
                     : _formatThousands(total),
                 icon: Icons.map_outlined,
                 iconColor: AppColors.primary,
+                valueColor: AppColors.primary,
                 loading: _loadingDashboardGeofences,
               ),
             ),

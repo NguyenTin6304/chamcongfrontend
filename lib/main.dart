@@ -14,7 +14,6 @@ import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
 import 'features/home/presentation/home_page.dart';
-import 'screens/admin/settings/settings_screen.dart' as admin_settings;
 
 void main() {
   runApp(const MainApp());
@@ -108,7 +107,7 @@ class MainApp extends StatelessWidget {
         page = legacy_admin.ExceptionsScreen(email: _extractEmailArg(settings));
         break;
       case '/admin/settings':
-        page = const admin_settings.SettingsScreen();
+        page = legacy_admin.SettingsScreen(email: _extractEmailArg(settings));
         break;
       case '/home':
         page = HomePage(email: _extractEmailArg(settings));

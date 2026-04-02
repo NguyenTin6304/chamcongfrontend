@@ -1,4 +1,4 @@
-﻿part of '../../admin_page.dart';
+part of '../../admin_page.dart';
 
 extension _AttendanceTableX on _AdminPageState {
   Widget _buildAttendanceTableCard() {
@@ -30,7 +30,7 @@ extension _AttendanceTableX on _AdminPageState {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        'Chưa có dữ liệu',
+                        'Ch\u01b0a c\u00f3 d\u1eef li\u1ec7u',
                         style: TextStyle(color: AppColors.textMuted),
                       ),
                     ],
@@ -71,15 +71,14 @@ extension _AttendanceTableX on _AdminPageState {
         ),
         columns: const [
           DataColumn(label: Text('STT')),
-          DataColumn(label: Text('PHÒNG BAN')),
-          DataColumn(label: Text('NHÂN VIÊN')),
-          DataColumn(label: Text('NGÀY')),
-          DataColumn(label: Text('GIỜ VÀO')),
-          DataColumn(label: Text('GIỜ RA')),
-          DataColumn(label: Text('TỔNG GIỜ')),
-          DataColumn(label: Text('TRẠNG THÁI')),
-          DataColumn(label: Text('VỊ TRÍ')),
-          DataColumn(label: Text('THAO TÁC')),
+          DataColumn(label: Text('NH\u00c2N VI\u00caN')),
+          DataColumn(label: Text('PH\u00d2NG BAN')),
+          DataColumn(label: Text('NG\u00c0Y')),
+          DataColumn(label: Text('GI\u1edd V\u00c0O')),
+          DataColumn(label: Text('GI\u1edd RA')),
+          DataColumn(label: Text('T\u1ed4NG GI\u1edd')),
+          DataColumn(label: Text('TR\u1ea0NG TH\u00c1I')),
+          DataColumn(label: Text('V\u1eca TR\u00cd')),
         ],
         rows: logs
             .asMap()
@@ -173,7 +172,7 @@ extension _AttendanceTableX on _AdminPageState {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          isOutside ? 'Ngoài vùng' : 'Trong vùng',
+                          isOutside ? 'Ngo\u00e0i v\u00f9ng' : 'Trong v\u00f9ng',
                           style: TextStyle(
                             color:
                                 isOutside ? AppColors.danger : AppColors.success,
@@ -181,17 +180,6 @@ extension _AttendanceTableX on _AdminPageState {
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  DataCell(
-                    IconButton(
-                      tooltip: 'Xem chi tiết',
-                      onPressed: () => _showAttendanceLogDetail(row),
-                      icon: const Icon(
-                        Icons.remove_red_eye_outlined,
-                        size: 18,
-                        color: AppColors.primary,
-                      ),
                     ),
                   ),
                 ],
@@ -207,7 +195,7 @@ extension _AttendanceTableX on _AdminPageState {
     required int startIndex,
   }) {
     const rowHeight = 64.0;
-    const tableWidth = 1400.0;
+    const tableWidth = 1310.0;
     final maxHeight = (logs.length * rowHeight).clamp(280.0, 460.0).toDouble();
 
     return SingleChildScrollView(
@@ -224,25 +212,21 @@ extension _AttendanceTableX on _AdminPageState {
                   SizedBox(width: 50, child: _AttendanceHeaderText('STT')),
                   SizedBox(
                     width: 260,
-                    child: _AttendanceHeaderText('NHÂN VIÊN'),
+                    child: _AttendanceHeaderText('NH\u00c2N VI\u00caN'),
                   ),
                   SizedBox(
                     width: 120,
-                    child: _AttendanceHeaderText('PHÒNG BAN'),
+                    child: _AttendanceHeaderText('PH\u00d2NG BAN'),
                   ),
-                  SizedBox(width: 95, child: _AttendanceHeaderText('NGÀY')),
-                  SizedBox(width: 90, child: _AttendanceHeaderText('GIỜ VÀO')),
-                  SizedBox(width: 90, child: _AttendanceHeaderText('GIỜ RA')),
-                  SizedBox(width: 90, child: _AttendanceHeaderText('TỔNG GIỜ')),
+                  SizedBox(width: 95, child: _AttendanceHeaderText('NG\u00c0Y')),
+                  SizedBox(width: 90, child: _AttendanceHeaderText('GI\u1edd V\u00c0O')),
+                  SizedBox(width: 90, child: _AttendanceHeaderText('GI\u1edd RA')),
+                  SizedBox(width: 90, child: _AttendanceHeaderText('T\u1ed4NG GI\u1edd')),
                   SizedBox(
                     width: 120,
-                    child: _AttendanceHeaderText('TRẠNG THÁI'),
+                    child: _AttendanceHeaderText('TR\u1ea0NG TH\u00c1I'),
                   ),
-                  SizedBox(width: 120, child: _AttendanceHeaderText('VỊ TRÍ')),
-                  SizedBox(
-                    width: 90,
-                    child: _AttendanceHeaderText('THAO TÁC'),
-                  ),
+                  SizedBox(width: 120, child: _AttendanceHeaderText('V\u1eca TR\u00cd')),
                 ],
               ),
             ),
@@ -378,7 +362,7 @@ extension _AttendanceTableX on _AdminPageState {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  isOutside ? 'Ngoài vùng' : 'Trong vùng',
+                                  isOutside ? 'Ngo\u00e0i v\u00f9ng' : 'Trong v\u00f9ng',
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: isOutside
@@ -389,18 +373,6 @@ extension _AttendanceTableX on _AdminPageState {
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                        SizedBox(
-                          width: 90,
-                          child: IconButton(
-                            tooltip: 'Xem chi tiết',
-                            onPressed: () => _showAttendanceLogDetail(row),
-                            icon: const Icon(
-                              Icons.remove_red_eye_outlined,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
                           ),
                         ),
                       ],
@@ -428,15 +400,14 @@ extension _AttendanceTableX on _AdminPageState {
         ),
         columns: const [
           DataColumn(label: Text('STT')),
-          DataColumn(label: Text('NHÂN VIÊN')),
-          DataColumn(label: Text('PHÒNG BAN')),
-          DataColumn(label: Text('NGÀY')),
-          DataColumn(label: Text('GIỜ VÀO')),
-          DataColumn(label: Text('GIỜ RA')),
-          DataColumn(label: Text('TỔNG GIỜ')),
-          DataColumn(label: Text('TRẠNG THÁI')),
-          DataColumn(label: Text('VỊ TRÍ')),
-          DataColumn(label: Text('THAO TÁC')),
+          DataColumn(label: Text('NH\u00c2N VI\u00caN')),
+          DataColumn(label: Text('PH\u00d2NG BAN')),
+          DataColumn(label: Text('NG\u00c0Y')),
+          DataColumn(label: Text('GI\u1edd V\u00c0O')),
+          DataColumn(label: Text('GI\u1edd RA')),
+          DataColumn(label: Text('T\u1ed4NG GI\u1edd')),
+          DataColumn(label: Text('TR\u1ea0NG TH\u00c1I')),
+          DataColumn(label: Text('V\u1eca TR\u00cd')),
         ],
         rows: List.generate(
           5,
@@ -451,7 +422,6 @@ extension _AttendanceTableX on _AdminPageState {
               DataCell(_SkeletonCell(width: 56)),
               DataCell(_SkeletonCell(width: 80)),
               DataCell(_SkeletonCell(width: 88)),
-              DataCell(_SkeletonCell(width: 30)),
             ],
           ),
         ),
@@ -475,7 +445,7 @@ extension _AttendanceTableX on _AdminPageState {
     return Row(
       children: [
         Text(
-          'Hiển thị $start-$end trong $total bản ghi',
+          'Hi\u1ec3n th\u1ecb $start-$end trong $total b\u1ea3n ghi',
           style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
         const Spacer(),
@@ -485,9 +455,10 @@ extension _AttendanceTableX on _AdminPageState {
                   setState(() {
                     _logsPage -= 1;
                   });
+                  _refreshLogsOnly();
                 }
               : null,
-          child: const Text('Trước'),
+          child: const Text('Tr\u01b0\u1edbc'),
         ),
         const SizedBox(width: 6),
         ...pages.map((page) {
@@ -514,6 +485,7 @@ extension _AttendanceTableX on _AdminPageState {
                         setState(() {
                           _logsPage = page;
                         });
+                        _refreshLogsOnly();
                       },
                 child: Text('$page'),
               ),
@@ -527,6 +499,7 @@ extension _AttendanceTableX on _AdminPageState {
                   setState(() {
                     _logsPage += 1;
                   });
+                  _refreshLogsOnly();
                 }
               : null,
           child: const Text('Sau'),
@@ -547,6 +520,7 @@ extension _AttendanceTableX on _AdminPageState {
               _logsPageSize = value;
               _logsPage = 1;
             });
+            _refreshLogsOnly();
           },
         ),
       ],

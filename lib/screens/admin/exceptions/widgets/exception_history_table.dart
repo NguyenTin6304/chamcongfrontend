@@ -4,8 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/admin/data/admin_api.dart';
-import '../../../../widgets/common/status_badge.dart';
-import 'pending_exception_card.dart';
+import 'exception_ui_helpers.dart';
 
 class DateRange {
   const DateRange({required this.from, required this.to});
@@ -19,12 +18,18 @@ class ExceptionHistoryTable extends StatefulWidget {
     required this.statusFilter,
     required this.dateRange,
     required this.groupId,
+    required this.exceptionTypeFilter,
+    required this.searchQuery,
+    required this.reloadToken,
     super.key,
   });
 
   final String? statusFilter;
   final DateRange? dateRange;
   final String? groupId;
+  final String? exceptionTypeFilter;
+  final String searchQuery;
+  final int reloadToken;
 
   @override
   State<ExceptionHistoryTable> createState() => _ExceptionHistoryTableState();
@@ -41,40 +46,15 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
   int _page = 1;
   int _pageSize = 10;
 
-  List<AttendanceExceptionItem> get _filteredRows {
-    final status = (widget.statusFilter ?? 'all').toLowerCase();
-    if (status == 'all') {
-      return _allRows;
-    }
-    return _allRows.where((row) {
-      final value = row.status.toLowerCase();
-      if (status == 'pending') {
-        return value.contains('open') || value.contains('pending');
-      }
-      if (status == 'approved') {
-        return value.contains('resolve') || value.contains('approve');
-      }
-      if (status == 'rejected') {
-        return value.contains('reject');
-      }
-      return true;
-    }).toList(growable: false);
-  }
-
-  List<AttendanceExceptionItem> get _pageItems {
-    final rows = _filteredRows;
-    final start = ((_page - 1) * _pageSize).clamp(0, rows.length);
-    final end = (_page * _pageSize).clamp(0, rows.length);
-    return rows.sublist(start, end);
-  }
-
-  int get _totalPages {
-    final rows = _filteredRows.length;
-    if (rows == 0) {
-      return 1;
-    }
-    return (rows / _pageSize).ceil();
-  }
+  static const List<String> _allTypes = <String>[
+    'SUSPECTED_LOCATION_SPOOF',
+    'OUT_OF_RANGE',
+    'AUTO_CLOSED',
+    'AUTO_CHECKOUT',
+    'MISSED_CHECKOUT',
+    'FORGOT_CHECKOUT',
+    'UNUSUAL_HOURS',
+  ];
 
   @override
   void initState() {
@@ -85,13 +65,22 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
   @override
   void didUpdateWidget(covariant ExceptionHistoryTable oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final changed = oldWidget.statusFilter != widget.statusFilter ||
+    final needsRefetch =
         oldWidget.groupId != widget.groupId ||
+        oldWidget.exceptionTypeFilter != widget.exceptionTypeFilter ||
+        oldWidget.reloadToken != widget.reloadToken ||
         oldWidget.dateRange?.from != widget.dateRange?.from ||
         oldWidget.dateRange?.to != widget.dateRange?.to;
-    if (changed) {
+    final needsPageReset = needsRefetch ||
+        oldWidget.statusFilter != widget.statusFilter ||
+        oldWidget.searchQuery != widget.searchQuery;
+    if (needsRefetch) {
       _page = 1;
       _loadRows();
+    } else if (needsPageReset) {
+      setState(() {
+        _page = 1;
+      });
     }
   }
 
@@ -117,19 +106,39 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     try {
       final groupId = int.tryParse(widget.groupId ?? '');
       final range = widget.dateRange;
-      final rows = await _api.listAttendanceExceptions(
-        token: token,
-        fromDate: range?.from,
-        toDate: range?.to,
-        groupId: groupId,
-        exceptionType: 'MISSED_CHECKOUT',
-        statusFilter: null,
-      );
+      final typeFilter = widget.exceptionTypeFilter;
+      final typesToLoad = typeFilter == null ? _allTypes : <String>[typeFilter];
+
+      final requests = typesToLoad
+          .map(
+            (type) => _loadByTypeSafe(
+              token: token,
+              fromDate: range?.from,
+              toDate: range?.to,
+              groupId: groupId,
+              exceptionType: type,
+            ),
+          )
+          .toList(growable: false);
+
+      final results = await Future.wait<List<AttendanceExceptionItem>>(requests);
+      final merged = <int, AttendanceExceptionItem>{};
+      for (final list in results) {
+        for (final row in list) {
+          merged[row.id] = row;
+        }
+      }
+      final sorted = merged.values.toList(growable: false)
+        ..sort((a, b) {
+          final aTime = a.createdAt ?? a.workDate;
+          final bTime = b.createdAt ?? b.workDate;
+          return bTime.compareTo(aTime);
+        });
       if (!mounted) {
         return;
       }
       setState(() {
-        _allRows = rows;
+        _allRows = sorted;
       });
     } catch (_) {
       if (!mounted) {
@@ -150,72 +159,140 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     }
   }
 
-  StatusBadgeType _mapBadgeType(String status) {
-    final value = status.toLowerCase();
-    if (value.contains('open') || value.contains('pending')) {
-      return StatusBadgeType.exception;
+  Future<List<AttendanceExceptionItem>> _loadByTypeSafe({
+    required String token,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int? groupId,
+    required String exceptionType,
+  }) async {
+    try {
+      return await _api.listAttendanceExceptions(
+        token: token,
+        fromDate: fromDate,
+        toDate: toDate,
+        groupId: groupId,
+        exceptionType: exceptionType,
+        statusFilter: null,
+      );
+    } catch (_) {
+      return const [];
     }
-    if (value.contains('reject')) {
-      return StatusBadgeType.outOfRange;
-    }
-    if (value.contains('resolve') || value.contains('approve')) {
-      return StatusBadgeType.onTime;
-    }
-    return StatusBadgeType.exception;
   }
 
-  ExceptionModel _toModel(AttendanceExceptionItem item) {
-    return ExceptionModel(
-      id: item.id,
-      employeeName: item.fullName,
-      employeeCode: item.employeeCode,
-      departmentName: item.groupName ?? '--',
-      exceptionType: item.exceptionType,
-      status: item.status,
-      workDate: item.workDate,
-      checkInTime: item.sourceCheckinTime == null
-          ? '--'
-          : DateFormat('HH:mm').format(item.sourceCheckinTime!.toLocal()),
-      checkOutTime: item.actualCheckoutTime == null
-          ? '--'
-          : DateFormat('HH:mm').format(item.actualCheckoutTime!.toLocal()),
-      locationLabel: item.exceptionType.toLowerCase().contains('location')
-          ? 'Ngoài vùng'
-          : 'Trong vùng',
-      reason: item.note?.trim().isNotEmpty == true
-          ? item.note!.trim()
-          : item.exceptionType,
-      reviewerName: item.resolvedByEmail ?? '--',
-      createdAt: item.createdAt,
-    );
-  }
-
-  Widget _buildTypePill(String value) {
+  bool _isPendingStatus(String value) {
     final lower = value.toLowerCase();
-    final color = lower.contains('location') ? AppColors.danger : AppColors.warning;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        value.replaceAll('_', ' '),
-        style: TextStyle(
-          fontSize: 11,
-          color: color,
-          fontWeight: FontWeight.w600,
+    return lower.contains('open') || lower.contains('pending');
+  }
+
+  bool _isApprovedStatus(String value) {
+    final lower = value.toLowerCase();
+    return lower.contains('resolve') || lower.contains('approve');
+  }
+
+  bool _isRejectedStatus(String value) {
+    final lower = value.toLowerCase();
+    return lower.contains('reject') || lower.contains('deny');
+  }
+
+  List<AttendanceExceptionItem> get _filteredRows {
+    final status = (widget.statusFilter ?? 'all').toLowerCase();
+    final keyword = widget.searchQuery.trim().toLowerCase();
+    return _allRows.where((row) {
+      if (status == 'pending' && !_isPendingStatus(row.status)) {
+        return false;
+      }
+      if (status == 'approved' && !_isApprovedStatus(row.status)) {
+        return false;
+      }
+      if (status == 'rejected' && !_isRejectedStatus(row.status)) {
+        return false;
+      }
+      if (keyword.isEmpty) {
+        return true;
+      }
+      final haystack = [
+        row.fullName,
+        row.employeeCode,
+        row.groupName ?? '',
+        row.note ?? '',
+        row.exceptionType,
+      ].join(' ').toLowerCase();
+      return haystack.contains(keyword);
+    }).toList(growable: false);
+  }
+
+  int get _totalPages {
+    final total = _filteredRows.length;
+    if (total == 0) {
+      return 1;
+    }
+    return (total / _pageSize).ceil();
+  }
+
+  List<AttendanceExceptionItem> get _pageRows {
+    final rows = _filteredRows;
+    final start = ((_page - 1) * _pageSize).clamp(0, rows.length);
+    final end = (_page * _pageSize).clamp(0, rows.length);
+    return rows.sublist(start, end);
+  }
+
+  List<Widget> _buildPageButtons() {
+    final totalPages = _totalPages;
+    final widgets = <Widget>[];
+    final pages = <int>{1, totalPages, _page - 1, _page, _page + 1}
+      ..removeWhere((value) => value < 1 || value > totalPages);
+    final ordered = pages.toList(growable: false)..sort();
+    var previous = 0;
+    for (final page in ordered) {
+      if (previous != 0 && page - previous > 1) {
+        widgets.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: Text('...'),
+          ),
+        );
+      }
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              setState(() {
+                _page = page;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _page == page ? AppColors.primary : AppColors.bgCard,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border, width: 0.5),
+              ),
+              child: Text(
+                '$page',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _page == page ? Colors.white : AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-    );
+      );
+      previous = page;
+    }
+    return widgets;
   }
 
   @override
   Widget build(BuildContext context) {
-    final rows = _pageItems;
     final total = _filteredRows.length;
     final start = total == 0 ? 0 : ((_page - 1) * _pageSize) + 1;
     final end = total == 0 ? 0 : (_page * _pageSize).clamp(0, total);
+    final rows = _pageRows;
 
     return Card(
       elevation: 0,
@@ -223,21 +300,30 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: AppColors.border, width: 0.5),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_loading)
-              _buildSkeletonRows()
+              _buildSkeletonTable()
             else if (rows.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text(
-                    'Chưa có dữ liệu',
-                    style: TextStyle(color: AppColors.textMuted),
-                  ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                color: AppColors.bgCard,
+                child: const Column(
+                  children: [
+                    Icon(
+                      Icons.assignment_outlined,
+                      size: 48,
+                      color: AppColors.border,
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Chưa có ngoại lệ',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
+                  ],
                 ),
               )
             else
@@ -247,10 +333,13 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                   headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
                   headingTextStyle: const TextStyle(
                     fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.06,
                     color: AppColors.textMuted,
-                    letterSpacing: 0.04,
                   ),
+                  dataRowMinHeight: 56,
+                  dataRowMaxHeight: 56,
+                  dividerThickness: 0.5,
                   columns: const [
                     DataColumn(label: Text('STT')),
                     DataColumn(label: Text('NHÂN VIÊN')),
@@ -265,57 +354,176 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                   rows: rows.asMap().entries.map((entry) {
                     final index = entry.key;
                     final item = entry.value;
-                    final model = _toModel(item);
+                    final stt = (start + index).toString().padLeft(2, '0');
+                    final initials = _initials(item.fullName);
+                    final typeText = exceptionTypeLabel(item.exceptionType);
+                    final typeColor = exceptionTypeColor(item.exceptionType);
+                    final dateText = DateFormat('dd/MM/yyyy').format(item.workDate);
+                    final checkInText = item.sourceCheckinTime == null
+                        ? '—'
+                        : DateFormat('HH:mm').format(item.sourceCheckinTime!.toLocal());
+                    final checkOutText = item.actualCheckoutTime == null
+                        ? '—'
+                        : DateFormat('HH:mm').format(item.actualCheckoutTime!.toLocal());
+                    final reason = (item.note ?? '').trim().isEmpty
+                        ? typeText
+                        : item.note!.trim();
+
                     return DataRow(
                       cells: [
-                        DataCell(Text('${start + index}')),
+                        DataCell(Text(stt)),
                         DataCell(
-                          Text('${model.employeeName} (${model.employeeCode})'),
+                          SizedBox(
+                            width: 220,
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppColors.bgPage,
+                                  child: Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.fullName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        item.employeeCode,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        DataCell(_buildTypePill(model.exceptionType)),
                         DataCell(
-                          Text(DateFormat('dd/MM/yyyy').format(model.workDate!)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: typeColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              typeText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: typeColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
                         ),
-                        DataCell(Text(model.checkInTime)),
-                        DataCell(Text(model.checkOutTime)),
-                        DataCell(Text(model.reason)),
-                        DataCell(StatusBadge(type: _mapBadgeType(item.status))),
-                        DataCell(Text(model.reviewerName)),
+                        DataCell(Text(dateText)),
+                        DataCell(Text(checkInText)),
+                        DataCell(
+                          Text(
+                            checkOutText,
+                            style: TextStyle(
+                              color: checkOutText == '—'
+                                  ? AppColors.textMuted
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        DataCell(
+                          SizedBox(
+                            width: 220,
+                            child: Text(
+                              reason,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        DataCell(_ReviewStatusBadge(status: item.status)),
+                        DataCell(Text(item.resolvedByEmail ?? '—')),
                       ],
                     );
                   }).toList(growable: false),
                 ),
               ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  'Hiển thị $start–$end trong $total ngoại lệ',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: AppColors.border, width: 0.5),
                 ),
-                const Spacer(),
-                OutlinedButton(
-                  onPressed: _page > 1
-                      ? () {
-                          setState(() {
-                            _page -= 1;
-                          });
-                        }
-                      : null,
-                  child: const Text('Trước'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  onPressed: _page < _totalPages
-                      ? () {
-                          setState(() {
-                            _page += 1;
-                          });
-                        }
-                      : null,
-                  child: const Text('Sau'),
-                ),
-              ],
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    'Hiển thị $start–$end trong $total ngoại lệ',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                  const Spacer(),
+                  OutlinedButton(
+                    onPressed: _page > 1
+                        ? () {
+                            setState(() {
+                              _page -= 1;
+                            });
+                          }
+                        : null,
+                    child: const Text('Trước'),
+                  ),
+                  ..._buildPageButtons(),
+                  const SizedBox(width: 6),
+                  OutlinedButton(
+                    onPressed: _page < _totalPages
+                        ? () {
+                            setState(() {
+                              _page += 1;
+                            });
+                          }
+                        : null,
+                    child: const Text('Sau'),
+                  ),
+                  const SizedBox(width: 12),
+                  DropdownButton<int>(
+                    value: _pageSize,
+                    borderRadius: BorderRadius.circular(8),
+                    items: const [
+                      DropdownMenuItem(value: 10, child: Text('10/trang')),
+                      DropdownMenuItem(value: 25, child: Text('25/trang')),
+                      DropdownMenuItem(value: 50, child: Text('50/trang')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        _pageSize = value;
+                        _page = 1;
+                      });
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -323,11 +531,17 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     );
   }
 
-  Widget _buildSkeletonRows() {
+  Widget _buildSkeletonTable() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
         headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
+        headingTextStyle: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.06,
+          color: AppColors.textMuted,
+        ),
         columns: const [
           DataColumn(label: Text('STT')),
           DataColumn(label: Text('NHÂN VIÊN')),
@@ -343,37 +557,105 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
           3,
           (_) => const DataRow(
             cells: [
-              DataCell(_SkeletonCell(width: 24)),
-              DataCell(_SkeletonCell(width: 140)),
-              DataCell(_SkeletonCell(width: 100)),
-              DataCell(_SkeletonCell(width: 80)),
-              DataCell(_SkeletonCell(width: 56)),
-              DataCell(_SkeletonCell(width: 56)),
-              DataCell(_SkeletonCell(width: 140)),
-              DataCell(_SkeletonCell(width: 84)),
-              DataCell(_SkeletonCell(width: 120)),
+              DataCell(_ShimmerCell(width: 24)),
+              DataCell(_ShimmerCell(width: 180)),
+              DataCell(_ShimmerCell(width: 120)),
+              DataCell(_ShimmerCell(width: 80)),
+              DataCell(_ShimmerCell(width: 56)),
+              DataCell(_ShimmerCell(width: 56)),
+              DataCell(_ShimmerCell(width: 170)),
+              DataCell(_ShimmerCell(width: 90)),
+              DataCell(_ShimmerCell(width: 120)),
             ],
           ),
         ),
       ),
     );
   }
+
+  String _initials(String fullName) {
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return 'NA';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
+        .toUpperCase();
+  }
 }
 
-class _SkeletonCell extends StatelessWidget {
-  const _SkeletonCell({required this.width});
+class _ReviewStatusBadge extends StatelessWidget {
+  const _ReviewStatusBadge({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final lower = status.toLowerCase();
+    late final String label;
+    late final Color background;
+    late final Color foreground;
+
+    if (lower.contains('reject') || lower.contains('deny')) {
+      label = 'Từ chối';
+      background = AppColors.badgeBgOutOfRange;
+      foreground = AppColors.badgeTextOutOfRange;
+    } else if (lower.contains('resolve') || lower.contains('approve')) {
+      label = 'Đã duyệt';
+      background = AppColors.badgeBgOnTime;
+      foreground = AppColors.badgeTextOnTime;
+    } else {
+      label = 'Chờ duyệt';
+      background = AppColors.badgeBgLate;
+      foreground = AppColors.badgeTextLate;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: foreground,
+        ),
+      ),
+    );
+  }
+}
+
+class _ShimmerCell extends StatelessWidget {
+  const _ShimmerCell({required this.width});
 
   final double width;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: 12,
-      decoration: BoxDecoration(
-        color: AppColors.border,
-        borderRadius: BorderRadius.circular(999),
-      ),
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.45, end: 0.9),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeInOut,
+      builder: (context, value, child) {
+        return Container(
+          width: width,
+          height: 12,
+          decoration: BoxDecoration(
+            color: AppColors.border.withValues(alpha: value),
+            borderRadius: BorderRadius.circular(99),
+          ),
+        );
+      },
+      onEnd: () {},
     );
   }
 }

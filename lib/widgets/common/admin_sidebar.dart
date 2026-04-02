@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 
@@ -53,7 +53,7 @@ class AdminSidebar<T> extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'AttendOS',
+                  'Chấm công',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -62,7 +62,7 @@ class AdminSidebar<T> extends StatelessWidget {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  'Quản trị nhân sự',
+                  'Quản trị hệ thống',
                   style: TextStyle(fontSize: 11, color: AppColors.sidebarMuted),
                 ),
                 SizedBox(height: 32),
@@ -159,29 +159,6 @@ class _SidebarTile<T> extends StatelessWidget {
   final VoidCallback onTap;
   final ValueChanged<bool> onHover;
 
-  String? _routeNameForLabel() {
-    if (item.label == 'Ngoại lệ') {
-      return '/admin/exceptions';
-    }
-    if (item.label == 'Cài đặt') {
-      return '/admin/settings';
-    }
-    return null;
-  }
-
-  void _handleTap(BuildContext context) {
-    onTap();
-    final route = _routeNameForLabel();
-    if (route == null) {
-      return;
-    }
-    final current = ModalRoute.of(context)?.settings.name?.split('?').first;
-    if (current == route) {
-      return;
-    }
-    Navigator.of(context).pushReplacementNamed(route);
-  }
-
   @override
   Widget build(BuildContext context) {
     final bg = isActive
@@ -199,7 +176,7 @@ class _SidebarTile<T> extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
-          onTap: () => _handleTap(context),
+          onTap: onTap,
           child: Container(
             height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 12),

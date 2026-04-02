@@ -34,6 +34,11 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
   int _selectedPrimaryIndex = 0;
   String? _logoUrl;
 
+  // Stored from /rules/active — required when calling PUT /rules/active
+  double _ruleLatitude = 0.0;
+  double _ruleLongitude = 0.0;
+  int _ruleRadiusM = 200;
+
   static const _timezones = <String>[
     'Asia/Ho_Chi_Minh',
     'Asia/Bangkok',
@@ -82,121 +87,92 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
     await _loadSettings();
   }
 
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
+  int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
+
   Future<void> _loadSettings() async {
     final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
+    if (token == null || token.isEmpty) return;
     setState(() => _loading = true);
     try {
       final response = await http.get(
-        Uri.parse('${AppConfig.apiBaseUrl}/settings'),
+        Uri.parse('${AppConfig.apiBaseUrl}/rules/active'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
-      if (response.statusCode != 200) {
-        throw Exception('load-settings-failed');
-      }
-      final payload = jsonDecode(utf8.decode(response.bodyBytes));
-      final data = _extractMap(payload);
-
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _systemNameCtrl.text = (data['system_name'] ?? 'AttendOS').toString();
-        _logoUrl = data['logo_url']?.toString();
-        _timeZone = (data['timezone'] ?? _timeZone).toString();
-        if (!_timezones.contains(_timeZone)) {
-          _timeZone = _timezones.first;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data is Map && mounted) {
+          setState(() {
+            _ruleLatitude = _toDouble(data['latitude']) ?? _ruleLatitude;
+            _ruleLongitude = _toDouble(data['longitude']) ?? _ruleLongitude;
+            _ruleRadiusM = _toInt(data['radius_m']) ?? _ruleRadiusM;
+            _lateGraceCtrl.text = (_toInt(data['grace_minutes']) ?? 15).toString();
+            _defaultRadiusCtrl.text = _ruleRadiusM.toString();
+            final endTime = data['end_time']?.toString();
+            if (endTime != null && endTime.isNotEmpty) {
+              _autoCheckoutCtrl.text = endTime;
+            }
+            final checkoutGrace = _toInt(data['checkout_grace_minutes']) ?? 0;
+            _autoCheckoutEnabled = checkoutGrace > 0;
+          });
         }
-        _language = (data['language'] ?? _language).toString();
-        _timeFormat = (data['time_format'] ?? _timeFormat).toString();
-        _lateGraceCtrl.text = (data['grace_minutes'] ?? 15).toString();
-        _autoCheckoutEnabled = (data['auto_checkout_enabled'] == true);
-        _autoCheckoutCtrl.text =
-            (data['auto_checkout_time'] ?? _autoCheckoutCtrl.text).toString();
-        _defaultRadiusCtrl.text = (data['default_radius_meters'] ?? 200).toString();
-        _otAfterCtrl.text = (data['ot_after_minutes'] ?? 60).toString();
-        _theme = (data['theme_mode'] ?? _theme).toString();
-        _density = (data['density'] ?? _density).toString();
-      });
+      }
+      // 404 (no active rule yet) or any other status → silently keep defaults
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
-      );
+      // Network error: silently keep defaults, do not show snackbar
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  Map<String, dynamic> _extractMap(dynamic payload) {
-    if (payload is Map<String, dynamic>) {
-      final data = payload['data'];
-      if (data is Map<String, dynamic>) {
-        return data;
-      }
-      return payload;
-    }
-    return <String, dynamic>{};
   }
 
   Future<void> _saveSettings() async {
     final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
+    if (token == null || token.isEmpty) return;
     setState(() => _saving = true);
     try {
+      final graceMinutes = int.tryParse(_lateGraceCtrl.text.trim()) ?? 15;
+      final radiusM = int.tryParse(_defaultRadiusCtrl.text.trim()) ?? _ruleRadiusM;
       final body = <String, dynamic>{
-        'system_name': _systemNameCtrl.text.trim(),
-        'timezone': _timeZone,
-        'language': _language,
-        'time_format': _timeFormat,
-        'grace_minutes': int.tryParse(_lateGraceCtrl.text.trim()) ?? 15,
-        'auto_checkout_enabled': _autoCheckoutEnabled,
-        'auto_checkout_time': _autoCheckoutCtrl.text.trim(),
-        'default_radius_meters': int.tryParse(_defaultRadiusCtrl.text.trim()) ?? 200,
-        'ot_after_minutes': int.tryParse(_otAfterCtrl.text.trim()) ?? 60,
-        'theme_mode': _theme,
-        'density': _density,
-        'primary_color_index': _selectedPrimaryIndex,
+        'latitude': _ruleLatitude,
+        'longitude': _ruleLongitude,
+        'radius_m': radiusM,
+        'grace_minutes': graceMinutes,
+        if (_autoCheckoutCtrl.text.trim().isNotEmpty)
+          'end_time': _autoCheckoutCtrl.text.trim(),
       };
-      final response = await http.patch(
-        Uri.parse('${AppConfig.apiBaseUrl}/settings'),
+      final response = await http.put(
+        Uri.parse('${AppConfig.apiBaseUrl}/rules/active'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: jsonEncode(body),
       );
-      if (response.statusCode != 200) {
-        throw Exception('save-settings-failed');
-      }
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Đã lưu cài đặt')));
+      if (response.statusCode != 200) throw Exception('save-failed');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã lưu cài đặt')),
+      );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -205,8 +181,9 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
       _systemNameCtrl.text = 'AttendOS';
       _lateGraceCtrl.text = '15';
       _autoCheckoutEnabled = false;
-      _autoCheckoutCtrl.text = '18:00';
+      _autoCheckoutCtrl.text = '17:30';
       _defaultRadiusCtrl.text = '200';
+      _ruleRadiusM = 200;
       _otAfterCtrl.text = '60';
       _language = 'vi';
       _timeFormat = '24h';

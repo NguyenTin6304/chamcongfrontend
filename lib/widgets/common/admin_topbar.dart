@@ -45,29 +45,6 @@ class AdminTopbar extends StatelessWidget {
               ],
             ),
           ),
-          SizedBox(
-            width: 240,
-            child: TextField(
-              controller: searchController,
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: 'Tìm kiếm',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-              ),
-            ),
-          ),
           const SizedBox(width: 8),
           IconButton(
             onPressed: () {},

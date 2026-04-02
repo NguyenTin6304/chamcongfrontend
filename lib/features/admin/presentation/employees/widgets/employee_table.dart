@@ -56,7 +56,6 @@ extension _EmployeeTableX on _AdminPageState {
                     DataColumn(label: Text('NHÓM')),
                     DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
                     DataColumn(label: Text('TRẠNG THÁI')),
-                    DataColumn(label: Text('THAM GIA')),
                     DataColumn(label: Text('THAO TÁC')),
                   ],
                   rows: rows
@@ -147,15 +146,6 @@ extension _EmployeeTableX on _AdminPageState {
                               ),
                             ),
                             DataCell(
-                              Text(
-                                employee.joinedAt == null
-                                    ? '--'
-                                    : DateFormat(
-                                        'dd/MM/yyyy',
-                                      ).format(employee.joinedAt!),
-                              ),
-                            ),
-                            DataCell(
                               Row(
                                 children: [
                                   IconButton(
@@ -237,7 +227,6 @@ extension _EmployeeTableX on _AdminPageState {
           DataColumn(label: Text('NHÓM')),
           DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
           DataColumn(label: Text('TRẠNG THÁI')),
-          DataColumn(label: Text('THAM GIA')),
           DataColumn(label: Text('THAO TÁC')),
         ],
         rows: List.generate(
@@ -251,7 +240,6 @@ extension _EmployeeTableX on _AdminPageState {
               DataCell(_SkeletonCell(width: 80)),
               DataCell(_SkeletonCell(width: 90)),
               DataCell(_SkeletonCell(width: 80)),
-              DataCell(_SkeletonCell(width: 70)),
               DataCell(_SkeletonCell(width: 70)),
             ],
           ),

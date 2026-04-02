@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
@@ -15,8 +15,10 @@ import '../../../widgets/common/kpi_card.dart';
 import '../../../widgets/common/status_badge.dart';
 import '../data/admin_api.dart';
 import 'admin_shell.dart';
-import 'group_admin_page.dart';
 import 'widgets/admin_location_picker.dart';
+import '../../../screens/admin/exceptions/exceptions_screen.dart'
+    as admin_exceptions;
+import '../../../screens/admin/settings/settings_screen.dart';
 part 'attendance_logs/widgets/attendance_detail_modal.dart';
 part 'attendance_logs/widgets/attendance_filter_bar.dart';
 part 'attendance_logs/widgets/attendance_stat_cards.dart';
@@ -101,6 +103,7 @@ class _AdminPageState extends State<AdminPage> {
   bool _loadingDashboardSummary = false;
   bool _loadingDashboardLogs = false;
   bool _loadingDashboardWeekly = false;
+  bool _weeklyError = false;
   bool _loadingDashboardGeofences = false;
   bool _loadingDashboardExceptions = false;
   bool _loadingDashboardGroups = false;
@@ -148,7 +151,6 @@ class _AdminPageState extends State<AdminPage> {
   String _reportsStatus = 'all';
   String _reportsType = 'overview';
   String _reportsTrendPeriod = 'day';
-  bool _reportsLoadedOnce = false;
   DateTime _logsFromDate = DateTime.now();
   DateTime _logsToDate = DateTime.now();
   String _logsSearch = '';
@@ -174,6 +176,8 @@ class _AdminPageState extends State<AdminPage> {
   final Set<int> _updatingExceptionIds = {};
   _AdminShellNav _activeNav = _AdminShellNav.dashboard;
   _AdminShellNav? _hoveredNav;
+  final Set<_AdminShellNav> _tabsLoaded = {};
+  int _logsServerTotal = 0;
   final Set<int> _dashboardUpdatingExceptionIds = {};
 
   String? _error;
@@ -294,19 +298,18 @@ class _AdminPageState extends State<AdminPage> {
       _token = token;
     });
 
-    await _refreshAll();
+    // Load shared data needed across all tabs, then initial tab.
+    await Future.wait([_loadUsers(), _loadDashboardGroups()]);
+    if (!mounted) return;
+    await _loadTabIfNeeded(_activeNav);
   }
 
   Future<void> _refreshAll() async {
-    await _loadActiveRule();
-    await _loadUsers();
-    await _loadEmployees();
-    await _loadExceptions();
-    await _loadDashboardGroups();
-    await _loadDashboardData();
-    if (_activeNav == _AdminShellNav.reports) {
-      await _refreshReportsOnly();
-    }
+    // Clear per-tab cache so the current tab reloads fresh.
+    _tabsLoaded.clear();
+    await Future.wait([_loadUsers(), _loadDashboardGroups()]);
+    if (!mounted) return;
+    await _loadTabIfNeeded(_activeNav);
   }
 
   Future<void> _loadActiveRule() async {
@@ -1311,27 +1314,6 @@ class _AdminPageState extends State<AdminPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> _openGroupAdmin() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      setState(() {
-        _error = 'Thiếu token đăng nhập. Hãy đăng nhập lại.';
-      });
-      return;
-    }
-
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => GroupAdminPage(token: token)));
-
-    if (!mounted) {
-      return;
-    }
-
-    await _loadEmployees();
-    await _loadUsers();
-  }
-
   Widget _buildBanner({required String text, required bool isError}) {
     final color = isError ? Colors.red : Colors.blue;
     final icon = isError ? Icons.error_outline : Icons.info_outline;
@@ -1393,21 +1375,26 @@ class _AdminPageState extends State<AdminPage> {
       const DropdownMenuItem<int?>(value: null, child: Text('Không gán user')),
     ];
 
+    // Only show users not already linked to a different employee
     for (final u in _users) {
-      items.add(
-        DropdownMenuItem<int?>(
-          value: u.id,
-          child: Text('${u.email} (id=${u.id}, ${u.role})'),
-        ),
-      );
+      final linkedToOther =
+          _employees.any((e) => e.userId == u.id && e.id != employee.id);
+      if (!linkedToOther) {
+        items.add(
+          DropdownMenuItem<int?>(
+            value: u.id,
+            child: Text('${u.email} (id=${u.id}, ${u.role})'),
+          ),
+        );
+      }
     }
 
     final selected = _selectedUserByEmployee[employee.id];
-    if (selected != null && !_users.any((u) => u.id == selected)) {
+    if (selected != null && !items.any((x) => x.value == selected)) {
       items.add(
         DropdownMenuItem<int?>(
           value: selected,
-          child: Text('user_id=$selected (khong co trong list)'),
+          child: Text('user_id=$selected (không có trong list)'),
         ),
       );
     }
@@ -1712,26 +1699,40 @@ class _AdminPageState extends State<AdminPage> {
     ];
   }
 
-  Future<void> _onShellNavTap(_AdminShellNav nav) async {
+  void _onShellNavTap(_AdminShellNav nav) {
+    if (_activeNav == nav) return;
     setState(() {
       _activeNav = nav;
     });
-    if (nav == _AdminShellNav.employees) {
-      await _refreshEmployeesOnly();
-      return;
-    }
-    if (nav == _AdminShellNav.groups) {
-      await _refreshGroupsOnly();
-      return;
-    }
-    if (nav == _AdminShellNav.geofences) {
-      await _refreshGeofencesOnly();
-      return;
-    }
-    if (nav == _AdminShellNav.reports) {
-      if (!_reportsLoadedOnce) {
+    _loadTabIfNeeded(nav);
+  }
+
+  Future<void> _loadTabIfNeeded(_AdminShellNav nav) async {
+    if (_tabsLoaded.contains(nav)) return;
+    _tabsLoaded.add(nav);
+    await _loadTabData(nav);
+  }
+
+  Future<void> _loadTabData(_AdminShellNav nav) async {
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+    switch (nav) {
+      case _AdminShellNav.dashboard:
+        await _loadDashboardData();
+      case _AdminShellNav.logs:
+        await _loadDashboardLogs(token);
+      case _AdminShellNav.employees:
+        await _loadEmployees();
+      case _AdminShellNav.groups:
+        break; // shared data already loaded via _loadDashboardGroups
+      case _AdminShellNav.geofences:
+        await _loadDashboardGeofences(token);
+      case _AdminShellNav.reports:
         await _refreshReportsOnly();
-      }
+      case _AdminShellNav.exceptions:
+        await _loadExceptions();
+      case _AdminShellNav.settings:
+        await _loadActiveRule();
     }
   }
 
@@ -1757,9 +1758,7 @@ class _AdminPageState extends State<AdminPage> {
       displayName: name,
       avatarText: avatarText,
       roleLabel: 'Quản trị viên',
-      onTap: (nav) {
-        _onShellNavTap(nav);
-      },
+      onTap: _onShellNavTap,
       onHoverChanged: (nav) {
         setState(() {
           _hoveredNav = nav;
@@ -1873,25 +1872,22 @@ class _AdminPageState extends State<AdminPage> {
       _loadingDashboardLogs = true;
     });
     try {
-      final rows = await _adminApi.listDashboardAttendanceLogs(
+      final result = await _adminApi.listDashboardAttendanceLogs(
         token: token,
         fromDate: _logsFromDate,
         toDate: _logsToDate,
         groupId: _dashboardGroupId,
         status: _dashboardStatus,
         search: _logsSearch,
+        page: _logsPage,
+        limit: _logsPageSize,
       );
       if (!mounted) {
         return;
       }
       setState(() {
-        _dashboardLogs = rows;
-        final pages = rows.isEmpty
-            ? 1
-            : ((rows.length - 1) ~/ _logsPageSize) + 1;
-        if (_logsPage > pages) {
-          _logsPage = pages;
-        }
+        _dashboardLogs = result.items;
+        _logsServerTotal = result.total;
       });
     } catch (_) {
       if (!mounted) {
@@ -1899,6 +1895,7 @@ class _AdminPageState extends State<AdminPage> {
       }
       setState(() {
         _dashboardLogs = const [];
+        _logsServerTotal = 0;
       });
       _showSnack('Không thể tải nhật ký chấm công.');
     } finally {
@@ -1913,6 +1910,7 @@ class _AdminPageState extends State<AdminPage> {
   Future<void> _loadDashboardWeekly(String token) async {
     setState(() {
       _loadingDashboardWeekly = true;
+      _weeklyError = false;
     });
     try {
       final rows = await _adminApi.getDashboardWeeklyTrends(
@@ -1933,8 +1931,8 @@ class _AdminPageState extends State<AdminPage> {
       }
       setState(() {
         _dashboardWeekly = const [];
+        _weeklyError = true;
       });
-      _showSnack('Không thể tải xu hướng chấm công tuần.');
     } finally {
       if (mounted) {
         setState(() {
@@ -2036,9 +2034,6 @@ class _AdminPageState extends State<AdminPage> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _reportsLoadedOnce = true;
-    });
   }
 
   Future<void> _loadReportsSummary(String token) async {
@@ -2115,7 +2110,7 @@ class _AdminPageState extends State<AdminPage> {
       _loadingReportsLogs = true;
     });
     try {
-      final rows = await _adminApi.listDashboardAttendanceLogs(
+      final result = await _adminApi.listDashboardAttendanceLogs(
         token: token,
         fromDate: _reportsFromDate,
         toDate: _reportsToDate,
@@ -2127,7 +2122,7 @@ class _AdminPageState extends State<AdminPage> {
         return;
       }
       setState(() {
-        _reportsLogs = rows;
+        _reportsLogs = result.items;
       });
     } catch (_) {
       if (!mounted) {
@@ -2151,7 +2146,7 @@ class _AdminPageState extends State<AdminPage> {
       _loadingReportsLateTop = true;
     });
     try {
-      final rows = await _adminApi.listDashboardAttendanceLogs(
+      final result = await _adminApi.listDashboardAttendanceLogs(
         token: token,
         fromDate: _reportsFromDate,
         toDate: _reportsToDate,
@@ -2164,7 +2159,7 @@ class _AdminPageState extends State<AdminPage> {
         return;
       }
       setState(() {
-        _reportsLateTop = rows;
+        _reportsLateTop = result.items;
       });
     } catch (_) {
       if (!mounted) {
@@ -2434,7 +2429,7 @@ class _AdminPageState extends State<AdminPage> {
                           value: null,
                           child: Text('Không liên kết'),
                         ),
-                        ..._users.map(
+                        ..._unassignedUsers().map(
                           (user) => DropdownMenuItem<int?>(
                             value: user.id,
                             child: Text('${user.email} (${user.role})'),
@@ -2647,7 +2642,7 @@ class _AdminPageState extends State<AdminPage> {
     return items;
   }
 
-  int get _logsTotalCount => _dashboardLogs.length;
+  int get _logsTotalCount => _logsServerTotal;
 
   int get _logsTotalPages {
     if (_logsTotalCount == 0) {
@@ -2656,17 +2651,8 @@ class _AdminPageState extends State<AdminPage> {
     return ((_logsTotalCount - 1) ~/ _logsPageSize) + 1;
   }
 
-  List<DashboardAttendanceLogItem> get _logsCurrentPageItems {
-    if (_dashboardLogs.isEmpty) {
-      return const [];
-    }
-    final start = (_logsPage - 1) * _logsPageSize;
-    if (start >= _dashboardLogs.length) {
-      return const [];
-    }
-    final end = (start + _logsPageSize).clamp(0, _dashboardLogs.length);
-    return _dashboardLogs.sublist(start, end);
-  }
+  // With server-side pagination _dashboardLogs already contains the current page.
+  List<DashboardAttendanceLogItem> get _logsCurrentPageItems => _dashboardLogs;
 
   bool _isEmployeeActive(EmployeeLite employee) {
     if (employee.active != null) {
@@ -2692,6 +2678,17 @@ class _AdminPageState extends State<AdminPage> {
 
   List<EmployeeLite> get _employeesView {
     var list = _employees.toList(growable: false);
+    final q = _employeesSearchController.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list
+          .where(
+            (e) =>
+                e.code.toLowerCase().contains(q) ||
+                e.fullName.toLowerCase().contains(q) ||
+                (e.email?.toLowerCase().contains(q) ?? false),
+          )
+          .toList(growable: false);
+    }
     if (_employeesGroupId != null) {
       list = list
           .where((e) => e.groupId == _employeesGroupId)
@@ -2803,19 +2800,6 @@ class _AdminPageState extends State<AdminPage> {
         });
       }
     }
-  }
-
-  Future<void> _refreshGeofencesOnly() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-    await Future.wait([
-      _loadDashboardGeofences(token),
-      _loadDashboardGroups(),
-      _loadEmployees(),
-    ]);
-    _syncSelectedGeofence();
   }
 
   void _syncSelectedGeofence() {
@@ -3285,10 +3269,6 @@ class _AdminPageState extends State<AdminPage> {
     return StatusBadgeType.onTime;
   }
 
-  Future<void> _showAttendanceLogDetail(DashboardAttendanceLogItem item) async {
-    await _showAttendanceLogDetailModal(item);
-  }
-
   Widget _buildAttendanceLogsPage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3338,6 +3318,7 @@ class _AdminPageState extends State<AdminPage> {
                 value: _loadingEmployees ? '--' : _formatThousands(total),
                 icon: Icons.groups_outlined,
                 iconColor: AppColors.primary,
+                valueColor: AppColors.primary,
                 loading: _loadingEmployees,
               ),
             ),
@@ -3390,6 +3371,11 @@ class _AdminPageState extends State<AdminPage> {
             width: 320,
             child: TextField(
               controller: _employeesSearchController,
+              onChanged: (_) {
+                setState(() {
+                  _employeesPage = 1;
+                });
+              },
               onSubmitted: (_) {
                 setState(() {
                   _employeesPage = 1;
@@ -3423,7 +3409,7 @@ class _AdminPageState extends State<AdminPage> {
             ),
           ),
           SizedBox(
-            width: 180,
+            width: 250,
             child: DropdownButtonFormField<int?>(
               initialValue: _employeesGroupId,
               decoration: _decoration('Nhóm', Icons.groups_2_outlined),
@@ -3449,7 +3435,7 @@ class _AdminPageState extends State<AdminPage> {
             ),
           ),
           SizedBox(
-            width: 180,
+            width: 220,
             child: DropdownButtonFormField<String>(
               initialValue: _employeesStatus,
               decoration: _decoration('Trạng thái', Icons.rule_outlined),
@@ -3874,93 +3860,7 @@ class _AdminPageState extends State<AdminPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                SizedBox(
-                  width: 190,
-                  child: DropdownButtonFormField<int?>(
-                    key: ValueKey<int?>(_dashboardGroupId),
-                    initialValue: _dashboardGroupId,
-                    decoration: _decoration(
-                      'Tất cả nhóm',
-                      Icons.group_outlined,
-                    ),
-                    items: _dashboardGroupItems(),
-                    onChanged: (value) {
-                      setState(() {
-                        _dashboardGroupId = value;
-                      });
-                      _onDashboardFilterChanged();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 150,
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey<String>(_dashboardStatus),
-                    initialValue: _dashboardStatus,
-                    decoration: _decoration('Trạng thái', Icons.rule_outlined),
-                    items: const [
-                      DropdownMenuItem<String>(
-                        value: 'all',
-                        child: Text('Tất cả'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'on_time',
-                        child: Text('Đúng giờ'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'late',
-                        child: Text('Đi muộn'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'out_of_range',
-                        child: Text('Ngoài vùng'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        _dashboardStatus = value;
-                      });
-                      _onDashboardFilterChanged();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  DateFormat('dd/MM/yyyy').format(_dashboardDate),
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const Spacer(),
-                ElevatedButton(
-                  onPressed: _exportingDashboardCsv
-                      ? null
-                      : _exportDashboardCsv,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A56DB),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: _exportingDashboardCsv
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Xuất CSV'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 2),
             if (_loadingDashboardLogs) _buildDashboardLogSkeleton(),
             if (!_loadingDashboardLogs && _dashboardLogs.isEmpty)
               const Padding(
@@ -4118,6 +4018,7 @@ class _AdminPageState extends State<AdminPage> {
             _MockWeeklyChart(
               data: _dashboardWeekly,
               loading: _loadingDashboardWeekly,
+              error: _weeklyError,
             ),
           ],
         ),
@@ -4146,7 +4047,8 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                 ),
                 TextButton(
-                  onPressed: _openGroupAdmin,
+                  onPressed: () =>
+                      _onShellNavTap(_AdminShellNav.geofences),
                   child: const Text('Xem bản đồ →'),
                 ),
               ],
@@ -4223,7 +4125,7 @@ class _AdminPageState extends State<AdminPage> {
               }),
             const SizedBox(height: 4),
             _DashedBorderButton(
-              onTap: _openGroupAdmin,
+              onTap: () => _onShellNavTap(_AdminShellNav.geofences),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -4381,11 +4283,12 @@ class _AdminPageState extends State<AdminPage> {
       case _AdminShellNav.reports:
         return _buildReportsPage();
       case _AdminShellNav.exceptions:
-        return _buildExceptionsCard();
+        return const admin_exceptions.ExceptionsScreen();
       case _AdminShellNav.settings:
-        return const SizedBox.shrink();
-      default:
-        return const SizedBox.shrink();
+        return SizedBox(
+          height: MediaQuery.of(context).size.height - 108,
+          child: const SettingsScreen(),
+        );
     }
   }
 
@@ -4477,48 +4380,69 @@ class _LegendDot extends StatelessWidget {
 }
 
 class _MockWeeklyChart extends StatelessWidget {
-  const _MockWeeklyChart({required this.data, required this.loading});
+  const _MockWeeklyChart({
+    required this.data,
+    required this.loading,
+    this.error = false,
+  });
 
   final List<DashboardWeeklyTrendItem> data;
   final bool loading;
+  final bool error;
 
   @override
   Widget build(BuildContext context) {
-    const maxY = 80.0;
-    final chartData = loading
-        ? const [
-            DashboardWeeklyTrendItem(
-              day: 'Thứ 2',
-              onTime: 24,
-              late: 24,
-              outOfRange: 24,
+    if (!loading && error) {
+      return const SizedBox(
+        height: 240,
+        child: Center(
+          child: Text(
+            'Không thể tải dữ liệu xu hướng',
+            style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+          ),
+        ),
+      );
+    }
+
+    if (!loading && data.isEmpty) {
+      return const SizedBox(
+        height: 240,
+        child: Center(
+          child: Text(
+            'Chưa có dữ liệu xu hướng',
+            style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+          ),
+        ),
+      );
+    }
+
+    const loadingPlaceholder = [
+      DashboardWeeklyTrendItem(day: 'Thứ 2', onTime: 24, late: 24, outOfRange: 24),
+      DashboardWeeklyTrendItem(day: 'Thứ 3', onTime: 24, late: 24, outOfRange: 24),
+      DashboardWeeklyTrendItem(day: 'Thứ 4', onTime: 24, late: 24, outOfRange: 24),
+      DashboardWeeklyTrendItem(day: 'Thứ 5', onTime: 24, late: 24, outOfRange: 24),
+      DashboardWeeklyTrendItem(day: 'Thứ 6', onTime: 24, late: 24, outOfRange: 24),
+    ];
+    final chartData = loading ? loadingPlaceholder : data;
+
+    final maxVal = loading
+        ? 24
+        : chartData.fold<int>(
+            1,
+            (m, item) => math.max(
+              m,
+              math.max(item.onTime, math.max(item.late, item.outOfRange)),
             ),
-            DashboardWeeklyTrendItem(
-              day: 'Thứ 3',
-              onTime: 24,
-              late: 24,
-              outOfRange: 24,
-            ),
-            DashboardWeeklyTrendItem(
-              day: 'Thứ 4',
-              onTime: 24,
-              late: 24,
-              outOfRange: 24,
-            ),
-            DashboardWeeklyTrendItem(
-              day: 'Thứ 5',
-              onTime: 24,
-              late: 24,
-              outOfRange: 24,
-            ),
-            DashboardWeeklyTrendItem(
-              day: 'Thứ 6',
-              onTime: 24,
-              late: 24,
-              outOfRange: 24,
-            ),
-          ]
-        : data;
+          );
+    final maxY = (maxVal * 1.25).ceilToDouble();
+    final step = (maxY / 4).ceilToDouble();
+    final yLabels = [
+      (maxY).toInt(),
+      (step * 3).toInt(),
+      (step * 2).toInt(),
+      step.toInt(),
+      0,
+    ];
 
     return SizedBox(
       height: 240,
@@ -4529,28 +4453,17 @@ class _MockWeeklyChart extends StatelessWidget {
             width: 26,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Text(
-                  '80',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                ),
-                Text(
-                  '60',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                ),
-                Text(
-                  '40',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                ),
-                Text(
-                  '20',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                ),
-                Text(
-                  '0',
-                  style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                ),
-              ],
+              children: yLabels
+                  .map(
+                    (v) => Text(
+                      '$v',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
           const SizedBox(width: 8),

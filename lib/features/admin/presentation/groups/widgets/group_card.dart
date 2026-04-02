@@ -159,7 +159,7 @@ extension _GroupCardX on _AdminPageState {
                       _employeesPage = 1;
                     });
                   },
-                  child: const Text('Xem tất cả →'),
+                  child: const Text('QUẢN LÝ'),
                 ),
               ],
             ),
@@ -180,10 +180,6 @@ extension _GroupCardX on _AdminPageState {
                   ),
                 ),
                 const Spacer(),
-                TextButton(
-                  onPressed: _openGroupAdmin,
-                  child: const Text('Quản lý'),
-                ),
                 IconButton(
                   onPressed: () => _showGroupEditorPanel(group: group),
                   icon: const Icon(Icons.edit_outlined, size: 18),

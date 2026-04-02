@@ -3,14 +3,18 @@ part of '../../admin_page.dart';
 extension _GeofenceListX on _AdminPageState {
   Widget _buildGeofenceSidePanelExtracted() {
     final selected = _selectedGeofence;
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        children: [
+    // SizedBox height matches the map card total height (search bar ~52px +
+    // gap 12 + map 560 + vertical padding 32) = 656px.
+    return SizedBox(
+      height: 656,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bgCard,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border, width: 0.5),
+        ),
+        child: Column(
+          children: [
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -22,7 +26,7 @@ extension _GeofenceListX on _AdminPageState {
                   ),
                 ),
                 ElevatedButton.icon(
-                  onPressed: _openGroupAdmin,
+                  onPressed: () => _onShellNavTap(_AdminShellNav.geofences),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -170,6 +174,7 @@ extension _GeofenceListX on _AdminPageState {
               ),
             ),
         ],
+      ),
       ),
     );
   }

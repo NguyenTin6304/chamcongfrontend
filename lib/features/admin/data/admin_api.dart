@@ -1032,29 +1032,11 @@ class AdminApi {
     if (fullName != null) {
       body['full_name'] = fullName;
     }
-    if (groupId != null) {
-      body['group_id'] = groupId;
-    }
-    if (userId != null) {
-      body['user_id'] = userId;
-    }
-    if (email != null) {
-      body['email'] = email;
-    }
-    if (phone != null) {
-      body['phone'] = phone;
-    }
-    if (departmentName != null) {
-      body['department_name'] = departmentName;
-    }
-    if (role != null) {
-      body['role'] = role;
-    }
-    if (active != null) {
-      body['active'] = active;
-    }
+    // Always include group_id and user_id so null means "unassign"
+    body['group_id'] = groupId;
+    body['user_id'] = userId;
 
-    final response = await http.patch(
+    final response = await http.put(
       uri,
       headers: _authHeaders(token),
       body: jsonEncode(body),
@@ -1115,7 +1097,7 @@ class AdminApi {
     );
   }
 
-  Future<List<DashboardAttendanceLogItem>> listDashboardAttendanceLogs({
+  Future<({List<DashboardAttendanceLogItem> items, int total})> listDashboardAttendanceLogs({
     required String token,
     DateTime? date,
     DateTime? fromDate,
@@ -1160,10 +1142,13 @@ class AdminApi {
     ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders(token));
     if (response.statusCode == 200) {
-      final rows = _parseJsonListAny(
+      final envelope = _parseJsonMap(
         utf8.decode(response.bodyBytes, allowMalformed: true),
       );
-      return rows
+      final dataRaw = envelope['data'];
+      final rows = dataRaw is List ? dataRaw : <dynamic>[];
+      final total = _toInt(envelope['total']) ?? 0;
+      final items = rows
           .whereType<Map<String, dynamic>>()
           .map((e) {
             return DashboardAttendanceLogItem(
@@ -1207,10 +1192,11 @@ class AdminApi {
                   _toDouble(e['longitude']) ??
                   _toDouble(e['lng']) ??
                   _toDouble(e['checkin_longitude']),
-              entryCount: _toInt(e['count']) ?? _toInt(e['total']),
+              entryCount: _toInt(e['count']) ?? _toInt(e['entry_count']),
             );
           })
           .toList(growable: false);
+      return (items: items, total: total);
     }
     final data = _parseJsonMap(
       utf8.decode(response.bodyBytes, allowMalformed: true),

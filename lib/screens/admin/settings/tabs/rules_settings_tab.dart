@@ -22,6 +22,15 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
   bool _savingAll = false;
   List<_RuleItem> _rules = _defaultRules();
 
+  // Full active-rule fields — required as base when calling PUT /rules/active
+  double _ruleLatitude = 0.0;
+  double _ruleLongitude = 0.0;
+  int _ruleRadiusM = 200;
+  String? _ruleStartTime;
+  String? _ruleEndTime;
+  int? _ruleCheckoutGrace;
+  int? _ruleCrossDayCutoff;
+
   @override
   void initState() {
     super.initState();
@@ -37,180 +46,126 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
     await _loadRules();
   }
 
+  int? _toInt(dynamic v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString());
+  }
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
+  }
+
   Future<void> _loadRules() async {
     final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
+    if (token == null || token.isEmpty) return;
     setState(() => _loading = true);
     try {
       final response = await http.get(
-        Uri.parse('${AppConfig.apiBaseUrl}/rules'),
+        Uri.parse('${AppConfig.apiBaseUrl}/rules/active'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
-      if (response.statusCode != 200) {
-        throw Exception('load-rules-failed');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data is Map<String, dynamic> && mounted) {
+          setState(() {
+            _ruleLatitude = _toDouble(data['latitude']) ?? _ruleLatitude;
+            _ruleLongitude = _toDouble(data['longitude']) ?? _ruleLongitude;
+            _ruleRadiusM = _toInt(data['radius_m']) ?? _ruleRadiusM;
+            _ruleStartTime = data['start_time']?.toString();
+            _ruleEndTime = data['end_time']?.toString();
+            _ruleCheckoutGrace = _toInt(data['checkout_grace_minutes']);
+            _ruleCrossDayCutoff = _toInt(data['cross_day_cutoff_minutes']);
+            _rules = _applyActiveRule(data);
+          });
+        }
       }
-      final payload = jsonDecode(utf8.decode(response.bodyBytes));
-      final rows = _extractList(payload);
-      final merged = _mergeRules(rows);
-      if (!mounted) {
-        return;
-      }
-      setState(() => _rules = merged);
+      // 404 (no active rule yet) → keep UI defaults silently
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  List<Map<String, dynamic>> _extractList(dynamic payload) {
-    if (payload is List) {
-      return payload.whereType<Map<String, dynamic>>().toList(growable: false);
-    }
-    if (payload is Map<String, dynamic>) {
-      final data = payload['data'];
-      if (data is List) {
-        return data.whereType<Map<String, dynamic>>().toList(growable: false);
+  List<_RuleItem> _applyActiveRule(Map<String, dynamic> data) {
+    return _defaultRules().map((rule) {
+      switch (rule.code) {
+        case 'late':
+          final grace = _toInt(data['grace_minutes']);
+          if (grace == null) return rule;
+          return rule.copyWith(fields: {...rule.fields, 'grace_minutes': grace});
+        case 'auto_checkout':
+          final endTime = data['end_time']?.toString();
+          final checkoutGrace = _toInt(data['checkout_grace_minutes']) ?? 0;
+          final fields = Map<String, dynamic>.from(rule.fields);
+          if (endTime != null) fields['auto_checkout_time'] = endTime;
+          fields['checkout_grace_minutes'] = checkoutGrace;
+          return rule.copyWith(isActive: checkoutGrace > 0, fields: fields);
+        case 'gps':
+          final radius = _toInt(data['radius_m']);
+          if (radius == null) return rule;
+          return rule.copyWith(fields: {...rule.fields, 'min_accuracy_meters': radius});
+        default:
+          return rule;
       }
-      final items = payload['items'];
-      if (items is List) {
-        return items.whereType<Map<String, dynamic>>().toList(growable: false);
-      }
-    }
-    return const [];
-  }
-
-  int? _toInt(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    return int.tryParse(value.toString());
-  }
-
-  double? _toDouble(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-    if (value is num) {
-      return value.toDouble();
-    }
-    return double.tryParse(value.toString());
-  }
-
-  bool _toBool(dynamic value, {bool fallback = false}) {
-    if (value == null) {
-      return fallback;
-    }
-    if (value is bool) {
-      return value;
-    }
-    if (value is num) {
-      return value != 0;
-    }
-    final lower = value.toString().toLowerCase();
-    if (lower == 'true' || lower == '1') {
-      return true;
-    }
-    if (lower == 'false' || lower == '0') {
-      return false;
-    }
-    return fallback;
-  }
-
-  List<_RuleItem> _mergeRules(List<Map<String, dynamic>> rows) {
-    final defaults = _defaultRules();
-    final lookup = <String, Map<String, dynamic>>{};
-    for (final row in rows) {
-      final key = (row['code'] ?? row['name'] ?? '').toString().toLowerCase();
-      lookup[key] = row;
-    }
-
-    return defaults.map((rule) {
-      Map<String, dynamic>? source;
-      for (final key in lookup.keys) {
-        final matched = key.contains(rule.code) || rule.code.contains(key);
-        if (matched) {
-          source = lookup[key];
-          break;
-        }
-      }
-      if (source == null) {
-        return rule;
-      }
-      final fields = Map<String, dynamic>.from(rule.fields);
-      fields.addAll(Map<String, dynamic>.from(source['fields'] ?? const {}));
-
-      for (final entry in source.entries) {
-        if (fields.containsKey(entry.key)) {
-          fields[entry.key] = entry.value;
-        }
-      }
-
-      return rule.copyWith(
-        id: _toInt(source['id']) ?? rule.id,
-        isActive: _toBool(source['is_active'] ?? source['active'], fallback: rule.isActive),
-        fields: fields,
-      );
     }).toList(growable: false);
   }
 
-  Future<void> _patchRule(_RuleItem item, Map<String, dynamic> payload) async {
+  Future<void> _putActiveRule(Map<String, dynamic> extra) async {
     final token = _token;
-    if (token == null || token.isEmpty || item.id == null) {
-      throw Exception('missing-rule-id');
-    }
-    final response = await http.patch(
-      Uri.parse('${AppConfig.apiBaseUrl}/rules/${item.id}'),
+    if (token == null || token.isEmpty) throw Exception('no-token');
+    final body = <String, dynamic>{
+      'latitude': _ruleLatitude,
+      'longitude': _ruleLongitude,
+      'radius_m': _ruleRadiusM,
+      if (_ruleStartTime != null) 'start_time': _ruleStartTime,
+      if (_ruleEndTime != null) 'end_time': _ruleEndTime,
+      if (_ruleCheckoutGrace != null) 'checkout_grace_minutes': _ruleCheckoutGrace,
+      if (_ruleCrossDayCutoff != null) 'cross_day_cutoff_minutes': _ruleCrossDayCutoff,
+      ...extra,
+    };
+    final response = await http.put(
+      Uri.parse('${AppConfig.apiBaseUrl}/rules/active'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode(payload),
+      body: jsonEncode(body),
     );
-    if (response.statusCode != 200) {
-      throw Exception('patch-rule-failed');
-    }
+    if (response.statusCode != 200) throw Exception('put-rule-failed');
   }
 
   Future<void> _toggleRule(int index, bool active) async {
-    final item = _rules[index];
-    final previous = item;
+    final previous = _rules[index];
     setState(() {
-      _rules[index] = item.copyWith(isActive: active, saving: true);
+      _rules[index] = previous.copyWith(isActive: active, saving: true);
     });
     try {
-      await _patchRule(item, {'isActive': active, 'is_active': active});
-    } catch (_) {
-      if (!mounted) {
-        return;
+      // Only 'late' rule maps to a backend field (grace_minutes = 0 means disabled)
+      if (previous.code == 'late') {
+        final grace = active ? (_toInt(previous.fields['grace_minutes']) ?? 15) : 0;
+        await _putActiveRule({'grace_minutes': grace});
       }
-      setState(() => _rules[index] = previous);
+      // Other rule cards are UI-only — no backend per-rule toggle
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _rules[index] = previous); // revert
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
       );
       return;
     }
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     setState(() {
       _rules[index] = _rules[index].copyWith(saving: false);
     });
@@ -218,43 +173,62 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
 
   Future<void> _saveRule(int index) async {
     final item = _rules[index];
-    setState(() {
-      _rules[index] = item.copyWith(saving: true);
-    });
+    setState(() => _rules[index] = item.copyWith(saving: true));
     try {
-      await _patchRule(item, item.fields);
-      if (!mounted) {
-        return;
+      final extra = <String, dynamic>{};
+      switch (item.code) {
+        case 'late':
+          final grace = _toInt(item.fields['grace_minutes']);
+          if (grace != null) extra['grace_minutes'] = grace;
+        case 'gps':
+          final radius = _toInt(item.fields['min_accuracy_meters']);
+          if (radius != null) extra['radius_m'] = radius;
+        default:
+          break;
       }
+      if (extra.isNotEmpty) await _putActiveRule(extra);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Đã lưu cài đặt')),
       );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _rules[index] = _rules[index].copyWith(saving: false);
-        });
-      }
+      if (mounted) setState(() => _rules[index] = _rules[index].copyWith(saving: false));
     }
   }
 
   Future<void> _saveAll() async {
     setState(() => _savingAll = true);
     try {
-      for (var i = 0; i < _rules.length; i++) {
-        await _saveRule(i);
+      final extra = <String, dynamic>{};
+      for (final rule in _rules) {
+        switch (rule.code) {
+          case 'late':
+            final grace = _toInt(rule.fields['grace_minutes']);
+            if (grace != null) extra['grace_minutes'] = grace;
+          case 'gps':
+            final radius = _toInt(rule.fields['min_accuracy_meters']);
+            if (radius != null) extra['radius_m'] = radius;
+          default:
+            break;
+        }
       }
+      if (extra.isNotEmpty) await _putActiveRule(extra);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã lưu cài đặt')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
+      );
     } finally {
-      if (mounted) {
-        setState(() => _savingAll = false);
-      }
+      if (mounted) setState(() => _savingAll = false);
     }
   }
 

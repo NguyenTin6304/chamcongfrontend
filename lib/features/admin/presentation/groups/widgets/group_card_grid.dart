@@ -23,6 +23,7 @@ extension _GroupCardGridX on _AdminPageState {
                     : _formatThousands(totalGroups),
                 icon: Icons.groups_2_outlined,
                 iconColor: AppColors.primary,
+                valueColor: AppColors.primary,
                 loading: _loadingDashboardGroups,
               ),
             ),

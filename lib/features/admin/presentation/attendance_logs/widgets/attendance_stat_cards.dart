@@ -34,6 +34,7 @@ extension _AttendanceStatCardsX on _AdminPageState {
             value: _loadingDashboardLogs ? '--' : _formatThousands(total),
             icon: Icons.fact_check_outlined,
             iconColor: AppColors.primary,
+            valueColor: AppColors.primary,
             loading: _loadingDashboardLogs,
           ),
         ),

@@ -40,6 +40,7 @@ extension _ReportsTrendX on _AdminPageState {
                     : _formatThousands(summary?.checkedIn ?? totalLogs),
                 icon: Icons.fact_check_outlined,
                 iconColor: AppColors.primary,
+                valueColor: AppColors.primary,
                 loading: _loadingReportsSummary,
               ),
             ),
@@ -266,7 +267,7 @@ extension _ReportsTrendX on _AdminPageState {
             ),
           ),
           SizedBox(
-            width: 200,
+            width: 250,
             child: DropdownButtonFormField<int?>(
               key: ValueKey<int?>(_reportsGroupId),
               initialValue: _reportsGroupId,
