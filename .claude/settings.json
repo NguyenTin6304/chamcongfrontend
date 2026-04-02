@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(.venv/Scripts/python -c \"from app.main import app; print\\('OK'\\); [print\\('  ' + r.path\\) for r in app.routes if hasattr\\(r, 'path'\\) and \\('export' in r.path or 'dashboard' in r.path or 'weekly' in r.path\\)]\")"
-    ]
-  }
-}

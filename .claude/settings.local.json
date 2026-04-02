@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(.venv/Scripts/python -c \"from app.main import app; print\\('OK: all routers loaded'\\); [print\\(f'  {r.path} [{\\\\\",\\\\\".join\\(r.methods\\)}]'\\) for r in app.routes if hasattr\\(r, 'path'\\) and \\('/dashboard' in r.path or '/geofence' in r.path or '/weekly' in r.path or '/attendance-logs' in r.path or '/exceptions' in r.path\\)]\")",
-      "Bash(.venv/Scripts/python -c ':*)",
-      "Read(//e/CongtyGPIT/chamcongapp/**)"
-    ]
-  }
-}
