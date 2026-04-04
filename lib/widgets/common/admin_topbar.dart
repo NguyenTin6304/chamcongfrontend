@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 
@@ -8,6 +8,7 @@ class AdminTopbar extends StatelessWidget {
     required this.dateLabel,
     required this.searchController,
     required this.avatarText,
+    required this.onReloadTap,
     required this.onAvatarTap,
     super.key,
   });
@@ -16,6 +17,7 @@ class AdminTopbar extends StatelessWidget {
   final String dateLabel;
   final TextEditingController searchController;
   final String avatarText;
+  final VoidCallback onReloadTap;
   final VoidCallback onAvatarTap;
 
   @override
@@ -36,16 +38,28 @@ class AdminTopbar extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   dateLabel,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Tải lại',
+            onPressed: onReloadTap,
+            icon: const Icon(Icons.refresh),
+          ),
+          const SizedBox(width: 4),
           IconButton(
             onPressed: () {},
             icon: const Icon(Icons.notifications_none_outlined),

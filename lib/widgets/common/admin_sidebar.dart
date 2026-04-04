@@ -18,27 +18,32 @@ class AdminSidebarItem<T> {
   final bool withDividerBefore;
 }
 
-class AdminSidebar<T> extends StatelessWidget {
+/// Sidebar with self-contained hover state.
+/// Hover events never propagate to the parent — only [onTap] does.
+class AdminSidebar<T> extends StatefulWidget {
   const AdminSidebar({
     required this.items,
     required this.selected,
-    required this.hovered,
     required this.displayName,
     required this.avatarText,
     required this.onTap,
-    required this.onHoverChanged,
     super.key,
     this.roleLabel = '',
   });
 
   final List<AdminSidebarItem<T>> items;
   final T selected;
-  final T? hovered;
   final String displayName;
   final String avatarText;
   final String roleLabel;
   final ValueChanged<T> onTap;
-  final ValueChanged<T?> onHoverChanged;
+
+  @override
+  State<AdminSidebar<T>> createState() => _AdminSidebarState<T>();
+}
+
+class _AdminSidebarState<T> extends State<AdminSidebar<T>> {
+  T? _hovered;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +58,7 @@ class AdminSidebar<T> extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Chấm công',
+                  'Ch\u1ea5m c\u00f4ng',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -62,7 +67,7 @@ class AdminSidebar<T> extends StatelessWidget {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  'Quản trị hệ thống',
+                  'Qu\u1ea3n tr\u1ecb h\u1ec7 th\u1ed1ng',
                   style: TextStyle(fontSize: 11, color: AppColors.sidebarMuted),
                 ),
                 SizedBox(height: 32),
@@ -73,13 +78,17 @@ class AdminSidebar<T> extends StatelessWidget {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               itemBuilder: (_, index) {
-                final item = items[index];
+                final item = widget.items[index];
                 final tile = _SidebarTile<T>(
                   item: item,
-                  isActive: selected == item.value,
-                  isHover: hovered == item.value,
-                  onTap: () => onTap(item.value),
-                  onHover: (v) => onHoverChanged(v ? item.value : null),
+                  isActive: widget.selected == item.value,
+                  isHover: _hovered == item.value,
+                  onTap: () => widget.onTap(item.value),
+                  onHover: (entered) {
+                    setState(() {
+                      _hovered = entered ? item.value : null;
+                    });
+                  },
                 );
                 if (!item.withDividerBefore) return tile;
                 return Column(
@@ -90,8 +99,8 @@ class AdminSidebar<T> extends StatelessWidget {
                   ],
                 );
               },
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemCount: widget.items.length,
             ),
           ),
           Container(
@@ -107,7 +116,7 @@ class AdminSidebar<T> extends StatelessWidget {
                   radius: 16,
                   backgroundColor: AppColors.sidebarAvatarBg,
                   child: Text(
-                    avatarText,
+                    widget.avatarText,
                     style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                 ),
@@ -117,7 +126,7 @@ class AdminSidebar<T> extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        displayName,
+                        widget.displayName,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
@@ -126,7 +135,7 @@ class AdminSidebar<T> extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        roleLabel,
+                        widget.roleLabel,
                         style: const TextStyle(
                           color: AppColors.sidebarMuted,
                           fontSize: 11,
@@ -188,10 +197,15 @@ class _SidebarTile<T> extends StatelessWidget {
               children: [
                 Icon(item.icon, size: 18, color: iconColor),
                 const SizedBox(width: 10),
-                Expanded(child: Text(item.label, style: TextStyle(color: textColor))),
+                Expanded(
+                  child: Text(item.label, style: TextStyle(color: textColor)),
+                ),
                 if (item.badgeCount > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.danger,
                       borderRadius: BorderRadius.circular(999),

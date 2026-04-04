@@ -739,6 +739,49 @@ class AdminApi {
     );
   }
 
+  /// Aggregate endpoint — fetches all group geofences in a single request.
+  /// Returns a map of groupId -> list of geofences.
+  /// Groups with no geofences are absent from the map (treat as empty list).
+  Future<Map<int, List<GroupGeofenceLite>>> listGroupGeofencesSummary({
+    required String token,
+    List<int>? groupIds,
+    bool activeOnly = false,
+  }) async {
+    final params = <String, String>{};
+    if (groupIds != null && groupIds.isNotEmpty) {
+      params['group_ids'] = groupIds.join(',');
+    }
+    if (activeOnly) params['active_only'] = 'true';
+    final uri =
+        Uri.parse('${AppConfig.apiBaseUrl}/groups/geofences/summary').replace(
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final raw = _parseJsonMap(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      final result = <int, List<GroupGeofenceLite>>{};
+      raw.forEach((key, value) {
+        final groupId = int.tryParse(key.toString());
+        if (groupId == null) return;
+        final list = value is List ? value : <dynamic>[];
+        result[groupId] = list
+            .whereType<Map<String, dynamic>>()
+            .map(_groupGeofenceFromMap)
+            .toList(growable: false);
+      });
+      return result;
+    }
+    final data = _parseJsonMap(response.body);
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load geofences summary failed (${response.statusCode})',
+      ),
+    );
+  }
+
   Future<GroupGeofenceLite> createGroupGeofence({
     required String token,
     required int groupId,

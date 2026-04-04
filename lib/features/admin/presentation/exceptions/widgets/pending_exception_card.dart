@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../../core/theme/app_colors.dart';
 import 'exception_ui_helpers.dart';
 
 class ExceptionModel {
@@ -355,4 +355,3 @@ class _DetailPair extends StatelessWidget {
     );
   }
 }
-

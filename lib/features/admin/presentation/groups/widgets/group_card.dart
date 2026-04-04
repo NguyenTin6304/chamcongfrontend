@@ -10,6 +10,10 @@ extension _GroupCardX on _AdminPageState {
     final zoneName = geofences.isNotEmpty ? geofences.first.name : '--';
     final radius = geofences.isNotEmpty ? '${geofences.first.radiusM}m' : '--';
     final shift = '${group.startTime ?? '--'} - ${group.endTime ?? '--'}';
+    final avatarCount = members.length > 5 ? 5 : members.length;
+    final avatarStackWidth = avatarCount <= 0
+        ? 0.0
+        : ((avatarCount - 1) * 18.0) + 28.0;
     final color = <Color>[
       AppColors.primary,
       AppColors.success,
@@ -102,32 +106,30 @@ extension _GroupCardX on _AdminPageState {
             Row(
               children: [
                 SizedBox(
+                  width: avatarStackWidth,
                   height: 30,
                   child: Stack(
-                    children: List.generate(
-                      members.length > 5 ? 5 : members.length,
-                      (idx) {
-                        final employee = members[idx];
-                        final left = idx * 18.0;
-                        return Positioned(
-                          left: left,
-                          child: CircleAvatar(
-                            radius: 14,
-                            backgroundColor: AppColors.bgPage,
-                            child: Text(
-                              employee.fullName.trim().isEmpty
-                                  ? 'N'
-                                  : employee.fullName.trim()[0].toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textMuted,
-                              ),
+                    children: List.generate(avatarCount, (idx) {
+                      final employee = members[idx];
+                      final left = idx * 18.0;
+                      return Positioned(
+                        left: left,
+                        child: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: AppColors.bgPage,
+                          child: Text(
+                            employee.fullName.trim().isEmpty
+                                ? 'N'
+                                : employee.fullName.trim()[0].toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMuted,
                             ),
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    }),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -153,11 +155,14 @@ extension _GroupCardX on _AdminPageState {
                 TextButton(
                   onPressed: () {
                     setState(() {
-                      _activeNav = _AdminShellNav.employees;
                       _employeesGroupId = group.id;
                       _employeesStatus = 'all';
-                      _employeesPage = 1;
                     });
+                    _employeesPaginationNotifier.value = (
+                      page: 1,
+                      pageSize: _employeesPageSize,
+                    );
+                    _switchNav(_AdminShellNav.employees);
                   },
                   child: const Text('QUẢN LÝ'),
                 ),

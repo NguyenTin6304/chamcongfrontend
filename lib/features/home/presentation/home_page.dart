@@ -45,6 +45,11 @@ class _HomePageState extends State<HomePage> {
   AttendanceActionException? _lastActionError;
   List<AttendanceLogItem> _history = const [];
 
+  // ── Memoisation ────────────────────────────────────────────────────────────
+  List<_AttendanceDayGroup>? _groupedHistoryCache;
+  List<AttendanceLogItem>? _groupedHistoryCacheRef;
+  // ───────────────────────────────────────────────────────────────────────────
+
   bool get _isAnyLoading =>
       _loadingStatus || _loadingHistory || _loadingLocation || _loadingAction;
 
@@ -649,6 +654,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<_AttendanceDayGroup> _buildGroupedHistory(List<AttendanceLogItem> logs) {
+    if (_groupedHistoryCache != null &&
+        identical(_groupedHistoryCacheRef, logs)) {
+      return _groupedHistoryCache!;
+    }
+    final result = _computeGroupedHistory(logs);
+    _groupedHistoryCacheRef = logs;
+    _groupedHistoryCache = result;
+    return result;
+  }
+
+  /// Pure helper — no state reads; safe to call outside build().
+  List<_AttendanceDayGroup> _computeGroupedHistory(
+    List<AttendanceLogItem> logs,
+  ) {
     final pairs = _buildHistoryPairs(logs);
     final map = <String, List<_AttendancePair>>{};
     final dateByKey = <String, DateTime?>{};
@@ -664,7 +683,8 @@ class _HomePageState extends State<HomePage> {
     }
 
     final groups = map.entries.map((entry) {
-      final items = entry.value..sort((a, b) => _pairSortTime(b).compareTo(_pairSortTime(a)));
+      final items = entry.value
+        ..sort((a, b) => _pairSortTime(b).compareTo(_pairSortTime(a)));
       return _AttendanceDayGroup(
         dayKey: entry.key,
         dayDate: dateByKey[entry.key],
@@ -675,15 +695,9 @@ class _HomePageState extends State<HomePage> {
     groups.sort((a, b) {
       final ad = a.dayDate;
       final bd = b.dayDate;
-      if (ad == null && bd == null) {
-        return 0;
-      }
-      if (ad == null) {
-        return 1;
-      }
-      if (bd == null) {
-        return -1;
-      }
+      if (ad == null && bd == null) return 0;
+      if (ad == null) return 1;
+      if (bd == null) return -1;
       return bd.compareTo(ad);
     });
 

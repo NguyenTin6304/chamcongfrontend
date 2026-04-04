@@ -2,8 +2,6 @@ part of '../../admin_page.dart';
 
 extension _EmployeeTableX on _AdminPageState {
   Widget _buildEmployeeTableCardExtracted() {
-    final rows = _employeesCurrentPageItems;
-    final startIndex = (_employeesPage - 1) * _employeesPageSize;
 
     return Card(
       elevation: 0,
@@ -38,7 +36,17 @@ extension _EmployeeTableX on _AdminPageState {
                 ),
               ),
             if (!_loadingEmployees && _employeesView.isNotEmpty)
-              SingleChildScrollView(
+              ValueListenableBuilder<({int page, int pageSize})>(
+                valueListenable: _employeesPaginationNotifier,
+                builder: (context, pagination, _) {
+                  final allRows = _employeesView;
+                  final start = (pagination.page - 1) * pagination.pageSize;
+                  final end = (start + pagination.pageSize).clamp(0, allRows.length);
+                  final rows = start < allRows.length
+                      ? allRows.sublist(start, end)
+                      : const <EmployeeLite>[];
+                  final startIndex = start;
+                  return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
@@ -50,13 +58,13 @@ extension _EmployeeTableX on _AdminPageState {
                   ),
                   columns: const [
                     DataColumn(label: Text('STT')),
-                    DataColumn(label: Text('NHÂN VIÊN')),
-                    DataColumn(label: Text('MÃ NV')),
-                    DataColumn(label: Text('PHÒNG BAN')),
-                    DataColumn(label: Text('NHÓM')),
-                    DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
-                    DataColumn(label: Text('TRẠNG THÁI')),
-                    DataColumn(label: Text('THAO TÁC')),
+                    DataColumn(label: Text('NH\u00c2N VI\u00caN')),
+                    DataColumn(label: Text('M\u00c3 NV')),
+                    DataColumn(label: Text('PH\u00d2NG BAN')),
+                    DataColumn(label: Text('NH\u00d3M')),
+                    DataColumn(label: Text('S\u1ed0 \u0110I\u1ec6N THO\u1ea0I')),
+                    DataColumn(label: Text('TR\u1ea0NG TH\u00c1I')),
+                    DataColumn(label: Text('THAO T\u00c1C')),
                   ],
                   rows: rows
                       .asMap()
@@ -199,6 +207,8 @@ extension _EmployeeTableX on _AdminPageState {
                       })
                       .toList(growable: false),
                 ),
+              );
+                },
               ),
             const SizedBox(height: 12),
             _buildEmployeesPagination(),
@@ -249,100 +259,84 @@ extension _EmployeeTableX on _AdminPageState {
   }
 
   Widget _buildEmployeesPaginationExtracted() {
-    final total = _employeesTotalCount;
-    final totalPages = _employeesTotalPages;
-    final start = total == 0
-        ? 0
-        : ((_employeesPage - 1) * _employeesPageSize) + 1;
-    final end = total == 0
-        ? 0
-        : (_employeesPage * _employeesPageSize).clamp(0, total);
-    final pages = <int>{
-      1,
-      totalPages,
-      _employeesPage - 1,
-      _employeesPage,
-      _employeesPage + 1,
-    }.where((p) => p >= 1 && p <= totalPages).toList()..sort();
+    return ValueListenableBuilder<({int page, int pageSize})>(
+      valueListenable: _employeesPaginationNotifier,
+      builder: (context, pagination, _) {
+        final page = pagination.page;
+        final pageSize = pagination.pageSize;
+        final total = _employeesView.length;
+        final totalPages = total == 0 ? 1 : ((total - 1) ~/ pageSize) + 1;
+        final start = total == 0 ? 0 : ((page - 1) * pageSize) + 1;
+        final end = total == 0 ? 0 : (page * pageSize).clamp(0, total);
+        final pageNums = <int>{
+          1,
+          totalPages,
+          page - 1,
+          page,
+          page + 1,
+        }.where((p) => p >= 1 && p <= totalPages).toList()..sort();
 
-    return Row(
-      children: [
-        Text(
-          'Hiển thị $start-$end trong $total bản ghi',
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-        ),
-        const Spacer(),
-        OutlinedButton(
-          onPressed: _employeesPage > 1
-              ? () {
-                  setState(() {
-                    _employeesPage -= 1;
-                  });
-                }
-              : null,
-          child: const Text('Trước'),
-        ),
-        const SizedBox(width: 6),
-        ...pages.map((page) {
-          final active = page == _employeesPage;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: SizedBox(
-              width: 34,
-              height: 34,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  backgroundColor: active
-                      ? AppColors.primary
-                      : Colors.transparent,
-                  foregroundColor: active ? Colors.white : AppColors.textMuted,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: AppColors.border),
+        void setPage(int p) {
+          _employeesPaginationNotifier.value = (page: p, pageSize: pageSize);
+        }
+
+        return Row(
+          children: [
+            Text(
+              'Hi\u1ec3n th\u1ecb $start-$end trong $total b\u1ea3n ghi',
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const Spacer(),
+            OutlinedButton(
+              onPressed: page > 1 ? () => setPage(page - 1) : null,
+              child: const Text('Tr\u01b0\u1edbc'),
+            ),
+            const SizedBox(width: 6),
+            ...pageNums.map((p) {
+              final active = p == page;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor:
+                          active ? AppColors.primary : Colors.transparent,
+                      foregroundColor:
+                          active ? Colors.white : AppColors.textMuted,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: AppColors.border),
+                      ),
+                    ),
+                    onPressed: active ? null : () => setPage(p),
+                    child: Text('$p'),
                   ),
                 ),
-                onPressed: active
-                    ? null
-                    : () {
-                        setState(() {
-                          _employeesPage = page;
-                        });
-                      },
-                child: Text('$page'),
-              ),
+              );
+            }),
+            const SizedBox(width: 6),
+            OutlinedButton(
+              onPressed: page < totalPages ? () => setPage(page + 1) : null,
+              child: const Text('Sau'),
             ),
-          );
-        }),
-        const SizedBox(width: 6),
-        OutlinedButton(
-          onPressed: _employeesPage < totalPages
-              ? () {
-                  setState(() {
-                    _employeesPage += 1;
-                  });
-                }
-              : null,
-          child: const Text('Sau'),
-        ),
-        const SizedBox(width: 10),
-        DropdownButton<int>(
-          value: _employeesPageSize,
-          items: const [
-            DropdownMenuItem(value: 10, child: Text('10/trang')),
-            DropdownMenuItem(value: 20, child: Text('20/trang')),
-            DropdownMenuItem(value: 50, child: Text('50/trang')),
+            const SizedBox(width: 10),
+            DropdownButton<int>(
+              value: pageSize,
+              items: const [
+                DropdownMenuItem(value: 10, child: Text('10/trang')),
+                DropdownMenuItem(value: 20, child: Text('20/trang')),
+                DropdownMenuItem(value: 50, child: Text('50/trang')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                _employeesPaginationNotifier.value = (page: 1, pageSize: value);
+              },
+            ),
           ],
-          onChanged: (value) {
-            if (value == null) {
-              return;
-            }
-            setState(() {
-              _employeesPageSize = value;
-              _employeesPage = 1;
-            });
-          },
-        ),
-      ],
+        );
+      },
     );
   }
 }

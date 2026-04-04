@@ -111,11 +111,14 @@ extension _UnassignedPanelX on _AdminPageState {
               TextButton(
                 onPressed: () {
                   setState(() {
-                    _activeNav = _AdminShellNav.employees;
                     _employeesGroupId = null;
                     _employeesStatus = 'all';
-                    _employeesPage = 1;
                   });
+                  _employeesPaginationNotifier.value = (
+                    page: 1,
+                    pageSize: _employeesPageSize,
+                  );
+                  _switchNav(_AdminShellNav.employees);
                 },
                 child: Text(
                   'Xem thêm ${employees.length - 4} người khác...',

@@ -96,6 +96,62 @@ extension _GeofenceMapX on _AdminPageState {
     );
   }
 
+  // ── Geofence layer cache ────────────────────────────────────────────────
+  void _ensureGeofenceLayers() {
+    if (_cachedGeofenceCircles != null &&
+        identical(_cachedGeofenceListRef, _dashboardGeofences) &&
+        _cachedGeofenceSelectedId == _selectedGeofence?.id) {
+      return;
+    }
+    final visible = _dashboardGeofences
+        .where((e) => e.latitude != null && e.longitude != null)
+        .toList(growable: false);
+    _cachedGeofenceCircles = visible.asMap().entries.map((entry) {
+      final color = _colorForGeofenceIndex(entry.key);
+      final zone = entry.value;
+      return CircleMarker(
+        point: LatLng(zone.latitude!, zone.longitude!),
+        radius: (zone.radiusMeters ?? 100).toDouble(),
+        useRadiusInMeter: true,
+        color: color.withValues(alpha: 0.12),
+        borderStrokeWidth: 2,
+        borderColor: color,
+      );
+    }).toList(growable: false);
+    _cachedGeofenceMarkers = visible.asMap().entries.map((entry) {
+      final color = _colorForGeofenceIndex(entry.key);
+      final zone = entry.value;
+      final isSelected = _selectedGeofence?.id == zone.id;
+      return Marker(
+        point: LatLng(zone.latitude!, zone.longitude!),
+        width: 36,
+        height: 36,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => _selectGeofenceForEdit(zone),
+          child: Icon(
+            Icons.location_on,
+            size: isSelected ? 34 : 30,
+            color: isSelected ? AppColors.earlyTeal : color,
+          ),
+        ),
+      );
+    }).toList(growable: false);
+    _cachedGeofenceListRef = _dashboardGeofences;
+    _cachedGeofenceSelectedId = _selectedGeofence?.id;
+  }
+
+  List<CircleMarker> get _geofenceCirclesCache {
+    _ensureGeofenceLayers();
+    return _cachedGeofenceCircles!;
+  }
+
+  List<Marker> get _geofenceMarkersCache {
+    _ensureGeofenceLayers();
+    return _cachedGeofenceMarkers!;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   Widget _buildGeofenceMapCardExtracted() {
     final tileUrl =
         'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}';
@@ -163,21 +219,17 @@ extension _GeofenceMapX on _AdminPageState {
               const SizedBox(width: 10),
               IconButton(
                 onPressed: () {
-                  final next = (_geofenceMapZoom + 1).clamp(3.0, 19.0);
+                  final next = (_geofenceZoomNotifier.value + 1).clamp(3.0, 19.0);
                   _geofenceMapController.move(center, next);
-                  setState(() {
-                    _geofenceMapZoom = next;
-                  });
+                  _geofenceZoomNotifier.value = next;
                 },
                 icon: const Icon(Icons.add_circle_outline),
               ),
               IconButton(
                 onPressed: () {
-                  final next = (_geofenceMapZoom - 1).clamp(3.0, 19.0);
+                  final next = (_geofenceZoomNotifier.value - 1).clamp(3.0, 19.0);
                   _geofenceMapController.move(center, next);
-                  setState(() {
-                    _geofenceMapZoom = next;
-                  });
+                  _geofenceZoomNotifier.value = next;
                 },
                 icon: const Icon(Icons.remove_circle_outline),
               ),
@@ -221,7 +273,7 @@ extension _GeofenceMapX on _AdminPageState {
                       });
                       _geofenceMapController.move(
                         LatLng(item.latitude, item.longitude),
-                        _geofenceMapZoom,
+                        _geofenceZoomNotifier.value,
                       );
                     },
                   );
@@ -241,75 +293,19 @@ extension _GeofenceMapX on _AdminPageState {
                       mapController: _geofenceMapController,
                       options: MapOptions(
                         initialCenter: center,
-                        initialZoom: _geofenceMapZoom,
+                        initialZoom: _geofenceZoomNotifier.value,
                         onTap: (_, point) => _onGeofenceMapTap(point),
                         onPositionChanged: (position, _) {
                           final zoom = position.zoom;
-                          if (mounted) {
-                            setState(() {
-                              _geofenceMapZoom = zoom;
-                            });
+                          if ((zoom - _geofenceZoomNotifier.value).abs() >= 0.05) {
+                            _geofenceZoomNotifier.value = zoom;
                           }
                         },
                       ),
                       children: [
                         TileLayer(urlTemplate: tileUrl),
-                        CircleLayer(
-                          circles: _dashboardGeofences
-                              .where(
-                                (e) => e.latitude != null && e.longitude != null,
-                              )
-                              .toList(growable: false)
-                              .asMap()
-                              .entries
-                              .map((entry) {
-                                final idx = entry.key;
-                                final zone = entry.value;
-                                final color = _colorForGeofenceIndex(idx);
-                                return CircleMarker(
-                                  point: LatLng(zone.latitude!, zone.longitude!),
-                                  radius: (zone.radiusMeters ?? 100).toDouble(),
-                                  useRadiusInMeter: true,
-                                  color: color.withValues(alpha: 0.12),
-                                  borderStrokeWidth: 2,
-                                  borderColor: color,
-                                );
-                              })
-                              .toList(growable: false),
-                        ),
-                        MarkerLayer(
-                          markers: _dashboardGeofences
-                              .where(
-                                (e) => e.latitude != null && e.longitude != null,
-                              )
-                              .toList(growable: false)
-                              .asMap()
-                              .entries
-                              .map((entry) {
-                                final idx = entry.key;
-                                final zone = entry.value;
-                                final color = _colorForGeofenceIndex(idx);
-                                final selectedZone =
-                                    _selectedGeofence?.id == zone.id;
-                                return Marker(
-                                  point: LatLng(zone.latitude!, zone.longitude!),
-                                  width: 36,
-                                  height: 36,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(999),
-                                    onTap: () => _selectGeofenceForEdit(zone),
-                                    child: Icon(
-                                      Icons.location_on,
-                                      size: selectedZone ? 34 : 30,
-                                      color: selectedZone
-                                          ? AppColors.earlyTeal
-                                          : color,
-                                    ),
-                                  ),
-                                );
-                              })
-                              .toList(growable: false),
-                        ),
+                        CircleLayer(circles: _geofenceCirclesCache),
+                        MarkerLayer(markers: _geofenceMarkersCache),
                         if (_newGeofencePoint != null)
                           MarkerLayer(
                             markers: [

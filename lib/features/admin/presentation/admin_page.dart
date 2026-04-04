@@ -16,9 +16,9 @@ import '../../../widgets/common/status_badge.dart';
 import '../data/admin_api.dart';
 import 'admin_shell.dart';
 import 'widgets/admin_location_picker.dart';
-import '../../../screens/admin/exceptions/exceptions_screen.dart'
-    as admin_exceptions;
-import '../../../screens/admin/settings/settings_screen.dart';
+import 'exceptions/exceptions_screen.dart' as admin_exceptions;
+import 'settings/settings_screen.dart';
+import 'reports/reports_tab.dart';
 part 'attendance_logs/widgets/attendance_detail_modal.dart';
 part 'attendance_logs/widgets/attendance_filter_bar.dart';
 part 'attendance_logs/widgets/attendance_stat_cards.dart';
@@ -32,11 +32,6 @@ part 'groups/widgets/unassigned_panel.dart';
 part 'geofences/widgets/geofence_config_form.dart';
 part 'geofences/widgets/geofence_list.dart';
 part 'geofences/widgets/geofence_map.dart';
-part 'reports/widgets/attendance_heatmap.dart';
-part 'reports/widgets/group_performance_chart.dart';
-part 'reports/widgets/status_donut_chart.dart';
-part 'reports/widgets/top_late_list.dart';
-part 'reports/widgets/trend_line_chart.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({required this.email, this.initialSection, super.key});
@@ -87,7 +82,6 @@ class _AdminPageState extends State<AdminPage> {
   final _logsSectionKey = GlobalKey();
   final _employeesSectionKey = GlobalKey();
   final _groupsSectionKey = GlobalKey();
-  final _reportsSectionKey = GlobalKey();
   final _exceptionsSectionKey = GlobalKey();
   final _settingsSectionKey = GlobalKey();
 
@@ -115,11 +109,6 @@ class _AdminPageState extends State<AdminPage> {
   bool _savingGeofenceConfig = false;
   bool _deletingGeofenceConfig = false;
   bool _exportingDashboardCsv = false;
-  bool _loadingReportsSummary = false;
-  bool _loadingReportsTrends = false;
-  bool _loadingReportsLogs = false;
-  bool _loadingReportsLateTop = false;
-  bool _exportingReportsExcel = false;
 
   ActiveRuleResult? _activeRule;
   String? _ruleLocationAddress;
@@ -132,10 +121,6 @@ class _AdminPageState extends State<AdminPage> {
   List<DashboardGeofenceItem> _dashboardGeofences = const [];
   List<DashboardExceptionItem> _dashboardExceptions = const [];
   List<GroupLite> _dashboardGroups = const [];
-  DashboardSummaryResult? _reportsSummary;
-  List<DashboardWeeklyTrendItem> _reportsTrends = const [];
-  List<DashboardAttendanceLogItem> _reportsLogs = const [];
-  List<DashboardAttendanceLogItem> _reportsLateTop = const [];
 
   int? _newEmployeeUserId;
   int? _expandedEmployeeId;
@@ -146,11 +131,6 @@ class _AdminPageState extends State<AdminPage> {
   final DateTime _dashboardDate = DateTime.now();
   int? _dashboardGroupId;
   String _dashboardStatus = 'all';
-  DateTime _reportsMonth = DateTime(DateTime.now().year, DateTime.now().month);
-  int? _reportsGroupId;
-  String _reportsStatus = 'all';
-  String _reportsType = 'overview';
-  String _reportsTrendPeriod = 'day';
   DateTime _logsFromDate = DateTime.now();
   DateTime _logsToDate = DateTime.now();
   String _logsSearch = '';
@@ -158,14 +138,18 @@ class _AdminPageState extends State<AdminPage> {
   int _logsPageSize = 10;
   int? _employeesGroupId;
   String _employeesStatus = 'all';
-  int _employeesPage = 1;
-  int _employeesPageSize = 10;
+  // Page + pageSize are UI-only — backed by a ValueNotifier so pagination
+  // clicks only rebuild the table subtree, not the entire AdminPage.
+  final _employeesPaginationNotifier =
+      ValueNotifier<({int page, int pageSize})>((page: 1, pageSize: 10));
+  int get _employeesPage => _employeesPaginationNotifier.value.page;
+  int get _employeesPageSize => _employeesPaginationNotifier.value.pageSize;
   String _groupsSearch = '';
   String _groupsStatus = 'all';
   final Map<int, List<GroupGeofenceLite>> _groupGeofencesByGroupId = {};
   DashboardGeofenceItem? _selectedGeofence;
   LatLng? _newGeofencePoint;
-  double _geofenceMapZoom = 14;
+  final _geofenceZoomNotifier = ValueNotifier<double>(14);
   List<GeoPlaceSuggestion> _geofencePlaceSuggestions = const [];
   bool _zoneOvertimeEnabled = false;
   bool _zoneActive = true;
@@ -175,10 +159,25 @@ class _AdminPageState extends State<AdminPage> {
   String? _exceptionStatusFilter = 'OPEN';
   final Set<int> _updatingExceptionIds = {};
   _AdminShellNav _activeNav = _AdminShellNav.dashboard;
-  _AdminShellNav? _hoveredNav;
   final Set<_AdminShellNav> _tabsLoaded = {};
   int _logsServerTotal = 0;
   final Set<int> _dashboardUpdatingExceptionIds = {};
+
+  // ── Memoisation caches ────────────────────────────────────────────────────
+  // _employeesView
+  List<EmployeeLite>? _cachedEmployeesView;
+  List<EmployeeLite>? _cachedEmployeesListRef;
+  String _cachedEmployeesFilterKey = '';
+  // _groupsView
+  List<GroupLite>? _cachedGroupsView;
+  List<GroupLite>? _cachedGroupsListRef;
+  String _cachedGroupsFilterKey = '';
+  // geofence circles/markers
+  List<CircleMarker>? _cachedGeofenceCircles;
+  List<Marker>? _cachedGeofenceMarkers;
+  List<DashboardGeofenceItem>? _cachedGeofenceListRef;
+  int? _cachedGeofenceSelectedId;
+  // ─────────────────────────────────────────────────────────────────────────
 
   String? _error;
   String? _info;
@@ -203,11 +202,6 @@ class _AdminPageState extends State<AdminPage> {
       _savingGeofenceConfig ||
       _deletingGeofenceConfig ||
       _exportingDashboardCsv ||
-      _loadingReportsSummary ||
-      _loadingReportsTrends ||
-      _loadingReportsLogs ||
-      _loadingReportsLateTop ||
-      _exportingReportsExcel ||
       _assigningEmployeeIds.isNotEmpty ||
       _deletingEmployeeIds.isNotEmpty ||
       _updatingExceptionIds.isNotEmpty ||
@@ -217,6 +211,7 @@ class _AdminPageState extends State<AdminPage> {
   void initState() {
     super.initState();
     _activeNav = _initialNavFromSection(widget.initialSection);
+    _resetGroupsFiltersToDefaults();
     _startTimeController.text = '08:00';
     _graceMinutesController.text = '30';
     _endTimeController.text = '17:30';
@@ -252,6 +247,12 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
+  void _resetGroupsFiltersToDefaults() {
+    _groupsSearch = '';
+    _groupsStatus = 'all';
+    _groupsSearchController.text = '';
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -278,6 +279,8 @@ class _AdminPageState extends State<AdminPage> {
     _zoneStartTimeController.dispose();
     _zoneEndTimeController.dispose();
     _zoneOvertimeStartController.dispose();
+    _geofenceZoomNotifier.dispose();
+    _employeesPaginationNotifier.dispose();
     super.dispose();
   }
 
@@ -497,11 +500,15 @@ class _AdminPageState extends State<AdminPage> {
             !_employees.any((e) => e.id == _expandedEmployeeId)) {
           _expandedEmployeeId = null;
         }
-        final pages = _employeesTotalPages;
-        if (_employeesPage > pages) {
-          _employeesPage = pages;
-        }
       });
+      // Clamp page after setState so _employeesTotalPages reads fresh data.
+      final pages = _employeesTotalPages;
+      if (_employeesPage > pages) {
+        _employeesPaginationNotifier.value = (
+          page: pages,
+          pageSize: _employeesPageSize,
+        );
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -1377,8 +1384,9 @@ class _AdminPageState extends State<AdminPage> {
 
     // Only show users not already linked to a different employee
     for (final u in _users) {
-      final linkedToOther =
-          _employees.any((e) => e.userId == u.id && e.id != employee.id);
+      final linkedToOther = _employees.any(
+        (e) => e.userId == u.id && e.id != employee.id,
+      );
       if (!linkedToOther) {
         items.add(
           DropdownMenuItem<int?>(
@@ -1700,11 +1708,16 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   void _onShellNavTap(_AdminShellNav nav) {
-    if (_activeNav == nav) return;
-    setState(() {
-      _activeNav = nav;
-    });
-    _loadTabIfNeeded(nav);
+    _switchNav(nav);
+  }
+
+  Future<void> _switchNav(_AdminShellNav nav) async {
+    if (_activeNav != nav) {
+      setState(() {
+        _activeNav = nav;
+      });
+    }
+    await _loadTabIfNeeded(nav);
   }
 
   Future<void> _loadTabIfNeeded(_AdminShellNav nav) async {
@@ -1724,11 +1737,15 @@ class _AdminPageState extends State<AdminPage> {
       case _AdminShellNav.employees:
         await _loadEmployees();
       case _AdminShellNav.groups:
-        break; // shared data already loaded via _loadDashboardGroups
+        if (_dashboardGroups.isEmpty) {
+          await _loadDashboardGroups();
+        }
+        await _loadEmployees();
+        await _loadGroupGeofenceCards();
       case _AdminShellNav.geofences:
         await _loadDashboardGeofences(token);
       case _AdminShellNav.reports:
-        await _refreshReportsOnly();
+        break; // ReportsTab loads its own data on mount
       case _AdminShellNav.exceptions:
         await _loadExceptions();
       case _AdminShellNav.settings:
@@ -1754,16 +1771,10 @@ class _AdminPageState extends State<AdminPage> {
     return AdminSidebar<_AdminShellNav>(
       items: items,
       selected: _activeNav,
-      hovered: _hoveredNav,
       displayName: name,
       avatarText: avatarText,
       roleLabel: 'Quản trị viên',
       onTap: _onShellNavTap,
-      onHoverChanged: (nav) {
-        setState(() {
-          _hoveredNav = nav;
-        });
-      },
     );
   }
 
@@ -1777,6 +1788,7 @@ class _AdminPageState extends State<AdminPage> {
       dateLabel: _vietnameseDateLabel(),
       searchController: _searchController,
       avatarText: avatarText,
+      onReloadTap: () => _refreshAll(),
       onAvatarTap: _logout,
     );
   }
@@ -1799,10 +1811,6 @@ class _AdminPageState extends State<AdminPage> {
         if (_dashboardGroupId != null &&
             !_dashboardGroups.any((g) => g.id == _dashboardGroupId)) {
           _dashboardGroupId = null;
-        }
-        if (_reportsGroupId != null &&
-            !_dashboardGroups.any((g) => g.id == _reportsGroupId)) {
-          _reportsGroupId = null;
         }
       });
     } catch (_) {
@@ -2012,236 +2020,6 @@ class _AdminPageState extends State<AdminPage> {
       _loadDashboardLogs(token),
       _loadDashboardWeekly(token),
     ]);
-  }
-
-  DateTime get _reportsFromDate =>
-      DateTime(_reportsMonth.year, _reportsMonth.month, 1);
-
-  DateTime get _reportsToDate =>
-      DateTime(_reportsMonth.year, _reportsMonth.month + 1, 0);
-
-  Future<void> _refreshReportsOnly() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-    await Future.wait([
-      _loadReportsSummary(token),
-      _loadReportsTrends(token),
-      _loadReportsLogs(token),
-      _loadReportsTopLate(token),
-    ]);
-    if (!mounted) {
-      return;
-    }
-  }
-
-  Future<void> _loadReportsSummary(String token) async {
-    setState(() {
-      _loadingReportsSummary = true;
-    });
-    try {
-      final data = await _adminApi.getDashboardSummary(
-        token: token,
-        date: _reportsFromDate,
-        groupId: _reportsGroupId,
-        status: _reportsStatus,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsSummary = data;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsSummary = null;
-      });
-      _showSnack('Khong the tai tong quan bao cao.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingReportsSummary = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadReportsTrends(String token) async {
-    setState(() {
-      _loadingReportsTrends = true;
-    });
-    try {
-      final data = await _adminApi.getDashboardWeeklyTrends(
-        token: token,
-        date: _reportsFromDate,
-        groupId: _reportsGroupId,
-        status: _reportsStatus,
-        period: _reportsTrendPeriod,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsTrends = data;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsTrends = const [];
-      });
-      _showSnack('Khong the tai xu huong cham cong.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingReportsTrends = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadReportsLogs(String token) async {
-    setState(() {
-      _loadingReportsLogs = true;
-    });
-    try {
-      final result = await _adminApi.listDashboardAttendanceLogs(
-        token: token,
-        fromDate: _reportsFromDate,
-        toDate: _reportsToDate,
-        groupId: _reportsGroupId,
-        status: _reportsStatus,
-        limit: 4000,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsLogs = result.items;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsLogs = const [];
-      });
-      _showSnack('Khong the tai du lieu bao cao.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingReportsLogs = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadReportsTopLate(String token) async {
-    setState(() {
-      _loadingReportsLateTop = true;
-    });
-    try {
-      final result = await _adminApi.listDashboardAttendanceLogs(
-        token: token,
-        fromDate: _reportsFromDate,
-        toDate: _reportsToDate,
-        groupId: _reportsGroupId,
-        status: 'late',
-        sort: 'count',
-        limit: 5,
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsLateTop = result.items;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _reportsLateTop = const [];
-      });
-      _showSnack('Khong the tai top nhan vien vao muon.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingReportsLateTop = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _onReportsFilterChanged() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-    await Future.wait([
-      _loadReportsSummary(token),
-      _loadReportsTrends(token),
-      _loadReportsLogs(token),
-      _loadReportsTopLate(token),
-    ]);
-  }
-
-  Future<void> _onReportsTrendPeriodChanged(String period) async {
-    setState(() {
-      _reportsTrendPeriod = period;
-    });
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-    await _loadReportsTrends(token);
-  }
-
-  Future<void> _shiftReportsMonth(int delta) async {
-    setState(() {
-      _reportsMonth = DateTime(_reportsMonth.year, _reportsMonth.month + delta);
-    });
-    await _onReportsFilterChanged();
-  }
-
-  Future<void> _exportReportsExcel() async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      _showSnack('Phien dang nhap da het han.');
-      return;
-    }
-    setState(() {
-      _exportingReportsExcel = true;
-    });
-    try {
-      final report = await _adminApi.downloadAttendanceReport(
-        token: token,
-        fromDate: _reportsFromDate,
-        toDate: _reportsToDate,
-        groupId: _reportsGroupId,
-      );
-      await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
-      if (!mounted) {
-        return;
-      }
-      _showSnack('Xuat bao cao Excel thanh cong.');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnack('Khong the xuat bao cao Excel. Vui long thu lai.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _exportingReportsExcel = false;
-        });
-      }
-    }
   }
 
   Future<void> _refreshLogsOnly() async {
@@ -2677,6 +2455,13 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<EmployeeLite> get _employeesView {
+    final filterKey =
+        '${_employeesSearchController.text.trim()}|$_employeesGroupId|$_employeesStatus';
+    if (_cachedEmployeesView != null &&
+        identical(_cachedEmployeesListRef, _employees) &&
+        _cachedEmployeesFilterKey == filterKey) {
+      return _cachedEmployeesView!;
+    }
     var list = _employees.toList(growable: false);
     final q = _employeesSearchController.text.trim().toLowerCase();
     if (q.isNotEmpty) {
@@ -2699,6 +2484,9 @@ class _AdminPageState extends State<AdminPage> {
     } else if (_employeesStatus == 'inactive') {
       list = list.where((e) => !_isEmployeeActive(e)).toList(growable: false);
     }
+    _cachedEmployeesListRef = _employees;
+    _cachedEmployeesFilterKey = filterKey;
+    _cachedEmployeesView = list;
     return list;
   }
 
@@ -2725,6 +2513,12 @@ class _AdminPageState extends State<AdminPage> {
   }
 
   List<GroupLite> get _groupsView {
+    final filterKey = '$_groupsSearch|$_groupsStatus';
+    if (_cachedGroupsView != null &&
+        identical(_cachedGroupsListRef, _dashboardGroups) &&
+        _cachedGroupsFilterKey == filterKey) {
+      return _cachedGroupsView!;
+    }
     var list = _dashboardGroups.toList(growable: false);
     final query = _groupsSearch.trim().toLowerCase();
     if (query.isNotEmpty) {
@@ -2741,6 +2535,9 @@ class _AdminPageState extends State<AdminPage> {
     } else if (_groupsStatus == 'inactive') {
       list = list.where((g) => !g.active).toList(growable: false);
     }
+    _cachedGroupsListRef = _dashboardGroups;
+    _cachedGroupsFilterKey = filterKey;
+    _cachedGroupsView = list;
     return list;
   }
 
@@ -2772,27 +2569,45 @@ class _AdminPageState extends State<AdminPage> {
       _loadingGroupGeofenceCards = true;
     });
     try {
-      final entries = await Future.wait(
-        groups.map((group) async {
-          try {
-            final items = await _adminApi.listGroupGeofences(
-              token: token,
-              groupId: group.id,
-            );
-            return MapEntry(group.id, items);
-          } catch (_) {
-            return MapEntry(group.id, const <GroupGeofenceLite>[]);
-          }
-        }),
-      );
+      // Single aggregate request instead of N per-group requests.
+      final summary = await _adminApi.listGroupGeofencesSummary(token: token);
       if (!mounted) {
         return;
       }
       setState(() {
-        _groupGeofencesByGroupId
-          ..clear()
-          ..addEntries(entries);
+        _groupGeofencesByGroupId.clear();
+        for (final group in groups) {
+          _groupGeofencesByGroupId[group.id] =
+              summary[group.id] ?? const <GroupGeofenceLite>[];
+        }
       });
+    } catch (_) {
+      // Fallback: per-group requests if aggregate endpoint is unavailable.
+      try {
+        final entries = await Future.wait(
+          groups.map((group) async {
+            try {
+              final items = await _adminApi.listGroupGeofences(
+                token: token,
+                groupId: group.id,
+              );
+              return MapEntry(group.id, items);
+            } catch (_) {
+              return MapEntry(group.id, const <GroupGeofenceLite>[]);
+            }
+          }),
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _groupGeofencesByGroupId
+            ..clear()
+            ..addEntries(entries);
+        });
+      } catch (_) {
+        // Silent — leave existing data untouched.
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -2856,7 +2671,7 @@ class _AdminPageState extends State<AdminPage> {
     if (moveMap && item.latitude != null && item.longitude != null) {
       _geofenceMapController.move(
         LatLng(item.latitude!, item.longitude!),
-        _geofenceMapZoom,
+        _geofenceZoomNotifier.value,
       );
     }
   }
@@ -3249,23 +3064,18 @@ class _AdminPageState extends State<AdminPage> {
     }
   }
 
-  StatusBadgeType _badgeTypeForStatus(String status) {
+  StatusBadgeType _badgeTypeForStatus(String status) =>
+      _badgeTypeForStatusStatic(status);
+
+  static StatusBadgeType _badgeTypeForStatusStatic(String status) {
     final normalized = status.toLowerCase();
-    if (normalized.contains('late')) {
-      return StatusBadgeType.late;
-    }
-    if (normalized.contains('early')) {
-      return StatusBadgeType.early;
-    }
+    if (normalized.contains('late')) return StatusBadgeType.late;
+    if (normalized.contains('early')) return StatusBadgeType.early;
     if (normalized.contains('overtime') || normalized.contains('ot')) {
       return StatusBadgeType.overtime;
     }
-    if (normalized.contains('out')) {
-      return StatusBadgeType.outOfRange;
-    }
-    if (normalized.contains('exception')) {
-      return StatusBadgeType.exception;
-    }
+    if (normalized.contains('out')) return StatusBadgeType.outOfRange;
+    if (normalized.contains('exception')) return StatusBadgeType.exception;
     return StatusBadgeType.onTime;
   }
 
@@ -3372,27 +3182,30 @@ class _AdminPageState extends State<AdminPage> {
             child: TextField(
               controller: _employeesSearchController,
               onChanged: (_) {
-                setState(() {
-                  _employeesPage = 1;
-                });
+                _employeesPaginationNotifier.value = (
+                  page: 1,
+                  pageSize: _employeesPageSize,
+                );
               },
               onSubmitted: (_) {
-                setState(() {
-                  _employeesPage = 1;
-                });
+                _employeesPaginationNotifier.value = (
+                  page: 1,
+                  pageSize: _employeesPageSize,
+                );
                 _refreshEmployeesOnly();
               },
               decoration: InputDecoration(
                 isDense: true,
-                hintText: 'Tìm nhân viên...',
+                hintText: 'T\u00ecm nh\u00e2n vi\u00ean...',
                 prefixIcon: const Icon(Icons.search, size: 18),
                 suffixIcon: IconButton(
                   onPressed: _loadingEmployees
                       ? null
                       : () {
-                          setState(() {
-                            _employeesPage = 1;
-                          });
+                          _employeesPaginationNotifier.value = (
+                            page: 1,
+                            pageSize: _employeesPageSize,
+                          );
                           _refreshEmployeesOnly();
                         },
                   icon: const Icon(Icons.search),
@@ -3428,8 +3241,11 @@ class _AdminPageState extends State<AdminPage> {
               onChanged: (value) {
                 setState(() {
                   _employeesGroupId = value;
-                  _employeesPage = 1;
                 });
+                _employeesPaginationNotifier.value = (
+                  page: 1,
+                  pageSize: _employeesPageSize,
+                );
                 _refreshEmployeesOnly();
               },
             ),
@@ -3456,8 +3272,11 @@ class _AdminPageState extends State<AdminPage> {
                 }
                 setState(() {
                   _employeesStatus = value;
-                  _employeesPage = 1;
                 });
+                _employeesPaginationNotifier.value = (
+                  page: 1,
+                  pageSize: _employeesPageSize,
+                );
                 _refreshEmployeesOnly();
               },
             ),
@@ -3549,182 +3368,6 @@ class _AdminPageState extends State<AdminPage> {
 
   Widget _buildGeofenceConfigForm(DashboardGeofenceItem selected) {
     return _buildGeofenceConfigFormExtracted(selected);
-  }
-
-  double _parseTotalHours(String value) {
-    final raw = value.trim();
-    if (raw.isEmpty || raw == '--') {
-      return 0;
-    }
-    if (raw.contains(':')) {
-      final parts = raw.split(':');
-      if (parts.length == 2) {
-        final h = int.tryParse(parts[0]) ?? 0;
-        final m = int.tryParse(parts[1]) ?? 0;
-        return h + (m / 60);
-      }
-    }
-    return double.tryParse(raw.replaceAll(',', '.')) ?? 0;
-  }
-
-  double _reportsTotalHours() {
-    var total = 0.0;
-    for (final row in _reportsLogs) {
-      total += _parseTotalHours(row.totalHours);
-    }
-    return total;
-  }
-
-  int _countByBadgeType(
-    List<DashboardAttendanceLogItem> rows,
-    StatusBadgeType type,
-  ) {
-    return rows
-        .where((row) => _badgeTypeForStatus(row.attendanceStatus) == type)
-        .length;
-  }
-
-  List<_ReportCountItem> _reportsTopLateItems() {
-    final source = _reportsLateTop.isNotEmpty
-        ? _reportsLateTop
-        : _reportsLogs
-              .where(
-                (row) =>
-                    _badgeTypeForStatus(row.attendanceStatus) ==
-                    StatusBadgeType.late,
-              )
-              .toList(growable: false);
-    final map = <String, _ReportCountItem>{};
-    for (final row in source) {
-      final key = '${row.employeeCode}_${row.employeeName}';
-      final current = map[key];
-      final nextCount = row.entryCount ?? 1;
-      if (current == null) {
-        map[key] = _ReportCountItem(
-          name: row.employeeName,
-          code: row.employeeCode,
-          count: nextCount,
-        );
-      } else {
-        map[key] = _ReportCountItem(
-          name: current.name,
-          code: current.code,
-          count: current.count + nextCount,
-        );
-      }
-    }
-    final list = map.values.toList(growable: false);
-    list.sort((a, b) => b.count.compareTo(a.count));
-    return list.take(5).toList(growable: false);
-  }
-
-  List<_ReportGroupPerformanceItem> _reportsGroupPerformanceItems() {
-    final map = <String, _ReportGroupPerformanceItem>{};
-    for (final row in _reportsLogs) {
-      final key = row.departmentName.trim().isEmpty
-          ? 'Chưa xác định'
-          : row.departmentName;
-      final type = _badgeTypeForStatus(row.attendanceStatus);
-      final current =
-          map[key] ??
-          _ReportGroupPerformanceItem(
-            groupName: key,
-            onTime: 0,
-            late: 0,
-            outOfRange: 0,
-          );
-      map[key] = current.copyWith(
-        onTime: current.onTime + (type == StatusBadgeType.onTime ? 1 : 0),
-        late: current.late + (type == StatusBadgeType.late ? 1 : 0),
-        outOfRange:
-            current.outOfRange + (type == StatusBadgeType.outOfRange ? 1 : 0),
-      );
-    }
-    final rows = map.values.toList(growable: false);
-    rows.sort((a, b) => b.total.compareTo(a.total));
-    return rows.take(6).toList(growable: false);
-  }
-
-  Map<DateTime, int> _reportsHeatmapCounts() {
-    final map = <DateTime, int>{};
-    for (final row in _reportsLogs) {
-      final date = row.workDate;
-      if (date == null) {
-        continue;
-      }
-      if (date.year != _reportsMonth.year ||
-          date.month != _reportsMonth.month) {
-        continue;
-      }
-      final key = DateTime(date.year, date.month, date.day);
-      map[key] = (map[key] ?? 0) + 1;
-    }
-    return map;
-  }
-
-  Future<void> _onReportsTypeChanged(String value) async {
-    setState(() {
-      _reportsType = value;
-    });
-  }
-
-  Widget _buildReportsPage() {
-    return _buildReportsPageExtracted();
-  }
-
-  Widget _buildReportsTypeTabsCard() {
-    return _buildReportsTypeTabsCardExtracted();
-  }
-
-  Widget _buildReportsFilterCard() {
-    return _buildReportsFilterCardExtracted();
-  }
-
-  Widget _buildReportsTrendCard() {
-    return _buildReportsTrendCardExtracted();
-  }
-
-  Widget _buildReportsStatusDonutCard({
-    required int onTimeCount,
-    required int lateCount,
-    required int outOfRangeCount,
-    required int overtimeCount,
-  }) {
-    return _buildReportsStatusDonutCardExtracted(
-      onTimeCount: onTimeCount,
-      lateCount: lateCount,
-      outOfRangeCount: outOfRangeCount,
-      overtimeCount: overtimeCount,
-    );
-  }
-
-  Widget _buildTopLateEmployeesCard() {
-    return _buildTopLateEmployeesCardExtracted();
-  }
-
-  Widget _buildGroupPerformanceCard() {
-    return _buildGroupPerformanceCardExtracted();
-  }
-
-  Color _heatmapCellColor({required double ratio, required bool weekend}) {
-    if (ratio <= 0) {
-      return weekend
-          ? AppColors.textMuted.withValues(alpha: 0.14)
-          : AppColors.bgPage;
-    }
-    final base = Color.lerp(
-      AppColors.bgPage,
-      AppColors.success.withValues(alpha: 0.95),
-      ratio.clamp(0, 1),
-    )!;
-    if (!weekend) {
-      return base;
-    }
-    return Color.lerp(base, AppColors.textMuted.withValues(alpha: 0.25), 0.2)!;
-  }
-
-  Widget _buildReportsHeatmapCard() {
-    return _buildReportsHeatmapCardExtracted();
   }
 
   Widget _buildDashboardContent() {
@@ -3877,10 +3520,11 @@ class _AdminPageState extends State<AdminPage> {
                   columns: const [
                     DataColumn(label: Text('Nhân viên')),
                     DataColumn(label: Text('Phòng ban')),
+                    DataColumn(label: Text('Ngày')),
                     DataColumn(label: Text('Giờ vào')),
+                    DataColumn(label: Text('Giờ ra')),
                     DataColumn(label: Text('Trạng thái vị trí')),
                     DataColumn(label: Text('Trạng thái')),
-                    DataColumn(label: Text('Thao tác')),
                   ],
                   rows: _dashboardLogs
                       .map((row) {
@@ -3888,6 +3532,15 @@ class _AdminPageState extends State<AdminPage> {
                           row.attendanceStatus,
                         );
                         final inRange = row.locationStatus == 'inside';
+                        final dateLabel = row.workDate == null
+                            ? '--'
+                            : DateFormat('dd/MM/yyyy').format(row.workDate!);
+                        final checkInLabel = _format24hTimeLabel(
+                          row.checkInTime,
+                        );
+                        final checkOutLabel = _format24hTimeLabel(
+                          row.checkOutTime,
+                        );
                         return DataRow(
                           cells: [
                             DataCell(
@@ -3907,10 +3560,21 @@ class _AdminPageState extends State<AdminPage> {
                               ),
                             ),
                             DataCell(Text(row.departmentName)),
+                            DataCell(Text(dateLabel)),
                             DataCell(
                               Text(
-                                row.checkInTime,
+                                checkInLabel,
                                 style: TextStyle(color: statusColor),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                checkOutLabel,
+                                style: TextStyle(
+                                  color: checkOutLabel == '--'
+                                      ? AppColors.textMuted
+                                      : AppColors.textPrimary,
+                                ),
                               ),
                             ),
                             DataCell(
@@ -3945,7 +3609,6 @@ class _AdminPageState extends State<AdminPage> {
                                 color: statusColor,
                               ),
                             ),
-                            const DataCell(Icon(Icons.more_horiz, size: 18)),
                           ],
                         );
                       })
@@ -3966,10 +3629,11 @@ class _AdminPageState extends State<AdminPage> {
         columns: const [
           DataColumn(label: Text('Nhân viên')),
           DataColumn(label: Text('Phòng ban')),
+          DataColumn(label: Text('Ngày')),
           DataColumn(label: Text('Giờ vào')),
+          DataColumn(label: Text('Giờ ra')),
           DataColumn(label: Text('Trạng thái vị trí')),
           DataColumn(label: Text('Trạng thái')),
-          DataColumn(label: Text('Thao tác')),
         ],
         rows: List.generate(
           3,
@@ -3977,15 +3641,34 @@ class _AdminPageState extends State<AdminPage> {
             cells: [
               DataCell(_SkeletonCell(width: 130)),
               DataCell(_SkeletonCell(width: 80)),
+              DataCell(_SkeletonCell(width: 72)),
+              DataCell(_SkeletonCell(width: 48)),
               DataCell(_SkeletonCell(width: 48)),
               DataCell(_SkeletonCell(width: 88)),
               DataCell(_SkeletonCell(width: 72)),
-              DataCell(_SkeletonCell(width: 30)),
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _format24hTimeLabel(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty || raw == '--') {
+      return '--';
+    }
+    if (RegExp(r'^\d{2}:\d{2}$').hasMatch(raw)) {
+      return raw;
+    }
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      return raw;
+    }
+    final local = parsed.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   Widget _buildWeeklyChartCard() {
@@ -4047,8 +3730,7 @@ class _AdminPageState extends State<AdminPage> {
                   ),
                 ),
                 TextButton(
-                  onPressed: () =>
-                      _onShellNavTap(_AdminShellNav.geofences),
+                  onPressed: () => _onShellNavTap(_AdminShellNav.geofences),
                   child: const Text('Xem bản đồ →'),
                 ),
               ],
@@ -4281,7 +3963,7 @@ class _AdminPageState extends State<AdminPage> {
       case _AdminShellNav.geofences:
         return _buildGeofencesPage();
       case _AdminShellNav.reports:
-        return _buildReportsPage();
+        return const ReportsTab();
       case _AdminShellNav.exceptions:
         return const admin_exceptions.ExceptionsScreen();
       case _AdminShellNav.settings:
@@ -4417,11 +4099,36 @@ class _MockWeeklyChart extends StatelessWidget {
     }
 
     const loadingPlaceholder = [
-      DashboardWeeklyTrendItem(day: 'Thứ 2', onTime: 24, late: 24, outOfRange: 24),
-      DashboardWeeklyTrendItem(day: 'Thứ 3', onTime: 24, late: 24, outOfRange: 24),
-      DashboardWeeklyTrendItem(day: 'Thứ 4', onTime: 24, late: 24, outOfRange: 24),
-      DashboardWeeklyTrendItem(day: 'Thứ 5', onTime: 24, late: 24, outOfRange: 24),
-      DashboardWeeklyTrendItem(day: 'Thứ 6', onTime: 24, late: 24, outOfRange: 24),
+      DashboardWeeklyTrendItem(
+        day: 'Thứ 2',
+        onTime: 24,
+        late: 24,
+        outOfRange: 24,
+      ),
+      DashboardWeeklyTrendItem(
+        day: 'Thứ 3',
+        onTime: 24,
+        late: 24,
+        outOfRange: 24,
+      ),
+      DashboardWeeklyTrendItem(
+        day: 'Thứ 4',
+        onTime: 24,
+        late: 24,
+        outOfRange: 24,
+      ),
+      DashboardWeeklyTrendItem(
+        day: 'Thứ 5',
+        onTime: 24,
+        late: 24,
+        outOfRange: 24,
+      ),
+      DashboardWeeklyTrendItem(
+        day: 'Thứ 6',
+        onTime: 24,
+        late: 24,
+        outOfRange: 24,
+      ),
     ];
     final chartData = loading ? loadingPlaceholder : data;
 
@@ -4726,290 +4433,6 @@ class _SkeletonRow extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _ReportCountItem {
-  const _ReportCountItem({
-    required this.name,
-    required this.code,
-    required this.count,
-  });
-
-  final String name;
-  final String code;
-  final int count;
-}
-
-class _ReportGroupPerformanceItem {
-  const _ReportGroupPerformanceItem({
-    required this.groupName,
-    required this.onTime,
-    required this.late,
-    required this.outOfRange,
-  });
-
-  final String groupName;
-  final int onTime;
-  final int late;
-  final int outOfRange;
-
-  int get total => onTime + late + outOfRange;
-
-  _ReportGroupPerformanceItem copyWith({
-    int? onTime,
-    int? late,
-    int? outOfRange,
-  }) {
-    return _ReportGroupPerformanceItem(
-      groupName: groupName,
-      onTime: onTime ?? this.onTime,
-      late: late ?? this.late,
-      outOfRange: outOfRange ?? this.outOfRange,
-    );
-  }
-}
-
-class _DonutSegmentData {
-  const _DonutSegmentData({
-    required this.label,
-    required this.count,
-    required this.color,
-  });
-
-  final String label;
-  final int count;
-  final Color color;
-}
-
-class _DonutChartPainter extends CustomPainter {
-  _DonutChartPainter({required this.segments, required this.total});
-
-  final List<_DonutSegmentData> segments;
-  final int total;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stroke = math.min(size.width, size.height) * 0.17;
-    final rect = Rect.fromCircle(
-      center: Offset(size.width / 2, size.height / 2),
-      radius: math.min(size.width, size.height) / 2 - stroke / 2,
-    );
-    final bgPaint = Paint()
-      ..color = AppColors.bgPage
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-    canvas.drawArc(rect, 0, math.pi * 2, false, bgPaint);
-
-    if (total <= 0) {
-      return;
-    }
-
-    var start = -math.pi / 2;
-    for (final segment in segments) {
-      if (segment.count <= 0) {
-        continue;
-      }
-      final sweep = (segment.count / total) * math.pi * 2;
-      final paint = Paint()
-        ..color = segment.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
-        ..strokeCap = StrokeCap.butt;
-      canvas.drawArc(rect, start, sweep, false, paint);
-      start += sweep;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
-    if (oldDelegate.total != total ||
-        oldDelegate.segments.length != segments.length) {
-      return true;
-    }
-    for (var i = 0; i < segments.length; i++) {
-      if (segments[i].count != oldDelegate.segments[i].count ||
-          segments[i].color != oldDelegate.segments[i].color) {
-        return true;
-      }
-    }
-    return false;
-  }
-}
-
-class _ReportsLineChart extends StatelessWidget {
-  const _ReportsLineChart({required this.data, required this.loading});
-
-  final List<DashboardWeeklyTrendItem> data;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final chartData = loading
-        ? const [
-            DashboardWeeklyTrendItem(
-              day: '1',
-              onTime: 40,
-              late: 20,
-              outOfRange: 10,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '2',
-              onTime: 35,
-              late: 16,
-              outOfRange: 9,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '3',
-              onTime: 50,
-              late: 14,
-              outOfRange: 8,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '4',
-              onTime: 42,
-              late: 18,
-              outOfRange: 10,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '5',
-              onTime: 56,
-              late: 15,
-              outOfRange: 6,
-            ),
-          ]
-        : data;
-
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border, width: 0.5),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: CustomPaint(
-              painter: _ReportsLineChartPainter(
-                data: chartData,
-                loading: loading,
-              ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: chartData
-              .map(
-                (e) => Expanded(
-                  child: Center(
-                    child: Text(
-                      e.day,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList(growable: false),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReportsLineChartPainter extends CustomPainter {
-  _ReportsLineChartPainter({required this.data, required this.loading});
-
-  final List<DashboardWeeklyTrendItem> data;
-  final bool loading;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = AppColors.bgPage
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (var i = 0; i < 5; i++) {
-      final y = (size.height - 16) * (i / 4) + 8;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    if (data.isEmpty) {
-      return;
-    }
-    final maxValue = data
-        .map((e) => math.max(e.onTime, math.max(e.late, e.outOfRange)))
-        .reduce(math.max)
-        .toDouble()
-        .clamp(10, 1000);
-
-    final onTimePoints = <Offset>[];
-    final latePoints = <Offset>[];
-    final outPoints = <Offset>[];
-
-    final stepX = data.length <= 1
-        ? size.width
-        : size.width / (data.length - 1);
-    for (var i = 0; i < data.length; i++) {
-      final x = stepX * i;
-      onTimePoints.add(
-        Offset(
-          x,
-          size.height - ((data[i].onTime / maxValue) * (size.height - 16)) - 8,
-        ),
-      );
-      latePoints.add(
-        Offset(
-          x,
-          size.height - ((data[i].late / maxValue) * (size.height - 16)) - 8,
-        ),
-      );
-      outPoints.add(
-        Offset(
-          x,
-          size.height -
-              ((data[i].outOfRange / maxValue) * (size.height - 16)) -
-              8,
-        ),
-      );
-    }
-
-    _drawLine(canvas, onTimePoints, AppColors.success, loading);
-    _drawLine(canvas, latePoints, AppColors.warning, loading);
-    _drawLine(canvas, outPoints, AppColors.danger, loading);
-  }
-
-  void _drawLine(
-    Canvas canvas,
-    List<Offset> points,
-    Color color,
-    bool loading,
-  ) {
-    if (points.length < 2) {
-      return;
-    }
-    final linePaint = Paint()
-      ..color = loading ? color.withValues(alpha: 0.5) : color
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-    canvas.drawPath(path, linePaint);
-
-    final dotPaint = Paint()..color = linePaint.color;
-    for (final point in points) {
-      canvas.drawCircle(point, 2.5, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ReportsLineChartPainter oldDelegate) {
-    return oldDelegate.loading != loading || oldDelegate.data != data;
   }
 }
 

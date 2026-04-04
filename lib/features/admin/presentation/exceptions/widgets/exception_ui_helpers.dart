@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../../core/theme/app_colors.dart';
 
 String exceptionTypeLabel(String type) {
   switch (type) {
@@ -47,4 +47,3 @@ bool isOutsideLocationLabel(String label) {
       normalized.contains('out_of_range') ||
       normalized.contains('out of range');
 }
-

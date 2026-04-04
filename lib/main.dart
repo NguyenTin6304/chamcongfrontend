@@ -3,13 +3,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_colors.dart';
-import 'features/admin/presentation/admin_extra_screens.dart' as legacy_admin;
-import 'features/admin/presentation/attendance_logs/attendance_logs_screen.dart';
-import 'features/admin/presentation/dashboard/dashboard_screen.dart';
-import 'features/admin/presentation/employees/employees_screen.dart';
-import 'features/admin/presentation/geofences/geofences_screen.dart';
-import 'features/admin/presentation/groups/groups_screen.dart';
-import 'features/admin/presentation/reports/reports_screen.dart';
+import 'features/admin/presentation/shell/admin_shell_page.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
@@ -86,28 +80,28 @@ class MainApp extends StatelessWidget {
         page = const ResetPasswordPage();
         break;
       case '/admin':
-        page = DashboardScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'dashboard');
         break;
       case '/admin/attendance':
-        page = AttendanceLogsScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'logs');
         break;
       case '/admin/employees':
-        page = EmployeesScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'employees');
         break;
       case '/admin/groups':
-        page = GroupsScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'groups');
         break;
       case '/admin/geofences':
-        page = GeofencesScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'geofences');
         break;
       case '/admin/reports':
-        page = ReportsScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'reports');
         break;
       case '/admin/exceptions':
-        page = legacy_admin.ExceptionsScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'exceptions');
         break;
       case '/admin/settings':
-        page = legacy_admin.SettingsScreen(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'settings');
         break;
       case '/home':
         page = HomePage(email: _extractEmailArg(settings));

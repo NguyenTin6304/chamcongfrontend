@@ -126,18 +126,6 @@ extension _AttendanceFilterBarX on _AdminPageState {
               ),
             ),
           ),
-          OutlinedButton.icon(
-            onPressed: _loadingDashboardLogs
-                ? null
-                : () {
-                    setState(() {
-                      _logsPage = 1;
-                    });
-                    _refreshLogsOnly();
-                  },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Làm mới'),
-          ),
           ElevatedButton.icon(
             onPressed: _exportingDashboardCsv ? null : _exportAttendanceLogsCsv,
             style: ElevatedButton.styleFrom(
