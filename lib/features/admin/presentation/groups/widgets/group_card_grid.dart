@@ -1,13 +1,14 @@
-part of '../../admin_page.dart';
+// ignore_for_file: invalid_use_of_protected_member
 
-extension _GroupCardGridX on _AdminPageState {
+part of '../groups_tab.dart';
+
+extension _GroupCardGridX on _GroupsTabState {
   Widget _buildGroupsPageExtracted() {
-    final totalGroups = _dashboardGroups.length;
+    final totalGroups = _groups.length;
     final totalEmployees = _employees.length;
     final unassigned = _unassignedGroupCount;
 
     return Column(
-      key: _groupsSectionKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
@@ -18,39 +19,39 @@ extension _GroupCardGridX on _AdminPageState {
               width: 250,
               child: KpiCard(
                 label: 'Tổng nhóm',
-                value: _loadingDashboardGroups
+                value: _loadingGroups
                     ? '--'
                     : _formatThousands(totalGroups),
                 icon: Icons.groups_2_outlined,
                 iconColor: AppColors.primary,
                 valueColor: AppColors.primary,
-                loading: _loadingDashboardGroups,
+                loading: _loadingGroups,
               ),
             ),
             SizedBox(
               width: 250,
               child: KpiCard(
                 label: 'Tổng nhân viên',
-                value: _loadingDashboardGroups
+                value: _loadingGroups
                     ? '--'
                     : _formatThousands(totalEmployees),
                 icon: Icons.people_outline,
                 iconColor: AppColors.success,
                 valueColor: AppColors.success,
-                loading: _loadingDashboardGroups,
+                loading: _loadingGroups,
               ),
             ),
             SizedBox(
               width: 250,
               child: KpiCard(
                 label: 'Chưa phân công',
-                value: _loadingDashboardGroups
+                value: _loadingGroups
                     ? '--'
                     : _formatThousands(unassigned),
                 icon: Icons.warning_amber_outlined,
                 iconColor: AppColors.warning,
                 valueColor: AppColors.warning,
-                loading: _loadingDashboardGroups,
+                loading: _loadingGroups,
               ),
             ),
           ],
@@ -154,7 +155,7 @@ extension _GroupCardGridX on _AdminPageState {
 
   Widget _buildGroupsGridCardExtracted() {
     final groups = _groupsView;
-    if (_loadingDashboardGroups) {
+    if (_loadingGroups) {
       return GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),

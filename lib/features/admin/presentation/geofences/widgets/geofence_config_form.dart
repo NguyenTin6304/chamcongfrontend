@@ -1,6 +1,8 @@
-part of '../../admin_page.dart';
+// ignore_for_file: invalid_use_of_protected_member
 
-extension _GeofenceConfigFormX on _AdminPageState {
+part of '../geofences_tab.dart';
+
+extension _GeofenceConfigFormX on _GeofencesTabState {
   Widget _buildGeofenceConfigFormExtracted(DashboardGeofenceItem selected) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -8,7 +10,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Cấu hình: ${selected.name}',
+            'Cau hinh: ${selected.name}',
             style: const TextStyle(
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
@@ -17,7 +19,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
           const SizedBox(height: 12),
           TextField(
             controller: _zoneNameController,
-            decoration: _decoration('Tên *', Icons.place_outlined),
+            decoration: _decoration('Ten *', Icons.place_outlined),
           ),
           const SizedBox(height: 10),
           Row(
@@ -26,7 +28,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
                 child: TextField(
                   controller: _zoneLatController,
                   readOnly: true,
-                  decoration: _decoration('Vĩ độ', Icons.my_location_outlined),
+                  decoration: _decoration('Vi do', Icons.my_location_outlined),
                 ),
               ),
               const SizedBox(width: 8),
@@ -34,7 +36,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
                 child: TextField(
                   controller: _zoneLngController,
                   readOnly: true,
-                  decoration: _decoration('Kinh độ', Icons.explore_outlined),
+                  decoration: _decoration('Kinh do', Icons.explore_outlined),
                 ),
               ),
             ],
@@ -44,7 +46,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
             controller: _zoneRadiusController,
             keyboardType: TextInputType.number,
             decoration: _decoration(
-              'Bán kính (m)',
+              'Ban kinh (m)',
               Icons.radio_button_checked_outlined,
             ),
           ),
@@ -66,13 +68,11 @@ extension _GeofenceConfigFormX on _AdminPageState {
           TextField(
             controller: _zoneAddressController,
             decoration: InputDecoration(
-              labelText: 'Địa điểm',
+              labelText: 'Dia diem',
               prefixIcon: const Icon(Icons.place_outlined),
               suffixIcon: IconButton(
-                onPressed: _reversingGeofenceAddress
-                    ? null
-                    : _reverseZoneAddress,
-                icon: _reversingGeofenceAddress
+                onPressed: _reversingAddress ? null : _reverseZoneAddress,
+                icon: _reversingAddress
                     ? const SizedBox(
                         width: 14,
                         height: 14,
@@ -92,7 +92,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
                 child: OutlinedButton.icon(
                   onPressed: () => _pickZoneTime(_zoneStartTimeController),
                   icon: const Icon(Icons.login_outlined, size: 16),
-                  label: Text('Giờ vào ${_zoneStartTimeController.text}'),
+                  label: Text('Gio vao ${_zoneStartTimeController.text}'),
                 ),
               ),
               const SizedBox(width: 8),
@@ -100,7 +100,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
                 child: OutlinedButton.icon(
                   onPressed: () => _pickZoneTime(_zoneEndTimeController),
                   icon: const Icon(Icons.logout_outlined, size: 16),
-                  label: Text('Giờ ra ${_zoneEndTimeController.text}'),
+                  label: Text('Gio ra ${_zoneEndTimeController.text}'),
                 ),
               ),
             ],
@@ -120,11 +120,11 @@ extension _GeofenceConfigFormX on _AdminPageState {
             OutlinedButton.icon(
               onPressed: () => _pickZoneTime(_zoneOvertimeStartController),
               icon: const Icon(Icons.nightlight_outlined, size: 16),
-              label: Text('Bắt đầu OT ${_zoneOvertimeStartController.text}'),
+              label: Text('Bat dau OT ${_zoneOvertimeStartController.text}'),
             ),
           const SizedBox(height: 10),
           const Text(
-            'Nhóm được gán',
+            'Nhom duoc gan',
             style: TextStyle(
               fontSize: 13,
               color: AppColors.textMuted,
@@ -135,7 +135,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _dashboardGroups
+            children: _groups
                 .map((group) {
                   return FilterChip(
                     label: Text(group.name),
@@ -159,7 +159,7 @@ extension _GeofenceConfigFormX on _AdminPageState {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _zoneActive,
-            title: const Text('Trạng thái hoạt động'),
+            title: const Text('Trang thai hoat dong'),
             onChanged: (value) {
               setState(() {
                 _zoneActive = value;

@@ -1,6 +1,6 @@
-part of '../../admin_page.dart';
+part of '../groups_tab.dart';
 
-extension _GroupCardX on _AdminPageState {
+extension _GroupCardX on _GroupsTabState {
   Widget _buildGroupCardExtracted(GroupLite group, int index) {
     final members = _employees
         .where((employee) => employee.groupId == group.id)
@@ -153,17 +153,7 @@ extension _GroupCardX on _AdminPageState {
                   ),
                 const Spacer(),
                 TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _employeesGroupId = group.id;
-                      _employeesStatus = 'all';
-                    });
-                    _employeesPaginationNotifier.value = (
-                      page: 1,
-                      pageSize: _employeesPageSize,
-                    );
-                    _switchNav(_AdminShellNav.employees);
-                  },
+                  onPressed: () => widget.onNavigateTo('employees'),
                   child: const Text('QUẢN LÝ'),
                 ),
               ],

@@ -1,11 +1,13 @@
-part of '../../admin_page.dart';
+// ignore_for_file: invalid_use_of_protected_member
 
-extension _GeofenceMapX on _AdminPageState {
+part of '../geofences_tab.dart';
+
+extension _GeofenceMapX on _GeofencesTabState {
   Widget _buildGeofencesPageExtracted() {
-    final total = _dashboardGeofences.length;
-    final active = _dashboardGeofences.where((e) => e.active).length;
-    final noSignal = _dashboardGeofences.where((e) => !e.active).length;
-    final totalMembers = _dashboardGeofences.fold<int>(
+    final total = _geofences.length;
+    final active = _geofences.where((e) => e.active).length;
+    final noSignal = _geofences.where((e) => !e.active).length;
+    final totalMembers = _geofences.fold<int>(
       0,
       (sum, item) => sum + item.memberCount,
     );
@@ -20,52 +22,47 @@ extension _GeofenceMapX on _AdminPageState {
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Tổng vùng',
-                value: _loadingDashboardGeofences
-                    ? '--'
-                    : _formatThousands(total),
+                label: 'Tong vung',
+                value: _loadingGeofences ? '--' : _formatThousands(total),
                 icon: Icons.map_outlined,
                 iconColor: AppColors.primary,
                 valueColor: AppColors.primary,
-                loading: _loadingDashboardGeofences,
+                loading: _loadingGeofences,
               ),
             ),
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Đang hoạt động',
-                value: _loadingDashboardGeofences
-                    ? '--'
-                    : _formatThousands(active),
+                label: 'Dang hoat dong',
+                value: _loadingGeofences ? '--' : _formatThousands(active),
                 icon: Icons.check_circle_outline,
                 iconColor: AppColors.success,
                 valueColor: AppColors.success,
-                loading: _loadingDashboardGeofences,
+                loading: _loadingGeofences,
               ),
             ),
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Không tín hiệu',
-                value: _loadingDashboardGeofences
-                    ? '--'
-                    : _formatThousands(noSignal),
+                label: 'Khong tin hieu',
+                value: _loadingGeofences ? '--' : _formatThousands(noSignal),
                 icon: Icons.wifi_off_outlined,
                 iconColor: AppColors.warning,
                 valueColor: AppColors.warning,
-                loading: _loadingDashboardGeofences,
+                loading: _loadingGeofences,
               ),
             ),
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Tổng nhân viên',
-                value: _loadingDashboardGeofences
+                label: 'Tong nhan vien',
+                value: _loadingGeofences
                     ? '--'
                     : _formatThousands(totalMembers),
                 icon: Icons.people_outline,
                 iconColor: AppColors.overtime,
-                loading: _loadingDashboardGeofences,
+                valueColor: AppColors.overtime,
+                loading: _loadingGeofences,
               ),
             ),
           ],
@@ -96,14 +93,13 @@ extension _GeofenceMapX on _AdminPageState {
     );
   }
 
-  // ── Geofence layer cache ────────────────────────────────────────────────
   void _ensureGeofenceLayers() {
     if (_cachedGeofenceCircles != null &&
-        identical(_cachedGeofenceListRef, _dashboardGeofences) &&
+        identical(_cachedGeofenceListRef, _geofences) &&
         _cachedGeofenceSelectedId == _selectedGeofence?.id) {
       return;
     }
-    final visible = _dashboardGeofences
+    final visible = _geofences
         .where((e) => e.latitude != null && e.longitude != null)
         .toList(growable: false);
     _cachedGeofenceCircles = visible.asMap().entries.map((entry) {
@@ -137,7 +133,7 @@ extension _GeofenceMapX on _AdminPageState {
         ),
       );
     }).toList(growable: false);
-    _cachedGeofenceListRef = _dashboardGeofences;
+    _cachedGeofenceListRef = _geofences;
     _cachedGeofenceSelectedId = _selectedGeofence?.id;
   }
 
@@ -150,7 +146,6 @@ extension _GeofenceMapX on _AdminPageState {
     _ensureGeofenceLayers();
     return _cachedGeofenceMarkers!;
   }
-  // ─────────────────────────────────────────────────────────────────────────
 
   Widget _buildGeofenceMapCardExtracted() {
     final tileUrl =
@@ -177,12 +172,12 @@ extension _GeofenceMapX on _AdminPageState {
                   onSubmitted: _searchGeofencePlaces,
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Tìm địa điểm...',
+                    hintText: 'Tim dia diem...',
                     prefixIcon: const Icon(Icons.search, size: 18),
                     suffixIcon: IconButton(
                       onPressed: () =>
                           _searchGeofencePlaces(_geofenceSearchController.text),
-                      icon: _searchingGeofencePlaces
+                      icon: _searchingPlaces
                           ? const SizedBox(
                               width: 14,
                               height: 14,
@@ -212,7 +207,7 @@ extension _GeofenceMapX on _AdminPageState {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
-                  'Chạm bản đồ để đặt điểm mới',
+                  'Cham ban do de dat diem moi',
                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ),
@@ -235,7 +230,7 @@ extension _GeofenceMapX on _AdminPageState {
               ),
             ],
           ),
-          if (_geofencePlaceSuggestions.isNotEmpty) ...[
+          if (_placeSuggestions.isNotEmpty) ...[
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
@@ -247,9 +242,9 @@ extension _GeofenceMapX on _AdminPageState {
               ),
               child: ListView.builder(
                 shrinkWrap: true,
-                itemCount: _geofencePlaceSuggestions.length,
+                itemCount: _placeSuggestions.length,
                 itemBuilder: (context, index) {
-                  final item = _geofencePlaceSuggestions[index];
+                  final item = _placeSuggestions[index];
                   return ListTile(
                     dense: true,
                     title: Text(
@@ -259,7 +254,7 @@ extension _GeofenceMapX on _AdminPageState {
                     ),
                     onTap: () {
                       setState(() {
-                        _geofencePlaceSuggestions = const [];
+                        _placeSuggestions = const [];
                         _zoneLatController.text = item.latitude.toStringAsFixed(
                           6,
                         );
@@ -351,14 +346,14 @@ extension _GeofenceMapX on _AdminPageState {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Thành viên: ${_formatThousands(selected.memberCount)}',
+                              'Thanh vien: ${_formatThousands(selected.memberCount)}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textMuted,
                               ),
                             ),
                             Text(
-                              'Đang hiện diện: ${_formatThousands(selected.presentCount ?? 0)}',
+                              'Dang hien dien: ${_formatThousands(selected.presentCount ?? 0)}',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textMuted,
@@ -368,9 +363,8 @@ extension _GeofenceMapX on _AdminPageState {
                             Row(
                               children: [
                                 OutlinedButton(
-                                  onPressed: () =>
-                                      _onShellNavTap(_AdminShellNav.logs),
-                                  child: const Text('Nhật ký'),
+                                  onPressed: () => widget.onNavigateTo('logs'),
+                                  child: const Text('Nhat ky'),
                                 ),
                                 const SizedBox(width: 8),
                                 ElevatedButton(
@@ -379,7 +373,7 @@ extension _GeofenceMapX on _AdminPageState {
                                     backgroundColor: AppColors.primary,
                                     foregroundColor: Colors.white,
                                   ),
-                                  child: const Text('Chỉnh sửa'),
+                                  child: const Text('Chinh sua'),
                                 ),
                               ],
                             ),

@@ -1,6 +1,6 @@
-part of '../../admin_page.dart';
+part of '../groups_tab.dart';
 
-extension _UnassignedPanelX on _AdminPageState {
+extension _UnassignedPanelX on _GroupsTabState {
   Widget _buildUnassignedGroupPanelExtracted() {
     final employees = _unassignedGroupEmployees;
     return Container(
@@ -89,7 +89,7 @@ extension _UnassignedPanelX on _AdminPageState {
                                   value: null,
                                   child: Text('Chưa chọn'),
                                 ),
-                                ..._dashboardGroups.map(
+                                ..._groups.map(
                                   (group) => DropdownMenuItem<int?>(
                                     value: group.id,
                                     child: Text(group.name),
@@ -109,17 +109,7 @@ extension _UnassignedPanelX on _AdminPageState {
             if (employees.length > 4) ...[
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    _employeesGroupId = null;
-                    _employeesStatus = 'all';
-                  });
-                  _employeesPaginationNotifier.value = (
-                    page: 1,
-                    pageSize: _employeesPageSize,
-                  );
-                  _switchNav(_AdminShellNav.employees);
-                },
+                onPressed: () => widget.onNavigateTo('employees'),
                 child: Text(
                   'Xem thêm ${employees.length - 4} người khác...',
                   style: const TextStyle(color: AppColors.primary),

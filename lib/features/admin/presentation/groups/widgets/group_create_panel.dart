@@ -1,6 +1,8 @@
-part of '../../admin_page.dart';
+// ignore_for_file: invalid_use_of_protected_member
 
-extension _GroupCreatePanelX on _AdminPageState {
+part of '../groups_tab.dart';
+
+extension _GroupCreatePanelX on _GroupsTabState {
   Future<void> _showGroupEditorPanelExtracted({GroupLite? group}) async {
     final isEdit = group != null;
     final nameController = TextEditingController(text: group?.name ?? '');
@@ -31,7 +33,7 @@ extension _GroupCreatePanelX on _AdminPageState {
       barrierLabel: 'group-editor',
       barrierColor: Colors.black.withValues(alpha: 0.24),
       transitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (_, __, ___) {
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return Align(
           alignment: Alignment.centerRight,
           child: StatefulBuilder(
@@ -74,7 +76,7 @@ extension _GroupCreatePanelX on _AdminPageState {
                 });
                 try {
                   if (isEdit) {
-                    await _adminApi.updateGroup(
+                    final updated = await _api.updateGroup(
                       token: token,
                       groupId: group.id,
                       name: name,
@@ -86,8 +88,16 @@ extension _GroupCreatePanelX on _AdminPageState {
                       checkoutGraceMinutes: checkoutMinutes,
                       clearCheckoutGraceMinutes: !autoCheckout,
                     );
+                    AdminDataCache.instance.upsertGroup(updated);
+                    if (mounted) {
+                      setState(() {
+                        _groups = _groups
+                            .map((item) => item.id == updated.id ? updated : item)
+                            .toList(growable: false);
+                      });
+                    }
                   } else {
-                    await _adminApi.createGroup(
+                    final created = await _api.createGroup(
                       token: token,
                       code: code,
                       name: name,
@@ -97,11 +107,17 @@ extension _GroupCreatePanelX on _AdminPageState {
                       graceMinutes: grace,
                       checkoutGraceMinutes: checkoutMinutes,
                     );
+                    AdminDataCache.instance.upsertGroup(created);
+                    if (mounted) {
+                      setState(() {
+                        _groups = [created, ..._groups];
+                      });
+                    }
                   }
                   if (!mounted || !context.mounted) {
                     return;
                   }
-                  await _refreshGroupsOnly();
+                  await _loadGroupGeofenceCards();
                   _showSnack(isEdit ? 'Đã cập nhật nhóm.' : 'Đã tạo nhóm mới.');
                   if (!context.mounted) {
                     return;
@@ -200,7 +216,7 @@ extension _GroupCreatePanelX on _AdminPageState {
                                     value: null,
                                     child: Text('Chưa chọn vùng'),
                                   ),
-                                  ..._dashboardGeofences.map(
+                                  ..._geofenceOptions.map(
                                     (item) => DropdownMenuItem<int?>(
                                       value: item.id,
                                       child: Text(item.name),

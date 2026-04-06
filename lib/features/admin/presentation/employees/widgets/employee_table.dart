@@ -1,8 +1,7 @@
-part of '../../admin_page.dart';
+part of '../employees_tab.dart';
 
-extension _EmployeeTableX on _AdminPageState {
-  Widget _buildEmployeeTableCardExtracted() {
-
+extension _EmployeeTableX on _EmployeesTabState {
+  Widget _buildEmployeesTableCard() {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -41,173 +40,178 @@ extension _EmployeeTableX on _AdminPageState {
                 builder: (context, pagination, _) {
                   final allRows = _employeesView;
                   final start = (pagination.page - 1) * pagination.pageSize;
-                  final end = (start + pagination.pageSize).clamp(0, allRows.length);
+                  final end = (start + pagination.pageSize).clamp(
+                    0,
+                    allRows.length,
+                  );
                   final rows = start < allRows.length
                       ? allRows.sublist(start, end)
                       : const <EmployeeLite>[];
                   final startIndex = start;
                   return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
-                  headingTextStyle: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.04,
-                  ),
-                  columns: const [
-                    DataColumn(label: Text('STT')),
-                    DataColumn(label: Text('NH\u00c2N VI\u00caN')),
-                    DataColumn(label: Text('M\u00c3 NV')),
-                    DataColumn(label: Text('PH\u00d2NG BAN')),
-                    DataColumn(label: Text('NH\u00d3M')),
-                    DataColumn(label: Text('S\u1ed0 \u0110I\u1ec6N THO\u1ea0I')),
-                    DataColumn(label: Text('TR\u1ea0NG TH\u00c1I')),
-                    DataColumn(label: Text('THAO T\u00c1C')),
-                  ],
-                  rows: rows
-                      .asMap()
-                      .entries
-                      .map((entry) {
-                        final employee = entry.value;
-                        final active = _isEmployeeActive(employee);
-                        final stt = startIndex + entry.key + 1;
-                        final statusText = active
-                            ? 'Hoạt động'
-                            : 'Không hoạt động';
-                        final statusBg = active
-                            ? AppColors.employeeActiveBg
-                            : AppColors.employeeInactiveBg;
-                        final statusFg = active
-                            ? AppColors.employeeActiveText
-                            : AppColors.employeeInactiveText;
-                        return DataRow(
-                          cells: [
-                            DataCell(Text('$stt')),
-                            DataCell(
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    radius: 14,
-                                    backgroundColor: AppColors.bgPage,
-                                    child: Text(
-                                      employee.fullName.trim().isEmpty
-                                          ? 'N'
-                                          : employee.fullName
-                                                .trim()[0]
-                                                .toUpperCase(),
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
+                      headingTextStyle: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                        letterSpacing: 0.04,
+                      ),
+                      columns: const [
+                        DataColumn(label: Text('STT')),
+                        DataColumn(label: Text('NHÂN VIÊN')),
+                        DataColumn(label: Text('MÃ NV')),
+                        DataColumn(label: Text('PHÒNG BAN')),
+                        DataColumn(label: Text('NHÓM')),
+                        DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
+                        DataColumn(label: Text('TRẠNG THÁI')),
+                        DataColumn(label: Text('THAO TÁC')),
+                      ],
+                      rows: rows
+                          .asMap()
+                          .entries
+                          .map((entry) {
+                            final employee = entry.value;
+                            final active = _isEmployeeActive(employee);
+                            final stt = startIndex + entry.key + 1;
+                            final statusText = active
+                                ? 'Hoạt động'
+                                : 'Không hoạt động';
+                            final statusBg = active
+                                ? AppColors.employeeActiveBg
+                                : AppColors.employeeInactiveBg;
+                            final statusFg = active
+                                ? AppColors.employeeActiveText
+                                : AppColors.employeeInactiveText;
+                            return DataRow(
+                              cells: [
+                                DataCell(Text('$stt')),
+                                DataCell(
+                                  Row(
                                     children: [
-                                      Text(employee.fullName),
-                                      Text(
-                                        employee.email ??
-                                            _userEmailById(employee.userId),
-                                        style: const TextStyle(
-                                          color: AppColors.textMuted,
-                                          fontSize: 12,
+                                      CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: AppColors.bgPage,
+                                        child: Text(
+                                          employee.fullName.trim().isEmpty
+                                              ? 'N'
+                                              : employee.fullName
+                                                    .trim()[0]
+                                                    .toUpperCase(),
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textMuted,
+                                          ),
                                         ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(employee.fullName),
+                                          Text(
+                                            employee.email ??
+                                                _userEmailById(employee.userId),
+                                            style: const TextStyle(
+                                              color: AppColors.textMuted,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                ],
-                              ),
-                            ),
-                            DataCell(Text(employee.code)),
-                            DataCell(
-                              Text(
-                                employee.departmentName ??
-                                    _employeeGroupName(employee),
-                              ),
-                            ),
-                            DataCell(Text(_employeeGroupName(employee))),
-                            DataCell(Text(employee.phone ?? '--')),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: statusBg,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  statusText,
-                                  style: TextStyle(
-                                    color: statusFg,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                DataCell(Text(employee.code)),
+                                DataCell(
+                                  Text(
+                                    employee.departmentName ??
+                                        _employeeGroupName(employee),
                                   ),
                                 ),
-                              ),
-                            ),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    onPressed: () =>
-                                        _showEmployeeEditPanel(employee),
-                                    icon: const Icon(
-                                      Icons.edit_outlined,
-                                      color: AppColors.primary,
-                                      size: 18,
+                                DataCell(Text(_employeeGroupName(employee))),
+                                DataCell(Text(employee.phone ?? '--')),
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: statusBg,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      statusText,
+                                      style: TextStyle(
+                                        color: statusFg,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
-                                  IconButton(
-                                    onPressed: () =>
-                                        _showEmployeeDetail(employee),
-                                    icon: const Icon(
-                                      Icons.remove_red_eye_outlined,
-                                      color: AppColors.textMuted,
-                                      size: 18,
-                                    ),
-                                  ),
-                                  Builder(
-                                    builder: (context) {
-                                      return IconButton(
-                                        onPressed: () async {
-                                          final box =
-                                              context.findRenderObject()
-                                                  as RenderBox?;
-                                          if (box == null) {
-                                            return;
-                                          }
-                                          final offset = box.localToGlobal(
-                                            Offset.zero,
-                                          );
-                                          await _showEmployeesActionMenu(
-                                            employee,
-                                            offset + Offset(0, box.size.height),
-                                          );
-                                        },
+                                ),
+                                DataCell(
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        onPressed: () =>
+                                            _showEmployeeEditPanel(employee),
                                         icon: const Icon(
-                                          Icons.more_vert,
+                                          Icons.edit_outlined,
+                                          color: AppColors.primary,
                                           size: 18,
                                         ),
-                                      );
-                                    },
+                                      ),
+                                      IconButton(
+                                        onPressed: () =>
+                                            _showEmployeeDetail(employee),
+                                        icon: const Icon(
+                                          Icons.remove_red_eye_outlined,
+                                          color: AppColors.textMuted,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      Builder(
+                                        builder: (context) {
+                                          return IconButton(
+                                            onPressed: () async {
+                                              final box =
+                                                  context.findRenderObject()
+                                                      as RenderBox?;
+                                              if (box == null) {
+                                                return;
+                                              }
+                                              final offset = box.localToGlobal(
+                                                Offset.zero,
+                                              );
+                                              await _showEmployeesActionMenu(
+                                                employee,
+                                                offset +
+                                                    Offset(0, box.size.height),
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.more_vert,
+                                              size: 18,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      })
-                      .toList(growable: false),
-                ),
-              );
+                                ),
+                              ],
+                            );
+                          })
+                          .toList(growable: false),
+                    ),
+                  );
                 },
               ),
             const SizedBox(height: 12),
@@ -218,7 +222,7 @@ extension _EmployeeTableX on _AdminPageState {
     );
   }
 
-  Widget _buildEmployeeTableSkeletonExtracted() {
+  Widget _buildEmployeesTableSkeleton() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
@@ -233,7 +237,7 @@ extension _EmployeeTableX on _AdminPageState {
           DataColumn(label: Text('STT')),
           DataColumn(label: Text('NHÂN VIÊN')),
           DataColumn(label: Text('MÃ NV')),
-          DataColumn(label: Text('PHÒNG BAN')),
+          DataColumn(label: Text('PHÒNG BAN')),
           DataColumn(label: Text('NHÓM')),
           DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
           DataColumn(label: Text('TRẠNG THÁI')),
@@ -258,7 +262,7 @@ extension _EmployeeTableX on _AdminPageState {
     );
   }
 
-  Widget _buildEmployeesPaginationExtracted() {
+  Widget _buildEmployeesPagination() {
     return ValueListenableBuilder<({int page, int pageSize})>(
       valueListenable: _employeesPaginationNotifier,
       builder: (context, pagination, _) {
@@ -283,13 +287,13 @@ extension _EmployeeTableX on _AdminPageState {
         return Row(
           children: [
             Text(
-              'Hi\u1ec3n th\u1ecb $start-$end trong $total b\u1ea3n ghi',
+              'Hiển thị $start-$end trong $total bản ghi',
               style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
             const Spacer(),
             OutlinedButton(
               onPressed: page > 1 ? () => setPage(page - 1) : null,
-              child: const Text('Tr\u01b0\u1edbc'),
+              child: const Text('Trước'),
             ),
             const SizedBox(width: 6),
             ...pageNums.map((p) {
@@ -330,7 +334,9 @@ extension _EmployeeTableX on _AdminPageState {
                 DropdownMenuItem(value: 50, child: Text('50/trang')),
               ],
               onChanged: (value) {
-                if (value == null) return;
+                if (value == null) {
+                  return;
+                }
                 _employeesPaginationNotifier.value = (page: 1, pageSize: value);
               },
             ),

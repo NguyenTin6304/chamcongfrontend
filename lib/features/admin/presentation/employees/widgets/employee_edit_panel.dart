@@ -1,6 +1,8 @@
-part of '../../admin_page.dart';
+// ignore_for_file: invalid_use_of_protected_member
 
-extension _EmployeeEditPanelX on _AdminPageState {
+part of '../employees_tab.dart';
+
+extension _EmployeeEditPanelX on _EmployeesTabState {
   Future<void> _showEmployeeDetailDialog(EmployeeLite employee) async {
     await showDialog<void>(
       context: context,
@@ -22,9 +24,7 @@ extension _EmployeeEditPanelX on _AdminPageState {
                 ),
                 const SizedBox(height: 8),
                 Text('Mã nhân viên: ${employee.code}'),
-                Text(
-                  'Email: ${employee.email ?? _userEmailById(employee.userId)}',
-                ),
+                Text('Email: ${employee.email ?? _userEmailById(employee.userId)}'),
                 Text('Số điện thoại: ${employee.phone ?? '--'}'),
                 Text(
                   'Phòng ban: ${employee.departmentName ?? _employeeGroupName(employee)}',
@@ -57,7 +57,7 @@ extension _EmployeeEditPanelX on _AdminPageState {
       text: employee.departmentName ?? _employeeGroupName(employee),
     );
     final users = _users;
-    final groups = _dashboardGroups;
+    final groups = _groups;
 
     var selectedGroupId = employee.groupId;
     if (selectedGroupId != null &&
@@ -81,7 +81,7 @@ extension _EmployeeEditPanelX on _AdminPageState {
       barrierLabel: 'employee-editor',
       barrierColor: Colors.black.withValues(alpha: 0.25),
       transitionDuration: const Duration(milliseconds: 220),
-      pageBuilder: (_, anim1, anim2) {
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return Align(
           alignment: Alignment.centerRight,
           child: StatefulBuilder(
@@ -102,11 +102,9 @@ extension _EmployeeEditPanelX on _AdminPageState {
                 setPanelState(() {
                   saving = true;
                 });
-                // Capture navigator before async gap — context may be stale
-                // after await if the dialog was dismissed via barrier tap.
                 final nav = Navigator.of(context);
                 try {
-                  final updated = await _adminApi.patchEmployee(
+                  final updated = await _api.patchEmployee(
                     token: token,
                     employeeId: employee.id,
                     fullName: fullNameController.text.trim(),
@@ -116,22 +114,16 @@ extension _EmployeeEditPanelX on _AdminPageState {
                   if (!mounted) {
                     return;
                   }
-                  // Update parent list before closing.
+                  AdminDataCache.instance.upsertEmployee(updated);
                   setState(() {
                     _employees = _employees
                         .map((e) => e.id == updated.id ? updated : e)
                         .toList(growable: false);
+                    _selectedUserByEmployee[updated.id] = updated.userId;
                   });
-                  // Pop first — do NOT call setPanelState here. Calling
-                  // setPanelState after parent setState schedules two
-                  // concurrent rebuilds that can leave InheritedElement
-                  // _dependents in an inconsistent state and trigger the
-                  // _dependents.isEmpty assertion.
                   nav.pop();
-                  // Snack shown after pop; _showSnack uses parent context.
                   _showSnack('Đã lưu thay đổi nhân viên.');
                 } catch (_) {
-                  // Only touch dialog state if it is still in the tree.
                   if (!mounted) {
                     return;
                   }
@@ -213,18 +205,14 @@ extension _EmployeeEditPanelX on _AdminPageState {
                                     'Tải ảnh đại diện sẽ cập nhật ở bước sau.',
                                   ),
                                   icon: const Icon(Icons.upload_outlined),
-                                  label: const Text(
-                                    'Tải ảnh đại diện',
-                                  ),
+                                  label: const Text('Tải ảnh đại diện'),
                                 ),
                               ),
                               const SizedBox(height: 6),
                               TextField(
                                 controller: fullNameController,
-                                decoration: _decoration(
-                                  'Họ tên *',
-                                  Icons.person_outline,
-                                ),
+                                decoration:
+                                    _decoration('Họ và tên', Icons.person_outline),
                               ),
                               const SizedBox(height: 10),
                               TextField(
@@ -238,10 +226,8 @@ extension _EmployeeEditPanelX on _AdminPageState {
                               const SizedBox(height: 10),
                               TextField(
                                 controller: emailController,
-                                decoration: _decoration(
-                                  'Email *',
-                                  Icons.email_outlined,
-                                ),
+                                decoration:
+                                    _decoration('Email', Icons.email_outlined),
                               ),
                               const SizedBox(height: 10),
                               TextField(
@@ -263,7 +249,7 @@ extension _EmployeeEditPanelX on _AdminPageState {
                               DropdownButtonFormField<int?>(
                                 initialValue: selectedGroupId,
                                 decoration: _decoration(
-                                  'Nhóm *',
+                                  'Nhóm',
                                   Icons.groups_2_outlined,
                                 ),
                                 items: [
@@ -310,18 +296,13 @@ extension _EmployeeEditPanelX on _AdminPageState {
                                   });
                                 },
                               ),
-                              
                               const SizedBox(height: 10),
                               SwitchListTile(
                                 value: active,
                                 contentPadding: EdgeInsets.zero,
-                                title: const Text(
-                                  'Trạng thái hoạt động',
-                                ),
+                                title: const Text('Trạng thái hoạt động'),
                                 subtitle: Text(
-                                  active
-                                      ? 'Hoạt động'
-                                      : 'Không hoạt động',
+                                  active ? 'Hoạt động' : 'Không hoạt động',
                                 ),
                                 onChanged: (value) {
                                   setPanelState(() {
@@ -393,6 +374,7 @@ extension _EmployeeEditPanelX on _AdminPageState {
         return SlideTransition(position: offset, child: child);
       },
     );
+
     fullNameController.dispose();
     codeController.dispose();
     emailController.dispose();

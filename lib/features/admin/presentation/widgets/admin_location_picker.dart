@@ -389,7 +389,8 @@ class _AdminLocationPickerState extends State<AdminLocationPicker> {
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: _suggestions.length,
-              separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+              separatorBuilder: (context, index) =>
+                  Divider(height: 1, color: Colors.grey.shade200),
               itemBuilder: (_, index) {
                 final item = _suggestions[index];
                 final subtitle = [item.city, item.country]
