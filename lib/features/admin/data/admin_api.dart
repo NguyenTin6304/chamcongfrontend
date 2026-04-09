@@ -133,6 +133,15 @@ class AttendanceExceptionItem {
     this.resolvedAt,
     this.resolvedBy,
     this.resolvedByEmail,
+    this.detectedAt,
+    this.expiresAt,
+    this.employeeExplanation,
+    this.employeeSubmittedAt,
+    this.adminNote,
+    this.adminDecidedAt,
+    this.decidedByEmail,
+    this.canAdminDecide = false,
+    this.timeline = const <Map<String, dynamic>>[],
   });
 
   final int id;
@@ -152,6 +161,15 @@ class AttendanceExceptionItem {
   final DateTime? resolvedAt;
   final int? resolvedBy;
   final String? resolvedByEmail;
+  final DateTime? detectedAt;
+  final DateTime? expiresAt;
+  final String? employeeExplanation;
+  final DateTime? employeeSubmittedAt;
+  final String? adminNote;
+  final DateTime? adminDecidedAt;
+  final String? decidedByEmail;
+  final bool canAdminDecide;
+  final List<Map<String, dynamic>> timeline;
 }
 
 class DashboardSummaryResult {
@@ -897,6 +915,8 @@ class AdminApi {
     DateTime? toDate,
     int? employeeId,
     int? groupId,
+    String? status,
+    String? search,
     bool includeEmpty = false,
   }) async {
     final query = <String, String>{};
@@ -911,6 +931,12 @@ class AdminApi {
     }
     if (groupId != null) {
       query['group_id'] = groupId.toString();
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      query['status'] = status;
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      query['search'] = search.trim();
     }
     if (includeEmpty) {
       query['include_empty'] = 'true';
@@ -948,10 +974,13 @@ class AdminApi {
     DateTime? toDate,
     int? employeeId,
     int? groupId,
-    String exceptionType = 'MISSED_CHECKOUT',
+    String? exceptionType,
     String? statusFilter,
   }) async {
-    final query = <String, String>{'exception_type': exceptionType};
+    final query = <String, String>{};
+    if (exceptionType != null && exceptionType.isNotEmpty) {
+      query['exception_type'] = exceptionType;
+    }
     if (fromDate != null) {
       query['from'] = _formatDateOnly(fromDate);
     }
@@ -974,7 +1003,9 @@ class AdminApi {
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final data = _parseJsonList(response.body);
+      final data = _parseJsonListAny(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
       return data
           .whereType<Map<String, dynamic>>()
           .map(_attendanceExceptionFromMap)
@@ -986,6 +1017,115 @@ class AdminApi {
       _extractErrorMessage(
         data,
         'Load attendance exceptions failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> getAttendanceExceptionDetail({
+    required String token,
+    required int exceptionId,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId',
+    );
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+
+    if (response.statusCode == 200) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load attendance exception detail failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> approveAttendanceException({
+    required String token,
+    required int exceptionId,
+    String? adminNote,
+    DateTime? actualCheckoutTime,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/approve',
+    );
+    final body = <String, dynamic>{};
+    final note = adminNote?.trim();
+    if (note != null && note.isNotEmpty) {
+      body['admin_note'] = note;
+    }
+    if (actualCheckoutTime != null) {
+      body['actual_checkout_time'] = actualCheckoutTime.toUtc().toIso8601String();
+    }
+
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 204) {
+      return getAttendanceExceptionDetail(
+        token: token,
+        exceptionId: exceptionId,
+      );
+    }
+
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Approve attendance exception failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> rejectAttendanceException({
+    required String token,
+    required int exceptionId,
+    required String adminNote,
+  }) async {
+    final note = adminNote.trim();
+    if (note.isEmpty) {
+      throw ArgumentError('admin_note is required to reject exception');
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/reject',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(<String, dynamic>{'admin_note': note}),
+    );
+    if (response.statusCode == 204) {
+      return getAttendanceExceptionDetail(
+        token: token,
+        exceptionId: exceptionId,
+      );
+    }
+
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Reject attendance exception failed (${response.statusCode})',
       ),
     );
   }
@@ -1326,98 +1466,6 @@ class AdminApi {
     );
   }
 
-  Future<DashboardGeofenceItem> updateGeofence({
-    required String token,
-    required int geofenceId,
-    String? name,
-    double? latitude,
-    double? longitude,
-    int? radiusMeters,
-    bool? active,
-    String? startTime,
-    String? endTime,
-    bool? overtimeEnabled,
-    String? overtimeStartTime,
-    List<int>? groupIds,
-    String? address,
-  }) async {
-    final body = <String, dynamic>{};
-    if (name != null) {
-      body['name'] = name;
-    }
-    if (latitude != null) {
-      body['latitude'] = latitude;
-    }
-    if (longitude != null) {
-      body['longitude'] = longitude;
-    }
-    if (radiusMeters != null) {
-      body['radius_meters'] = radiusMeters;
-    }
-    if (active != null) {
-      body['active'] = active;
-    }
-    if (startTime != null) {
-      body['start_time'] = startTime;
-    }
-    if (endTime != null) {
-      body['end_time'] = endTime;
-    }
-    if (overtimeEnabled != null) {
-      body['overtime_enabled'] = overtimeEnabled;
-    }
-    if (overtimeStartTime != null) {
-      body['overtime_start_time'] = overtimeStartTime;
-    }
-    if (groupIds != null) {
-      body['group_ids'] = groupIds;
-    }
-    if (address != null) {
-      body['address'] = address;
-    }
-
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/geofence/$geofenceId');
-    final response = await http.patch(
-      uri,
-      headers: _authHeaders(token),
-      body: jsonEncode(body),
-    );
-
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
-    if (response.statusCode == 200) {
-      final payload = _extractPayloadMap(data);
-      return _dashboardGeofenceFromMap(payload);
-    }
-    throw Exception(
-      _extractErrorMessage(
-        data,
-        'Update geofence failed (${response.statusCode})',
-      ),
-    );
-  }
-
-  Future<void> deleteGeofence({
-    required String token,
-    required int geofenceId,
-  }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/geofence/$geofenceId');
-    final response = await http.delete(uri, headers: _authHeaders(token));
-    if (response.statusCode == 200 || response.statusCode == 204) {
-      return;
-    }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
-    throw Exception(
-      _extractErrorMessage(
-        data,
-        'Delete geofence failed (${response.statusCode})',
-      ),
-    );
-  }
-
   Future<List<GeoPlaceSuggestion>> searchGeoapifyPlaces({
     required String query,
     int limit = 6,
@@ -1484,14 +1532,12 @@ class AdminApi {
     if (AppConfig.geoapifyApiKey.trim().isEmpty) {
       return null;
     }
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/geocode/reverse').replace(
-      queryParameters: {
-        'lat': latitude.toString(),
-        'lon': longitude.toString(),
-        'apiKey': AppConfig.geoapifyApiKey,
-      },
-    );
-    final response = await http.get(uri, headers: _authHeaders(token));
+    final uri = Uri.https('api.geoapify.com', '/v1/geocode/reverse', {
+      'lat': latitude.toString(),
+      'lon': longitude.toString(),
+      'apiKey': AppConfig.geoapifyApiKey,
+    });
+    final response = await http.get(uri);
     if (response.statusCode != 200) {
       return null;
     }
@@ -1516,7 +1562,7 @@ class AdminApi {
 
   Future<List<DashboardExceptionItem>> listDashboardExceptions({
     required String token,
-    String status = 'pending',
+    String status = 'PENDING_ADMIN',
   }) async {
     final uri = Uri.parse(
       '${AppConfig.apiBaseUrl}/reports/exceptions',
@@ -1544,7 +1590,7 @@ class AdminApi {
                   e['exception_type'] as String? ??
                   '-',
               timeLabel: _toClockLabel(e['time'] ?? e['created_at']),
-              status: (e['status'] as String? ?? 'pending').toLowerCase(),
+              status: e['status']?.toString() ?? status,
             );
           })
           .toList(growable: false);
@@ -1556,50 +1602,6 @@ class AdminApi {
       _extractErrorMessage(
         data,
         'Load dashboard exceptions failed (${response.statusCode})',
-      ),
-    );
-  }
-
-  Future<void> approveDashboardException({
-    required String token,
-    required int exceptionId,
-  }) async {
-    final uri = Uri.parse(
-      '${AppConfig.apiBaseUrl}/attendance/exceptions/$exceptionId/approve',
-    );
-    final response = await http.patch(uri, headers: _authHeaders(token));
-    if (response.statusCode == 200 || response.statusCode == 204) {
-      return;
-    }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
-    throw Exception(
-      _extractErrorMessage(
-        data,
-        'Approve exception failed (${response.statusCode})',
-      ),
-    );
-  }
-
-  Future<void> rejectDashboardException({
-    required String token,
-    required int exceptionId,
-  }) async {
-    final uri = Uri.parse(
-      '${AppConfig.apiBaseUrl}/attendance/exceptions/$exceptionId/reject',
-    );
-    final response = await http.patch(uri, headers: _authHeaders(token));
-    if (response.statusCode == 200 || response.statusCode == 204) {
-      return;
-    }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
-    throw Exception(
-      _extractErrorMessage(
-        data,
-        'Reject exception failed (${response.statusCode})',
       ),
     );
   }
@@ -1729,6 +1731,8 @@ class AdminApi {
   AttendanceExceptionItem _attendanceExceptionFromMap(Map<String, dynamic> e) {
     final workDateRaw = e['work_date']?.toString() ?? '';
     final workDate = DateTime.tryParse(workDateRaw) ?? DateTime(1970, 1, 1);
+    final decidedByEmail = e['decided_by_email'] as String?;
+    final resolvedByEmail = e['resolved_by_email'] as String?;
     return AttendanceExceptionItem(
       id: _toInt(e['id']) ?? 0,
       employeeId: _toInt(e['employee_id']) ?? 0,
@@ -1738,15 +1742,24 @@ class AdminApi {
       groupName: e['group_name'] as String?,
       workDate: workDate,
       exceptionType: e['exception_type'] as String? ?? '-',
-      status: e['status'] as String? ?? '-',
+      status: e['status']?.toString() ?? '-',
       note: e['note'] as String?,
       sourceCheckinLogId: _toInt(e['source_checkin_log_id']) ?? 0,
       sourceCheckinTime: _toDateTime(e['source_checkin_time']),
       actualCheckoutTime: _toDateTime(e['actual_checkout_time']),
       createdAt: _toDateTime(e['created_at']),
-      resolvedAt: _toDateTime(e['resolved_at']),
+      resolvedAt: _toDateTime(e['resolved_at'] ?? e['admin_decided_at']),
       resolvedBy: _toInt(e['resolved_by']),
-      resolvedByEmail: e['resolved_by_email'] as String?,
+      resolvedByEmail: resolvedByEmail ?? decidedByEmail,
+      detectedAt: _toDateTime(e['detected_at']),
+      expiresAt: _toDateTime(e['expires_at']),
+      employeeExplanation: e['employee_explanation'] as String?,
+      employeeSubmittedAt: _toDateTime(e['employee_submitted_at']),
+      adminNote: e['admin_note'] as String?,
+      adminDecidedAt: _toDateTime(e['admin_decided_at']),
+      decidedByEmail: decidedByEmail,
+      canAdminDecide: _toBool(e['can_admin_decide']) ?? false,
+      timeline: _toMapList(e['timeline']),
     );
   }
 
@@ -1883,6 +1896,20 @@ class AdminApi {
       return null;
     }
     return DateTime.tryParse(value.toString());
+  }
+
+  List<Map<String, dynamic>> _toMapList(dynamic value) {
+    if (value is! List) {
+      return const <Map<String, dynamic>>[];
+    }
+    return value
+        .whereType<Map>()
+        .map(
+          (item) => item.map(
+            (key, value) => MapEntry(key.toString(), value),
+          ),
+        )
+        .toList(growable: false);
   }
 
   bool? _toBool(dynamic value) {

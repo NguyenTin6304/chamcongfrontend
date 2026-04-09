@@ -38,57 +38,54 @@ class _GeofencesTabState extends State<GeofencesTab> {
   bool _deletingGeofence = false;
 
   List<GroupLite> _groups = const [];
-  List<DashboardGeofenceItem> _geofences = const [];
-  DashboardGeofenceItem? _selectedGeofence;
+  int? _selectedGroupId;
+
+  List<GroupGeofenceLite> _geofences = const [];
+  GroupGeofenceLite? _editingGeofence;
+  bool _isCreating = false;
+
   LatLng? _newGeofencePoint;
   List<GeoPlaceSuggestion> _placeSuggestions = const [];
 
-  bool _zoneOvertimeEnabled = false;
-  bool _zoneActive = true;
-  final Set<int> _zoneAssignedGroupIds = {};
+  bool _formActive = true;
 
   final _geofenceSearchController = TextEditingController();
-  final _zoneNameController = TextEditingController();
-  final _zoneLatController = TextEditingController();
-  final _zoneLngController = TextEditingController();
-  final _zoneRadiusController = TextEditingController();
-  final _zoneAddressController = TextEditingController();
-  final _zoneStartTimeController = TextEditingController();
-  final _zoneEndTimeController = TextEditingController();
-  final _zoneOvertimeStartController = TextEditingController();
+  final _formNameController = TextEditingController();
+  final _formLatController = TextEditingController();
+  final _formLngController = TextEditingController();
+  final _formRadiusController = TextEditingController();
+  final _formAddressController = TextEditingController();
 
   final MapController _geofenceMapController = MapController();
   final _geofenceZoomNotifier = ValueNotifier<double>(14);
 
   List<CircleMarker>? _cachedGeofenceCircles;
   List<Marker>? _cachedGeofenceMarkers;
-  List<DashboardGeofenceItem>? _cachedGeofenceListRef;
+  List<GroupGeofenceLite>? _cachedGeofenceListRef;
   int? _cachedGeofenceSelectedId;
 
   @override
   void initState() {
     super.initState();
-    _zoneRadiusController.text = '200';
-    _zoneStartTimeController.text = '08:00';
-    _zoneEndTimeController.text = '17:30';
-    _zoneOvertimeStartController.text = '18:00';
+    _formRadiusController.text = '200';
     _bootstrap();
   }
 
   @override
   void dispose() {
     _geofenceSearchController.dispose();
-    _zoneNameController.dispose();
-    _zoneLatController.dispose();
-    _zoneLngController.dispose();
-    _zoneRadiusController.dispose();
-    _zoneAddressController.dispose();
-    _zoneStartTimeController.dispose();
-    _zoneEndTimeController.dispose();
-    _zoneOvertimeStartController.dispose();
+    _formNameController.dispose();
+    _formLatController.dispose();
+    _formLngController.dispose();
+    _formRadiusController.dispose();
+    _formAddressController.dispose();
     _geofenceZoomNotifier.dispose();
     super.dispose();
   }
+
+  // ---------------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------------
 
   Future<void> _bootstrap() async {
     final token = await _tokenStorage.getToken();
@@ -100,7 +97,11 @@ class _GeofencesTabState extends State<GeofencesTab> {
       _token = token;
     });
 
-    await Future.wait<void>([_loadGroups(token), _loadGeofences(token)]);
+    await _loadGroups(token);
+
+    if (_groups.isNotEmpty && _selectedGroupId == null) {
+      _onGroupSelected(_groups.first.id);
+    }
   }
 
   Future<void> _loadGroups(String token) async {
@@ -119,7 +120,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
       if (!mounted) {
         return;
       }
-      _showSnack('Khong the tai danh sach nhom.');
+      _showSnack('Không thể tải danh sách nhóm.');
     } finally {
       if (mounted) {
         setState(() {
@@ -129,28 +130,43 @@ class _GeofencesTabState extends State<GeofencesTab> {
     }
   }
 
-  Future<void> _loadGeofences(String token) async {
+  void _onGroupSelected(int groupId) {
+    setState(() {
+      _selectedGroupId = groupId;
+      _editingGeofence = null;
+      _isCreating = false;
+      _newGeofencePoint = null;
+    });
+    _resetForm();
+    final token = _token;
+    if (token != null && token.isNotEmpty) {
+      _loadGeofences(token, groupId);
+    }
+  }
+
+  Future<void> _loadGeofences(String token, int groupId) async {
     setState(() {
       _loadingGeofences = true;
     });
     try {
-      final rows = await _api.listDashboardGeofences(token: token);
+      final rows = await _api.listGroupGeofences(
+        token: token,
+        groupId: groupId,
+      );
       if (!mounted) {
         return;
       }
       setState(() {
         _geofences = rows;
       });
-      _syncSelectedGeofence();
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
         _geofences = const [];
-        _selectedGeofence = null;
       });
-      _showSnack('Khong the tai danh sach vung dia ly.');
+      _showSnack('Không thể tải danh sách vùng địa lý.');
     } finally {
       if (mounted) {
         setState(() {
@@ -160,65 +176,220 @@ class _GeofencesTabState extends State<GeofencesTab> {
     }
   }
 
-  void _syncSelectedGeofence() {
-    if (!mounted) {
-      return;
-    }
-    if (_geofences.isEmpty) {
-      setState(() {
-        _selectedGeofence = null;
-      });
-      return;
-    }
-    if (_selectedGeofence == null) {
-      _selectGeofenceForEdit(_geofences.first, moveMap: false);
-      return;
-    }
+  // ---------------------------------------------------------------------------
+  // Form helpers
+  // ---------------------------------------------------------------------------
 
-    DashboardGeofenceItem? refreshed;
-    for (final item in _geofences) {
-      if (item.id == _selectedGeofence!.id) {
-        refreshed = item;
-        break;
-      }
-    }
-    if (refreshed == null) {
-      _selectGeofenceForEdit(_geofences.first, moveMap: false);
-      return;
-    }
-    _selectGeofenceForEdit(refreshed, moveMap: false);
+  void _resetForm() {
+    _formNameController.clear();
+    _formLatController.clear();
+    _formLngController.clear();
+    _formRadiusController.text = '200';
+    _formAddressController.clear();
+    _formActive = true;
+    _newGeofencePoint = null;
+    _cachedGeofenceCircles = null;
+    _cachedGeofenceMarkers = null;
   }
 
-  void _selectGeofenceForEdit(
-    DashboardGeofenceItem item, {
-    bool moveMap = true,
-  }) {
-    _zoneNameController.text = item.name;
-    _zoneLatController.text = (item.latitude ?? AppConfig.defaultMapCenterLat)
-        .toStringAsFixed(6);
-    _zoneLngController.text = (item.longitude ?? AppConfig.defaultMapCenterLng)
-        .toStringAsFixed(6);
-    _zoneRadiusController.text = (item.radiusMeters ?? 200).toString();
-    _zoneAddressController.text = item.address ?? '';
-    _zoneStartTimeController.text = item.startTime ?? '08:00';
-    _zoneEndTimeController.text = item.endTime ?? '17:30';
-    _zoneOvertimeEnabled = item.overtimeEnabled ?? false;
-    _zoneOvertimeStartController.text = item.overtimeStartTime ?? '18:00';
-    _zoneActive = item.active;
-    _zoneAssignedGroupIds
-      ..clear()
-      ..addAll(item.groupId == null ? const <int>[] : <int>[item.groupId!]);
+  void _startCreate() {
     setState(() {
-      _selectedGeofence = item;
+      _isCreating = true;
+      _editingGeofence = null;
+    });
+    _resetForm();
+  }
+
+  void _startEdit(GroupGeofenceLite item) {
+    _formNameController.text = item.name;
+    _formLatController.text = item.latitude.toStringAsFixed(6);
+    _formLngController.text = item.longitude.toStringAsFixed(6);
+    _formRadiusController.text = item.radiusM.toString();
+    _formAddressController.clear();
+    _formActive = item.active;
+    setState(() {
+      _editingGeofence = item;
+      _isCreating = false;
       _newGeofencePoint = null;
     });
-    if (moveMap && item.latitude != null && item.longitude != null) {
-      _geofenceMapController.move(
-        LatLng(item.latitude!, item.longitude!),
-        _geofenceZoomNotifier.value,
+    _geofenceMapController.move(
+      LatLng(item.latitude, item.longitude),
+      _geofenceZoomNotifier.value,
+    );
+  }
+
+  void _cancelForm() {
+    setState(() {
+      _editingGeofence = null;
+      _isCreating = false;
+      _newGeofencePoint = null;
+    });
+    _resetForm();
+  }
+
+  // ---------------------------------------------------------------------------
+  // CRUD actions
+  // ---------------------------------------------------------------------------
+
+  Future<void> _saveNew() async {
+    final token = _token;
+    final groupId = _selectedGroupId;
+    if (token == null || token.isEmpty || groupId == null) {
+      return;
+    }
+    final name = _formNameController.text.trim();
+    final lat = double.tryParse(_formLatController.text.trim());
+    final lng = double.tryParse(_formLngController.text.trim());
+    final radius = int.tryParse(_formRadiusController.text.trim());
+    if (name.isEmpty || lat == null || lng == null || radius == null) {
+      _showSnack('Vui lòng nhập đầy đủ thông tin (tên, tọa độ, bán kính).');
+      return;
+    }
+    setState(() {
+      _savingGeofence = true;
+    });
+    try {
+      await _api.createGroupGeofence(
+        token: token,
+        groupId: groupId,
+        name: name,
+        latitude: lat,
+        longitude: lng,
+        radiusM: radius.clamp(10, 2000),
+        active: _formActive,
       );
+      if (!mounted) {
+        return;
+      }
+      _cancelForm();
+      await _loadGeofences(token, groupId);
+      _showSnack('Đã thêm vùng địa lý mới.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể thêm vùng địa lý.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingGeofence = false;
+        });
+      }
     }
   }
+
+  Future<void> _saveEdit() async {
+    final token = _token;
+    final groupId = _selectedGroupId;
+    final editing = _editingGeofence;
+    if (token == null || token.isEmpty || groupId == null || editing == null) {
+      return;
+    }
+    final name = _formNameController.text.trim();
+    final lat = double.tryParse(_formLatController.text.trim());
+    final lng = double.tryParse(_formLngController.text.trim());
+    final radius = int.tryParse(_formRadiusController.text.trim());
+    if (name.isEmpty || lat == null || lng == null || radius == null) {
+      _showSnack('Vui lòng nhập đầy đủ thông tin.');
+      return;
+    }
+    setState(() {
+      _savingGeofence = true;
+    });
+    try {
+      await _api.updateGroupGeofence(
+        token: token,
+        groupId: groupId,
+        geofenceId: editing.id,
+        name: name,
+        latitude: lat,
+        longitude: lng,
+        radiusM: radius.clamp(10, 2000),
+        active: _formActive,
+      );
+      if (!mounted) {
+        return;
+      }
+      _cancelForm();
+      await _loadGeofences(token, groupId);
+      _showSnack('Đã cập nhật vùng địa lý.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể cập nhật vùng địa lý.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingGeofence = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteGeofence() async {
+    final token = _token;
+    final groupId = _selectedGroupId;
+    final editing = _editingGeofence;
+    if (token == null || token.isEmpty || groupId == null || editing == null) {
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa vùng địa lý'),
+        content: Text('Bạn có chắc muốn xóa "${editing.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) {
+      return;
+    }
+    setState(() {
+      _deletingGeofence = true;
+    });
+    try {
+      await _api.deleteGroupGeofence(
+        token: token,
+        groupId: groupId,
+        geofenceId: editing.id,
+      );
+      if (!mounted) {
+        return;
+      }
+      _cancelForm();
+      await _loadGeofences(token, groupId);
+      _showSnack('Đã xóa vùng địa lý.');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể xóa vùng địa lý.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingGeofence = false;
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Map & search helpers
+  // ---------------------------------------------------------------------------
 
   Future<void> _searchGeofencePlaces(String query) async {
     final q = query.trim();
@@ -248,14 +419,11 @@ class _GeofencesTabState extends State<GeofencesTab> {
     }
   }
 
-  Future<void> _reverseZoneAddress() async {
+  Future<void> _reverseFormAddress() async {
+    final lat = double.tryParse(_formLatController.text.trim());
+    final lng = double.tryParse(_formLngController.text.trim());
     final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-    final lat = double.tryParse(_zoneLatController.text.trim());
-    final lng = double.tryParse(_zoneLngController.text.trim());
-    if (lat == null || lng == null) {
+    if (lat == null || lng == null || token == null || token.isEmpty) {
       return;
     }
     setState(() {
@@ -271,8 +439,9 @@ class _GeofencesTabState extends State<GeofencesTab> {
         return;
       }
       if (address != null && address.isNotEmpty) {
+        _geofenceSearchController.text = address;
         setState(() {
-          _zoneAddressController.text = address;
+          _formAddressController.text = address;
         });
       }
     } finally {
@@ -285,151 +454,45 @@ class _GeofencesTabState extends State<GeofencesTab> {
   }
 
   Future<void> _onGeofenceMapTap(LatLng point) async {
-    setState(() {
-      _newGeofencePoint = point;
-      _zoneLatController.text = point.latitude.toStringAsFixed(6);
-      _zoneLngController.text = point.longitude.toStringAsFixed(6);
-    });
-    _showSnack('Da chon diem moi tren ban do.');
-    await _reverseZoneAddress();
-  }
-
-  Future<void> _pickZoneTime(TextEditingController controller) async {
-    final now = TimeOfDay.now();
-    final current = controller.text.trim();
-    final match = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(current);
-    final initial = match == null
-        ? now
-        : TimeOfDay(
-            hour: int.tryParse(match.group(1)!) ?? now.hour,
-            minute: int.tryParse(match.group(2)!) ?? now.minute,
-          );
-    final picked = await showTimePicker(context: context, initialTime: initial);
-    if (picked == null || !mounted) {
-      return;
-    }
-    controller.text =
-        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _saveGeofenceConfig() async {
-    final token = _token;
-    final selected = _selectedGeofence;
-    if (token == null || token.isEmpty || selected == null) {
-      _showSnack('Khong the luu cau hinh vung.');
-      return;
-    }
-    final name = _zoneNameController.text.trim();
-    final lat = double.tryParse(_zoneLatController.text.trim());
-    final lng = double.tryParse(_zoneLngController.text.trim());
-    final radius = int.tryParse(_zoneRadiusController.text.trim());
-    if (name.isEmpty || lat == null || lng == null || radius == null) {
-      _showSnack('Vui long nhap day du thong tin vung dia ly.');
-      return;
-    }
-    setState(() {
-      _savingGeofence = true;
-    });
-    try {
-      final updated = await _api.updateGeofence(
-        token: token,
-        geofenceId: selected.id,
-        name: name,
-        latitude: lat,
-        longitude: lng,
-        radiusMeters: radius.clamp(10, 2000),
-        active: _zoneActive,
-        startTime: _zoneStartTimeController.text.trim(),
-        endTime: _zoneEndTimeController.text.trim(),
-        overtimeEnabled: _zoneOvertimeEnabled,
-        overtimeStartTime: _zoneOvertimeEnabled
-            ? _zoneOvertimeStartController.text.trim()
-            : null,
-        groupIds: _zoneAssignedGroupIds.toList(growable: false),
-        address: _zoneAddressController.text.trim(),
-      );
-      if (!mounted) {
-        return;
-      }
+    if (_isCreating || _editingGeofence != null) {
       setState(() {
-        _geofences = _geofences
-            .map((item) => item.id == updated.id ? updated : item)
-            .toList(growable: false);
+        _newGeofencePoint = point;
+        _formLatController.text = point.latitude.toStringAsFixed(6);
+        _formLngController.text = point.longitude.toStringAsFixed(6);
       });
-      _selectGeofenceForEdit(updated);
-      _showSnack('Da cap nhat vung dia ly.');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnack('Khong the cap nhat vung dia ly.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _savingGeofence = false;
-        });
+      _showSnack('Đã chọn điểm mới trên bản đồ.');
+      await _reverseFormAddress();
+    } else {
+      final token = _token;
+      if (token == null || token.isEmpty) return;
+      setState(() {
+        _reversingAddress = true;
+      });
+      try {
+        final address = await _api.reverseGeocodeAddress(
+          token: token,
+          latitude: point.latitude,
+          longitude: point.longitude,
+        );
+        if (!mounted) return;
+        if (address != null && address.isNotEmpty) {
+          setState(() {
+            _geofenceSearchController.text = address;
+          });
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _reversingAddress = false;
+          });
+        }
       }
     }
   }
 
-  Future<void> _deleteSelectedGeofence() async {
-    final token = _token;
-    final selected = _selectedGeofence;
-    if (token == null || token.isEmpty || selected == null) {
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xoa vung dia ly'),
-        content: Text('Ban co chac muon xoa "${selected.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Huy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.danger,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Xoa'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) {
-      return;
-    }
-    setState(() {
-      _deletingGeofence = true;
-    });
-    try {
-      await _api.deleteGeofence(token: token, geofenceId: selected.id);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _geofences = _geofences
-            .where((item) => item.id != selected.id)
-            .toList(growable: false);
-      });
-      _syncSelectedGeofence();
-      _showSnack('Da xoa vung dia ly.');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnack('Khong the xoa vung dia ly.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _deletingGeofence = false;
-        });
-      }
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // UI utilities
+  // ---------------------------------------------------------------------------
 
   InputDecoration _decoration(String label, IconData icon) {
     return InputDecoration(
@@ -471,6 +534,10 @@ class _GeofencesTabState extends State<GeofencesTab> {
     return palette[index % palette.length];
   }
 
+  // ---------------------------------------------------------------------------
+  // Build delegation
+  // ---------------------------------------------------------------------------
+
   Widget _buildGeofencesPage() {
     return _buildGeofencesPageExtracted();
   }
@@ -483,8 +550,8 @@ class _GeofencesTabState extends State<GeofencesTab> {
     return _buildGeofenceSidePanelExtracted();
   }
 
-  Widget _buildGeofenceConfigForm(DashboardGeofenceItem selected) {
-    return _buildGeofenceConfigFormExtracted(selected);
+  Widget _buildGeofenceConfigForm() {
+    return _buildGeofenceConfigFormExtracted();
   }
 
   @override

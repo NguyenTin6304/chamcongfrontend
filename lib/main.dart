@@ -7,6 +7,7 @@ import 'features/admin/presentation/shell/admin_shell_page.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
+import 'features/attendance/presentation/employee_exceptions_screen.dart';
 import 'features/home/presentation/home_page.dart';
 
 void main() {
@@ -29,6 +30,7 @@ class MainApp extends StatelessWidget {
     '/admin/exceptions',
     '/admin/settings',
     '/home',
+    '/home/exceptions',
   };
 
   String _extractEmailArg(RouteSettings settings) {
@@ -105,6 +107,9 @@ class MainApp extends StatelessWidget {
         break;
       case '/home':
         page = HomePage(email: _extractEmailArg(settings));
+        break;
+      case '/home/exceptions':
+        page = const EmployeeExceptionsScreen();
         break;
       default:
         page = const LoginPage();

@@ -58,7 +58,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
   @override
   void initState() {
     super.initState();
-    _systemNameCtrl.text = 'AttendOS';
+    _systemNameCtrl.text = 'Chấm công GPIT';
     _lateGraceCtrl.text = '15';
     _autoCheckoutCtrl.text = '18:00';
     _defaultRadiusCtrl.text = '200';
@@ -178,7 +178,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
 
   void _resetDefaults() {
     setState(() {
-      _systemNameCtrl.text = 'AttendOS';
+      _systemNameCtrl.text = 'Chấm công GPIT';
       _lateGraceCtrl.text = '15';
       _autoCheckoutEnabled = false;
       _autoCheckoutCtrl.text = '17:30';

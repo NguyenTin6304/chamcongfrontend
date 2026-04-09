@@ -113,7 +113,7 @@ class _ReportsTabState extends State<ReportsTab> {
     try {
       final data = await _adminApi.getDashboardWeeklyTrends(
         token: token,
-        date: _reportsFromDate,
+        date: _reportsToDate,
         groupId: _reportsGroupId,
         status: _reportsStatus,
         period: _reportsTrendPeriod,
@@ -465,8 +465,6 @@ class _ReportsTabState extends State<ReportsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildFilterCard(),
-        const SizedBox(height: 16),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -504,10 +502,9 @@ class _ReportsTabState extends State<ReportsTab> {
                 value: _loadingReportsLogs
                     ? '--'
                     : _formatPercent(reportsTotalHours),
-                subText: 'Giờ',
-                subColor: AppColors.textMuted,
                 icon: Icons.timer_outlined,
-                iconColor: AppColors.primary,
+                iconColor: AppColors.warning,
+                valueColor: AppColors.warning,
                 loading: _loadingReportsLogs,
               ),
             ),
@@ -539,6 +536,8 @@ class _ReportsTabState extends State<ReportsTab> {
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        _buildFilterCard(),
         const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -741,7 +740,7 @@ class _ReportsTabState extends State<ReportsTab> {
             children: [
               const Expanded(
                 child: Text(
-                  'Xu hướng chấm công theo ngày',
+                  'Xu hướng chấm công',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                 ),
               ),
@@ -1384,6 +1383,26 @@ class _ReportsLineChart extends StatelessWidget {
           ]
         : data;
 
+    if (!loading && chartData.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border, width: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        alignment: Alignment.center,
+        child: const Text(
+          'Không có dữ liệu xu hướng.',
+          style: TextStyle(color: AppColors.textMuted),
+        ),
+      );
+    }
+
+    final labelStride = chartData.length > 16
+        ? 5
+        : chartData.length > 10
+            ? 2
+            : 1;
+
     return Column(
       children: [
         Expanded(
@@ -1403,12 +1422,15 @@ class _ReportsLineChart extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Row(
-          children: chartData
+          children: chartData.asMap().entries
               .map(
-                (e) => Expanded(
+                (entry) => Expanded(
                   child: Center(
                     child: Text(
-                      e.day,
+                      entry.key % labelStride == 0 ||
+                              entry.key == chartData.length - 1
+                          ? entry.value.day
+                          : '',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textMuted,
@@ -1446,16 +1468,16 @@ class _ReportsLineChartPainter extends CustomPainter {
         .map((e) => math.max(e.onTime, math.max(e.late, e.outOfRange)))
         .reduce(math.max)
         .toDouble()
-        .clamp(10, 1000);
+        .clamp(10, 1000)
+        .toDouble();
 
     final onTimePoints = <Offset>[];
     final latePoints = <Offset>[];
     final outPoints = <Offset>[];
 
-    final stepX =
-        data.length <= 1 ? size.width : size.width / (data.length - 1);
+    final stepX = data.length <= 1 ? 0.0 : size.width / (data.length - 1);
     for (var i = 0; i < data.length; i++) {
-      final x = stepX * i;
+      final x = data.length == 1 ? size.width / 2 : stepX * i;
       onTimePoints.add(
         Offset(
           x,
@@ -1493,18 +1515,22 @@ class _ReportsLineChartPainter extends CustomPainter {
     Color color,
     bool loading,
   ) {
-    if (points.length < 2) return;
     final linePaint = Paint()
       ..color = loading ? color.withValues(alpha: 0.5) : color
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
+    final dotPaint = Paint()..color = linePaint.color;
+    if (points.length == 1) {
+      canvas.drawCircle(points.first, 2.5, dotPaint);
+      return;
+    }
+    if (points.length < 2) return;
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (var i = 1; i < points.length; i++) {
       path.lineTo(points[i].dx, points[i].dy);
     }
     canvas.drawPath(path, linePaint);
 
-    final dotPaint = Paint()..color = linePaint.color;
     for (final point in points) {
       canvas.drawCircle(point, 2.5, dotPaint);
     }

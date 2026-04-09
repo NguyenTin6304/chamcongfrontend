@@ -1,16 +1,16 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
-import '../../../../core/config/app_config.dart';
 import '../../../../core/download/file_downloader.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/admin_api.dart';
 import '../../../../widgets/common/kpi_card.dart';
 import 'widgets/exception_history_table.dart';
+import 'widgets/exception_ui_helpers.dart';
 import 'widgets/pending_exception_card.dart';
 
 class ExceptionsScreen extends StatefulWidget {
@@ -29,9 +29,10 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   bool _loading = false;
   bool _exporting = false;
 
-  String _selectedStatus = 'pending';
+  String _selectedStatus = 'PENDING_EMPLOYEE';
   DateRange _dateRange = _currentMonthRange();
   int? _selectedGroupId;
+  int? _selectedEmployeeId;
   String? _selectedExceptionType;
   String _searchQuery = '';
   int _reloadToken = 0;
@@ -40,10 +41,21 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   List<GroupLite> _groups = const [];
   List<ExceptionModel> _pendingItems = const [];
 
+  int _pendingEmployeeCount = 0;
   int _pendingCount = 0;
-  int _todayCount = 0;
   int _approvedCount = 0;
   int _rejectedCount = 0;
+
+  static const List<String> _allExceptionTypes = <String>[
+    'SUSPECTED_LOCATION_SPOOF',
+    'OUT_OF_RANGE',
+    'AUTO_CLOSED',
+    'AUTO_CHECKOUT',
+    'MISSED_CHECKOUT',
+    'FORGOT_CHECKOUT',
+    'LARGE_TIME_DEVIATION',
+    'UNUSUAL_HOURS',
+  ];
 
   static DateRange _currentMonthRange() {
     final now = DateTime.now();
@@ -101,8 +113,8 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       setState(() {
         _groups = groups;
         _pendingItems = pending;
-        _pendingCount = stats['pending'] ?? pending.length;
-        _todayCount = stats['today'] ?? 0;
+        _pendingEmployeeCount = stats['pending_employee'] ?? 0;
+        _pendingCount = pending.isNotEmpty ? pending.length : stats['pending_admin'] ?? 0;
         _approvedCount = stats['approved'] ?? 0;
         _rejectedCount = stats['rejected'] ?? 0;
         _reloadToken += 1;
@@ -126,38 +138,16 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   Future<List<ExceptionModel>> _fetchPendingExceptions({
     required String token,
   }) async {
-    final query = <String, String>{'status': 'pending'};
-    if (_selectedGroupId != null) {
-      query['group_id'] = _selectedGroupId.toString();
-    }
-    if (_selectedExceptionType != null) {
-      query['exception_type'] = _selectedExceptionType!;
-    }
-    query['from'] = DateFormat('yyyy-MM-dd').format(_dateRange.from);
-    query['to'] = DateFormat('yyyy-MM-dd').format(_dateRange.to);
-
-    final uri = Uri.parse(
-      '${AppConfig.apiBaseUrl}/attendance/exceptions',
-    ).replace(queryParameters: query);
-
     try {
-      final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+      final rows = await _loadExceptionRowsByStatus(
+        token: token,
+        status: 'PENDING_ADMIN',
       );
-      if (response.statusCode != 200) {
-        throw Exception('pending-fetch-failed');
-      }
-      final payload = jsonDecode(utf8.decode(response.bodyBytes));
-      final rows = _extractList(payload);
-      return rows.map(_mapExceptionModel).toList(growable: false);
+      return rows.map(_mapExceptionItem).toList(growable: false);
     } catch (_) {
       final fallback = await _api.listDashboardExceptions(
         token: token,
-        status: 'pending',
+        status: 'PENDING_ADMIN',
       );
       return fallback
           .map(
@@ -175,6 +165,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               reason: item.reason,
               reviewerName: '--',
               createdAt: DateTime.now(),
+              canAdminDecide: item.status.toUpperCase() == 'PENDING_ADMIN',
             ),
           )
           .toList(growable: false);
@@ -182,111 +173,75 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   }
 
   Future<Map<String, int>> _fetchStats({required String token}) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/attendance/exceptions/stats');
-    try {
-      final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-      if (response.statusCode != 200) {
-        throw Exception('stats-fetch-failed');
+    final results = await Future.wait<List<AttendanceExceptionItem>>([
+      _loadExceptionRowsByStatus(token: token, status: 'PENDING_EMPLOYEE'),
+      _loadExceptionRowsByStatus(token: token, status: 'PENDING_ADMIN'),
+      _loadExceptionRowsByStatus(token: token, status: 'APPROVED'),
+      _loadExceptionRowsByStatus(token: token, status: 'REJECTED'),
+      _loadExceptionRowsByStatus(token: token, status: 'EXPIRED'),
+    ]);
+
+    final pendingEmployee = results[0];
+    final pendingAdmin = results[1];
+    final approved = results[2];
+    final rejected = results[3];
+    final merged = <int, AttendanceExceptionItem>{};
+    for (final result in results) {
+      for (final item in result) {
+        merged[item.id] = item;
       }
-      final payload = jsonDecode(utf8.decode(response.bodyBytes));
-      final map = _extractMap(payload);
-      return {
-        'pending': _toInt(
-              map['pending'] ?? map['pending_count'] ?? map['open_count'],
-            ) ??
-            0,
-        'today': _toInt(map['today'] ?? map['today_count']) ?? 0,
-        'approved': _toInt(
-              map['approved'] ?? map['approved_count'] ?? map['resolved_count'],
-            ) ??
-            0,
-        'rejected':
-            _toInt(map['rejected'] ?? map['rejected_count'] ?? map['deny_count']) ??
-                0,
-      };
-    } catch (_) {
-      final history = await _api.listAttendanceExceptions(
-        token: token,
-        fromDate: _dateRange.from,
-        toDate: _dateRange.to,
-        groupId: _selectedGroupId,
-        exceptionType: _selectedExceptionType ?? 'MISSED_CHECKOUT',
-      );
-      var pending = 0;
-      var approved = 0;
-      var rejected = 0;
-      var today = 0;
-      final now = DateTime.now();
-      for (final item in history) {
-        final status = item.status.toLowerCase();
-        if (status.contains('open') || status.contains('pending')) {
-          pending += 1;
-        } else if (status.contains('reject') || status.contains('deny')) {
-          rejected += 1;
-        } else {
-          approved += 1;
+    }
+    var today = 0;
+    final now = DateTime.now();
+    for (final item in merged.values) {
+      final date = item.workDate;
+      if (date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day) {
+        today += 1;
+      }
+    }
+
+    return {
+      'pending_employee': pendingEmployee.length,
+      'pending_admin': pendingAdmin.length,
+      'today': today,
+      'approved': approved.length,
+      'rejected': rejected.length,
+    };
+  }
+
+  Future<List<AttendanceExceptionItem>> _loadExceptionRowsByStatus({
+    required String token,
+    required String status,
+  }) async {
+    final types = _selectedExceptionType == null
+        ? _allExceptionTypes
+        : <String>[_selectedExceptionType!];
+    final results = await Future.wait<List<AttendanceExceptionItem>>(
+      types.map((type) async {
+        try {
+          return await _api.listAttendanceExceptions(
+            token: token,
+            fromDate: _dateRange.from,
+            toDate: _dateRange.to,
+            groupId: _selectedGroupId,
+            employeeId: _selectedEmployeeId,
+            exceptionType: type,
+            statusFilter: status,
+          );
+        } catch (_) {
+          return const <AttendanceExceptionItem>[];
         }
-        final date = item.workDate;
-        if (date.year == now.year &&
-            date.month == now.month &&
-            date.day == now.day) {
-          today += 1;
-        }
-      }
-      return {
-        'pending': pending,
-        'today': today,
-        'approved': approved,
-        'rejected': rejected,
-      };
-    }
-  }
-
-  List<Map<String, dynamic>> _extractList(dynamic payload) {
-    if (payload is List) {
-      return payload.whereType<Map<String, dynamic>>().toList(growable: false);
-    }
-    if (payload is Map<String, dynamic>) {
-      final data = payload['data'];
-      if (data is List) {
-        return data.whereType<Map<String, dynamic>>().toList(growable: false);
-      }
-      final items = payload['items'];
-      if (items is List) {
-        return items.whereType<Map<String, dynamic>>().toList(growable: false);
+      }),
+    );
+    final merged = <int, AttendanceExceptionItem>{};
+    for (final result in results) {
+      for (final row in result) {
+        merged[row.id] = row;
       }
     }
-    return const [];
-  }
-
-  Map<String, dynamic> _extractMap(dynamic payload) {
-    if (payload is Map<String, dynamic>) {
-      final data = payload['data'];
-      if (data is Map<String, dynamic>) {
-        return data;
-      }
-      return payload;
-    }
-    return <String, dynamic>{};
-  }
-
-  int? _toInt(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-    if (value is int) {
-      return value;
-    }
-    if (value is num) {
-      return value.toInt();
-    }
-    return int.tryParse(value.toString());
+    return merged.values.toList(growable: false);
   }
 
   String _toTime(dynamic value) {
@@ -314,98 +269,89 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
     return DateTime.tryParse(value.toString());
   }
 
-  ExceptionModel _mapExceptionModel(Map<String, dynamic> row) {
-    final fullName =
-        row['name'] as String? ??
-        row['employee_name'] as String? ??
-        row['full_name'] as String? ??
-        '--';
-    final code = row['employee_code'] as String? ?? '--';
-    final department =
-        row['department_name'] as String? ?? row['group_name'] as String? ?? '--';
-    final type = row['exception_type'] as String? ?? row['type'] as String? ?? '--';
-
+  ExceptionModel _mapExceptionItem(AttendanceExceptionItem item) {
     return ExceptionModel(
-      id: _toInt(row['id']) ?? 0,
-      employeeName: fullName,
-      employeeCode: code,
-      departmentName: department,
-      exceptionType: type,
-      status: (row['status'] as String? ?? 'pending').toLowerCase(),
-      workDate: _toDate(row['work_date'] ?? row['date']),
-      checkInTime: _toTime(row['check_in'] ?? row['check_in_time']),
-      checkOutTime: _toTime(row['check_out'] ?? row['check_out_time']),
-      locationLabel: row['location'] as String? ?? row['location_status'] as String? ?? '--',
-      reason: row['reason'] as String? ?? type,
-      reviewerName:
-          row['reviewer_name'] as String? ?? row['resolved_by_email'] as String? ?? '--',
-      createdAt: _toDate(row['created_at'] ?? row['time']),
+      id: item.id,
+      employeeName: item.fullName,
+      employeeCode: item.employeeCode,
+      departmentName: item.groupName ?? item.groupCode ?? '--',
+      exceptionType: item.exceptionType,
+      status: item.status,
+      workDate: item.workDate,
+      checkInTime: _toTime(item.sourceCheckinTime),
+      checkOutTime: _toTime(item.actualCheckoutTime),
+      locationLabel: '--',
+      reason: item.note ?? item.exceptionType,
+      reviewerName: item.resolvedByEmail ?? item.decidedByEmail ?? '--',
+      createdAt: item.createdAt ?? item.detectedAt,
+      canAdminDecide: item.canAdminDecide,
     );
   }
 
   Future<void> _approve(ExceptionModel item) async {
-    await _handleAction(item: item, approve: true);
+    await _showExceptionReviewDialog(item, initialApprove: true);
   }
 
   Future<void> _reject(ExceptionModel item) async {
-    await _handleAction(item: item, approve: false);
+    await _showExceptionReviewDialog(item, initialApprove: false);
   }
 
-  Future<void> _handleAction({
-    required ExceptionModel item,
-    required bool approve,
+  bool _canAdminDecide(ExceptionModel item) {
+    return item.status.toUpperCase() == 'PENDING_ADMIN' && item.canAdminDecide;
+  }
+
+  String _formatDateOnly(DateTime? value) {
+    if (value == null) {
+      return '--';
+    }
+    return DateFormat('dd/MM/yyyy').format(value.toLocal());
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) {
+      return '--';
+    }
+    return DateFormat('dd/MM/yyyy HH:mm').format(value.toLocal());
+  }
+
+  String _displayText(String? value) {
+    final text = value?.trim();
+    return text == null || text.isEmpty ? '--' : text;
+  }
+
+  Future<void> _showExceptionReviewDialog(
+    ExceptionModel item, {
+    bool? initialApprove,
+    bool readOnly = false,
   }) async {
     final token = _token;
     if (token == null || token.isEmpty || _actioningIds.contains(item.id)) {
       return;
     }
 
-    final previousItems = _pendingItems;
-    final previousPending = _pendingCount;
-    final previousApproved = _approvedCount;
-    final previousRejected = _rejectedCount;
-
     setState(() {
       _actioningIds.add(item.id);
-      _pendingItems = _pendingItems.where((value) => value.id != item.id).toList();
-      _pendingCount = (_pendingCount - 1).clamp(0, 1 << 30);
-      if (approve) {
-        _approvedCount += 1;
-      } else {
-        _rejectedCount += 1;
-      }
     });
 
     try {
-      if (approve) {
-        await _api.approveDashboardException(token: token, exceptionId: item.id);
-      } else {
-        await _api.rejectDashboardException(token: token, exceptionId: item.id);
-      }
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(approve ? 'Đã phê duyệt' : 'Đã từ chối'),
-          backgroundColor: approve ? AppColors.success : AppColors.danger,
-        ),
+      final detail = await _api.getAttendanceExceptionDetail(
+        token: token,
+        exceptionId: item.id,
       );
-      setState(() {
-        _reloadToken += 1;
-      });
-    } catch (_) {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _pendingItems = previousItems;
-        _pendingCount = previousPending;
-        _approvedCount = previousApproved;
-        _rejectedCount = previousRejected;
-      });
+      await _openReviewDialog(
+        detail,
+        initialApprove: initialApprove,
+        readOnly: readOnly,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
+        SnackBar(content: Text('Khong the tai chi tiet exception: $error')),
       );
     } finally {
       if (mounted) {
@@ -414,6 +360,313 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         });
       }
     }
+  }
+
+  Future<void> _openReviewDialog(
+    AttendanceExceptionItem detail, {
+    bool? initialApprove,
+    bool readOnly = false,
+  }) async {
+    final noteController = TextEditingController(text: detail.adminNote ?? '');
+    final canDecide =
+        !readOnly &&
+        detail.status.toUpperCase() == 'PENDING_ADMIN' &&
+        detail.canAdminDecide;
+    final isCheckoutType =
+        detail.exceptionType.toUpperCase() == 'AUTO_CLOSED' ||
+        detail.exceptionType.toUpperCase() == 'MISSED_CHECKOUT';
+    DateTime? selectedCheckoutTime;
+    var submitting = false;
+
+    Future<void> submit({
+      required bool approve,
+      required StateSetter setDialogState,
+      required BuildContext dialogContext,
+      DateTime? checkoutTime,
+    }) async {
+      final token = _token;
+      if (token == null || token.isEmpty || submitting) {
+        return;
+      }
+      final note = noteController.text.trim();
+      if (!approve && note.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vui long nhap admin_note khi tu choi.')),
+        );
+        return;
+      }
+      if (approve && isCheckoutType && checkoutTime != null) {
+        final checkinTime = detail.sourceCheckinTime;
+        if (checkinTime != null && !checkoutTime.isAfter(checkinTime)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Giờ ra phải sau giờ vào.')),
+          );
+          return;
+        }
+      }
+      setDialogState(() {
+        submitting = true;
+      });
+      try {
+        if (approve) {
+          await _api.approveAttendanceException(
+            token: token,
+            exceptionId: detail.id,
+            adminNote: note.isEmpty ? null : note,
+            actualCheckoutTime: isCheckoutType ? checkoutTime : null,
+          );
+        } else {
+          await _api.rejectAttendanceException(
+            token: token,
+            exceptionId: detail.id,
+            adminNote: note,
+          );
+        }
+        if (!mounted || !dialogContext.mounted) {
+          return;
+        }
+        Navigator.of(dialogContext).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(approve ? 'Đã duyệt exception.' : 'Đã từ chối exception.'),
+            backgroundColor: approve ? AppColors.success : AppColors.danger,
+          ),
+        );
+        await _refreshData();
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setDialogState(() {
+          submitting = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Backend tu choi transition: $error')),
+        );
+      }
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final timeline = detail.timeline;
+            return AlertDialog(
+              title: const Text('Chi tiết exception'),
+              content: SizedBox(
+                width: 720,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _DialogSectionTitle('Nhân viên'),
+                      _DialogInfoRow('Mã nhân viên', detail.employeeCode),
+                      _DialogInfoRow('Họ tên', detail.fullName),
+                      _DialogInfoRow(
+                        'Nhóm',
+                        _displayText(detail.groupName ?? detail.groupCode),
+                      ),
+                      const SizedBox(height: 12),
+                      const _DialogSectionTitle('Nội dung exception'),
+                      _DialogInfoRow('Loại', exceptionTypeLabel(detail.exceptionType)),
+                      _DialogInfoRow(
+                        'Trạng thái',
+                        exceptionStatusLabel(detail.status),
+                      ),
+                      _DialogInfoRow('Ngày công', _formatDateOnly(detail.workDate)),
+                      _DialogInfoRow('Lý do hệ thống', _displayText(detail.note)),
+                      _DialogInfoRow(
+                        'Phát hiện lúc',
+                        _formatDateTime(detail.detectedAt),
+                      ),
+                      _DialogInfoRow(
+                        'Hết hạn lúc',
+                        _formatDateTime(detail.expiresAt),
+                      ),
+                      const SizedBox(height: 12),
+                      const _DialogSectionTitle('Giải trình nhân viên'),
+                      _DialogInfoRow(
+                        'Nội dung',
+                        _displayText(detail.employeeExplanation),
+                      ),
+                      _DialogInfoRow(
+                        'Gửi lúc',
+                        _formatDateTime(detail.employeeSubmittedAt),
+                      ),
+                      const SizedBox(height: 12),
+                      const _DialogSectionTitle('Quyết định admin'),
+                      _DialogInfoRow('Ghi chú', _displayText(detail.adminNote)),
+                      _DialogInfoRow(
+                        'Quyết định lúc',
+                        _formatDateTime(detail.adminDecidedAt),
+                      ),
+                      _DialogInfoRow(
+                        'Người quyết định',
+                        _displayText(detail.decidedByEmail),
+                      ),
+                      const SizedBox(height: 12),
+                      const _DialogSectionTitle('Timeline'),
+                      if (timeline.isEmpty)
+                        const Text(
+                          'Khong co timeline.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMuted,
+                          ),
+                        )
+                      else
+                        ...timeline.map(_buildTimelineRow),
+                      if (canDecide) ...[
+                        if (isCheckoutType) ...[
+                          const SizedBox(height: 16),
+                          const _DialogSectionTitle('Giờ ra thực tế'),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  selectedCheckoutTime == null
+                                      ? 'Chưa chọn (tuỳ chọn)'
+                                      : DateFormat('HH:mm  dd/MM/yyyy')
+                                          .format(selectedCheckoutTime!.toLocal()),
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              TextButton.icon(
+                                icon: const Icon(Icons.access_time, size: 16),
+                                label: Text(
+                                  selectedCheckoutTime == null ? 'Chọn giờ' : 'Đổi giờ',
+                                ),
+                                onPressed: submitting
+                                    ? null
+                                    : () async {
+                                        final workDate = detail.workDate;
+                                        final initial = selectedCheckoutTime?.toLocal() ??
+                                            DateTime.now();
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay.fromDateTime(initial),
+                                        );
+                                        if (picked != null) {
+                                          final candidate = DateTime(
+                                            workDate.year,
+                                            workDate.month,
+                                            workDate.day,
+                                            picked.hour,
+                                            picked.minute,
+                                          );
+                                          setDialogState(() {
+                                            selectedCheckoutTime = candidate.toUtc();
+                                          });
+                                        }
+                                      },
+                              ),
+                              if (selectedCheckoutTime != null)
+                                IconButton(
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  tooltip: 'Xóa giờ ra',
+                                  onPressed: submitting
+                                      ? null
+                                      : () => setDialogState(() {
+                                            selectedCheckoutTime = null;
+                                          }),
+                                ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: noteController,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'admin_note',
+                            hintText: 'Nhap ghi chu khi can',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        if (initialApprove == false)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Text(
+                              'Bat buoc nhap note khi tu choi.',
+                              style: TextStyle(
+                                color: AppColors.danger,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      submitting ? null : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Đóng'),
+                ),
+                if (canDecide) ...[
+                  OutlinedButton(
+                    onPressed: submitting
+                        ? null
+                        : () => submit(
+                              approve: false,
+                              setDialogState: setDialogState,
+                              dialogContext: dialogContext,
+                            ),
+                    child: submitting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Từ chối'),
+                  ),
+                  ElevatedButton(
+                    onPressed: submitting
+                        ? null
+                        : () => submit(
+                              approve: true,
+                              setDialogState: setDialogState,
+                              dialogContext: dialogContext,
+                              checkoutTime: selectedCheckoutTime,
+                            ),
+                    child: submitting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Phê duyệt'),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    noteController.dispose();
+  }
+
+  Widget _buildTimelineRow(Map<String, dynamic> item) {
+    final action = _displayText(
+      item['action']?.toString() ?? item['status']?.toString(),
+    );
+    final actor = _displayText(
+      item['actor_email']?.toString() ?? item['actor']?.toString(),
+    );
+    final at = _formatDateTime(
+      _toDate(item['created_at'] ?? item['at'] ?? item['time']),
+    );
+    final note = _displayText(item['note']?.toString());
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text('$at - $action - $actor - $note'),
+    );
   }
 
   Future<void> _pickRange() async {
@@ -444,20 +697,34 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       _exporting = true;
     });
     try {
-      final report = await _api.exportDashboardExcel(
-        token: token,
-        fromDate: _dateRange.from,
-        toDate: _dateRange.to,
-        groupId: _selectedGroupId,
-        status: _selectedStatus == 'all' ? null : _selectedStatus,
+      final rows = await _loadExceptionRowsForCurrentFilters(token);
+      if (rows.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Khong co exception de xuat voi filter hien tai.'),
+          ),
+        );
+        return;
+      }
+
+      final csv = _buildExceptionCsv(rows);
+      final fileName =
+          'attendance_exceptions_${DateFormat('yyyyMMdd').format(_dateRange.from)}_${DateFormat('yyyyMMdd').format(_dateRange.to)}.csv';
+      await saveBytesAsFile(
+        bytes: Uint8List.fromList(utf8.encode(csv)),
+        fileName: fileName,
       );
-      await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
+        SnackBar(
+          content: Text('Khong the xuat exception voi filter hien tai: $error'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -466,6 +733,112 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         });
       }
     }
+  }
+
+  Future<List<AttendanceExceptionItem>> _loadExceptionRowsForCurrentFilters(
+    String token,
+  ) async {
+    final types = _selectedExceptionType == null
+        ? _allExceptionTypes
+        : <String>[_selectedExceptionType!];
+    final requests = types.map(
+      (type) => _loadExceptionRowsByTypeForExport(
+        token: token,
+        exceptionType: type,
+        ignoreErrors: _selectedExceptionType == null,
+      ),
+    );
+    final results = await Future.wait<List<AttendanceExceptionItem>>(requests);
+    final merged = <int, AttendanceExceptionItem>{};
+    for (final result in results) {
+      for (final row in result) {
+        merged[row.id] = row;
+      }
+    }
+    final rows = merged.values.toList(growable: false)
+      ..sort((a, b) {
+        final aTime = a.createdAt ?? a.detectedAt ?? a.workDate;
+        final bTime = b.createdAt ?? b.detectedAt ?? b.workDate;
+        return bTime.compareTo(aTime);
+      });
+    return rows;
+  }
+
+  Future<List<AttendanceExceptionItem>> _loadExceptionRowsByTypeForExport({
+    required String token,
+    required String exceptionType,
+    required bool ignoreErrors,
+  }) async {
+    try {
+      return await _api.listAttendanceExceptions(
+        token: token,
+        fromDate: _dateRange.from,
+        toDate: _dateRange.to,
+        groupId: _selectedGroupId,
+        employeeId: _selectedEmployeeId,
+        exceptionType: exceptionType,
+        statusFilter: _selectedStatus,
+      );
+    } catch (_) {
+      if (ignoreErrors) {
+        return const [];
+      }
+      rethrow;
+    }
+  }
+
+  String _buildExceptionCsv(List<AttendanceExceptionItem> rows) {
+    final buffer = StringBuffer()
+      ..writeln(
+        [
+          'id',
+          'employee_id',
+          'employee_code',
+          'employee_name',
+          'group',
+          'exception_type',
+          'status',
+          'work_date',
+          'detected_at',
+          'expires_at',
+          'employee_explanation',
+          'employee_submitted_at',
+          'admin_note',
+          'admin_decided_at',
+          'decided_by_email',
+          'system_note',
+        ].map(_csvCell).join(','),
+      );
+
+    for (final row in rows) {
+      buffer.writeln(
+        [
+          row.id.toString(),
+          row.employeeId.toString(),
+          row.employeeCode,
+          row.fullName,
+          row.groupName ?? row.groupCode ?? '',
+          row.exceptionType,
+          row.status,
+          _formatDateOnly(row.workDate),
+          _formatDateTime(row.detectedAt),
+          _formatDateTime(row.expiresAt),
+          row.employeeExplanation ?? '',
+          _formatDateTime(row.employeeSubmittedAt),
+          row.adminNote ?? '',
+          _formatDateTime(row.adminDecidedAt),
+          row.decidedByEmail ?? '',
+          row.note ?? '',
+        ].map(_csvCell).join(','),
+      );
+    }
+
+    return buffer.toString();
+  }
+
+  String _csvCell(String value) {
+    final escaped = value.replaceAll('"', '""');
+    return '"$escaped"';
   }
 
   List<ExceptionModel> get _filteredPendingItems {
@@ -486,39 +859,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   }
 
   ({Color bg, Color text, Color border}) _tabPalette(String id, bool active) {
-    if (!active) {
-      return (
-        bg: AppColors.bgPage,
-        text: AppColors.textMuted,
-        border: AppColors.border,
-      );
-    }
-    switch (id) {
-      case 'pending':
-        return (
-          bg: AppColors.badgeBgLate,
-          text: AppColors.badgeTextLate,
-          border: AppColors.exceptionTabPendingBorder,
-        );
-      case 'approved':
-        return (
-          bg: AppColors.badgeBgOnTime,
-          text: AppColors.badgeTextOnTime,
-          border: AppColors.exceptionTabApprovedBorder,
-        );
-      case 'rejected':
-        return (
-          bg: AppColors.badgeBgOutOfRange,
-          text: AppColors.badgeTextOutOfRange,
-          border: AppColors.exceptionTabRejectedBorder,
-        );
-      default:
-        return (
-          bg: AppColors.exceptionTabAllBg,
-          text: AppColors.exceptionTabAllText,
-          border: AppColors.exceptionTabAllBorder,
-        );
-    }
+    return exceptionStatusPalette(id, active: active);
   }
 
   Widget _buildPendingCards(List<ExceptionModel> pending) {
@@ -538,13 +879,10 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               (item) => PendingExceptionCard(
                 exception: item,
                 isProcessing: _actioningIds.contains(item.id),
-                onApprove: () => _approve(item),
-                onReject: () => _reject(item),
-                onViewDetail: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Tính năng đang phát triển')),
-                  );
-                },
+                canDecide: _canAdminDecide(item),
+                onApprove: _canAdminDecide(item) ? () => _approve(item) : null,
+                onReject: _canAdminDecide(item) ? () => _reject(item) : null,
+                onViewDetail: () => _showExceptionReviewDialog(item),
               ),
             )
             .toList(growable: false);
@@ -587,12 +925,21 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingVisible = _selectedStatus == 'pending' && _pendingCount > 0;
+    final pendingVisible =
+        _selectedStatus == 'PENDING_ADMIN' && _pendingCount > 0;
     final tabs = <({String id, String label})>[
-      (id: 'all', label: 'Tất cả'),
-      (id: 'pending', label: 'Chờ duyệt ($_pendingCount)'),
-      (id: 'approved', label: 'Đã duyệt'),
-      (id: 'rejected', label: 'Từ chối'),
+      (
+        id: 'PENDING_EMPLOYEE',
+        label:
+            '${exceptionStatusLabel('PENDING_EMPLOYEE')} ($_pendingEmployeeCount)',
+      ),
+      (
+        id: 'PENDING_ADMIN',
+        label: '${exceptionStatusLabel('PENDING_ADMIN')} ($_pendingCount)',
+      ),
+      (id: 'APPROVED', label: exceptionStatusLabel('APPROVED')),
+      (id: 'REJECTED', label: exceptionStatusLabel('REJECTED')),
+      (id: 'EXPIRED', label: exceptionStatusLabel('EXPIRED')),
     ];
 
     return Column(
@@ -605,8 +952,8 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
             SizedBox(
               width: 250,
               child: KpiCard(
-                label: 'Chờ duyệt',
-                value: '$_pendingCount',
+                label: exceptionStatusLabel('PENDING_EMPLOYEE'),
+                value: '$_pendingEmployeeCount',
                 valueColor: AppColors.warning,
                 icon: Icons.warning_amber_rounded,
                 iconColor: AppColors.warning,
@@ -616,10 +963,11 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
             SizedBox(
               width: 250,
               child: KpiCard(
-                label: 'Hôm nay',
-                value: '$_todayCount',
-                icon: Icons.calendar_today_outlined,
-                iconColor: AppColors.primary,
+                label: exceptionStatusLabel('PENDING_ADMIN'),
+                value: '$_pendingCount',
+                valueColor: AppColors.overtime,
+                icon: Icons.admin_panel_settings_outlined,
+                iconColor: AppColors.overtime,
                 loading: _loading,
               ),
             ),
@@ -668,10 +1016,14 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                         final palette = _tabPalette(tab.id, isActive);
                         return InkWell(
                           borderRadius: BorderRadius.circular(999),
-                          onTap: () {
+                          onTap: () async {
+                            if (_selectedStatus == tab.id) {
+                              return;
+                            }
                             setState(() {
                               _selectedStatus = tab.id;
                             });
+                            await _refreshData();
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -811,59 +1163,12 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                         : const Icon(Icons.download_rounded, size: 16),
                     label: const Text('Xuất danh sách'),
                   ),
-                  IconButton(
-                    tooltip: 'Làm mới',
-                    onPressed: _refreshData,
-                    icon: const Icon(Icons.refresh, color: AppColors.textMuted),
-                  ),
                 ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        if (pendingVisible) ...[
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.warning,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Yêu cầu cần xử lý',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.badgeBgLate,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  '$_pendingCount',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.badgeTextLate,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildPendingCards(_filteredPendingItems),
-          const SizedBox(height: 16),
-        ],
         Row(
           children: [
             const Expanded(
@@ -876,14 +1181,6 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                 ),
               ),
             ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _selectedStatus = 'all';
-                });
-              },
-              child: const Text('Xem tất cả lịch sử →'),
-            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -891,11 +1188,75 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
           statusFilter: _selectedStatus,
           dateRange: _dateRange,
           groupId: _selectedGroupId?.toString(),
+          employeeId: _selectedEmployeeId,
           exceptionTypeFilter: _selectedExceptionType,
           searchQuery: _searchQuery,
           reloadToken: _reloadToken,
+          onViewDetail: (item) {
+            final model = _mapExceptionItem(item);
+            _showExceptionReviewDialog(
+              model,
+              readOnly: !_canAdminDecide(model),
+            );
+          },
         ),
       ],
+    );
+  }
+}
+
+class _DialogSectionTitle extends StatelessWidget {
+  const _DialogSectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogInfoRow extends StatelessWidget {
+  const _DialogInfoRow(this.label, this.value);
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 150,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

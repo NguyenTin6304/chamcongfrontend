@@ -11,6 +11,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../widgets/common/kpi_card.dart';
 import '../../data/admin_api.dart';
 import '../../data/admin_data_cache.dart';
+import '../exceptions/widgets/exception_ui_helpers.dart';
 
 class DashboardTab extends StatefulWidget {
   const DashboardTab({required this.onNavigateTo, super.key});
@@ -34,6 +35,7 @@ class _DashboardTabState extends State<DashboardTab> {
   List<DashboardExceptionItem> _exceptions = const [];
 
   final DateTime _date = DateTime.now();
+  DateTime _weeklyMonth = DateTime(DateTime.now().year, DateTime.now().month);
   int? _groupId;
   final String _status = 'all';
 
@@ -44,7 +46,18 @@ class _DashboardTabState extends State<DashboardTab> {
   bool _loadingGeofences = false;
   bool _loadingExceptions = false;
   bool _exportingCsv = false;
-  final Set<int> _updatingExceptionIds = {};
+
+  static const int _dashboardExceptionLimit = 3;
+  static const List<String> _dashboardExceptionTypes = <String>[
+    'SUSPECTED_LOCATION_SPOOF',
+    'AUTO_CLOSED',
+    'MISSED_CHECKOUT',
+    'LARGE_TIME_DEVIATION',
+  ];
+  static const List<String> _unresolvedExceptionStatuses = <String>[
+    'PENDING_ADMIN',
+    'PENDING_EMPLOYEE',
+  ];
 
   @override
   void initState() {
@@ -143,9 +156,10 @@ class _DashboardTabState extends State<DashboardTab> {
     try {
       final rows = await _api.getDashboardWeeklyTrends(
         token: token,
-        date: _date,
+        date: _weeklyMonth,
         groupId: _groupId,
         status: _status,
+        period: 'month',
       );
       if (!mounted) return;
       setState(() {
@@ -164,6 +178,15 @@ class _DashboardTabState extends State<DashboardTab> {
         });
       }
     }
+  }
+
+  Future<void> _shiftWeeklyMonth(int delta) async {
+    setState(() {
+      _weeklyMonth = DateTime(_weeklyMonth.year, _weeklyMonth.month + delta);
+    });
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+    await _loadWeekly(token);
   }
 
   Future<void> _loadGeofences(String token) async {
@@ -196,7 +219,7 @@ class _DashboardTabState extends State<DashboardTab> {
       _loadingExceptions = true;
     });
     try {
-      final rows = await _api.listDashboardExceptions(token: token);
+      final rows = await _loadRecentUnresolvedExceptions(token);
       if (!mounted) return;
       setState(() {
         _exceptions = rows;
@@ -214,6 +237,71 @@ class _DashboardTabState extends State<DashboardTab> {
         });
       }
     }
+  }
+
+  Future<List<DashboardExceptionItem>> _loadRecentUnresolvedExceptions(
+    String token,
+  ) async {
+    final requests = <Future<List<AttendanceExceptionItem>>>[];
+    for (final status in _unresolvedExceptionStatuses) {
+      for (final type in _dashboardExceptionTypes) {
+        requests.add(
+          _loadExceptionRowsByTypeSafe(
+            token: token,
+            status: status,
+            exceptionType: type,
+          ),
+        );
+      }
+    }
+
+    final results = await Future.wait<List<AttendanceExceptionItem>>(requests);
+    final merged = <int, AttendanceExceptionItem>{};
+    for (final result in results) {
+      for (final row in result) {
+        merged[row.id] = row;
+      }
+    }
+
+    final rows = merged.values.toList(growable: false)
+      ..sort((a, b) {
+        final aTime = a.createdAt ?? a.detectedAt ?? a.workDate;
+        final bTime = b.createdAt ?? b.detectedAt ?? b.workDate;
+        return bTime.compareTo(aTime);
+      });
+
+    return rows
+        .take(_dashboardExceptionLimit)
+        .map(_mapDashboardException)
+        .toList(growable: false);
+  }
+
+  Future<List<AttendanceExceptionItem>> _loadExceptionRowsByTypeSafe({
+    required String token,
+    required String status,
+    required String exceptionType,
+  }) async {
+    try {
+      return await _api.listAttendanceExceptions(
+        token: token,
+        exceptionType: exceptionType,
+        statusFilter: status,
+      );
+    } catch (_) {
+      return const <AttendanceExceptionItem>[];
+    }
+  }
+
+  DashboardExceptionItem _mapDashboardException(AttendanceExceptionItem item) {
+    final timeSource = item.detectedAt ?? item.createdAt ?? item.workDate;
+    return DashboardExceptionItem(
+      id: item.id,
+      initials: _nameToInitials(item.fullName),
+      name: item.fullName,
+      reason: exceptionTypeLabel(item.exceptionType),
+      timeLabel: DateFormat('dd/MM HH:mm').format(timeSource.toLocal()),
+      status: item.status,
+    );
   }
 
   Future<void> _onFilterChanged() async {
@@ -253,57 +341,6 @@ class _DashboardTabState extends State<DashboardTab> {
       if (mounted) {
         setState(() {
           _exportingCsv = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _handleExceptionAction({
-    required DashboardExceptionItem item,
-    required bool approve,
-  }) async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      _showSnack('Phiên đăng nhập đã hết hạn.');
-      return;
-    }
-    if (_updatingExceptionIds.contains(item.id)) {
-      return;
-    }
-
-    final previous = _exceptions;
-    setState(() {
-      _updatingExceptionIds.add(item.id);
-      _exceptions = _exceptions
-          .where((exception) => exception.id != item.id)
-          .toList(growable: false);
-    });
-    try {
-      if (approve) {
-        await _api.approveDashboardException(
-          token: token,
-          exceptionId: item.id,
-        );
-      } else {
-        await _api.rejectDashboardException(
-          token: token,
-          exceptionId: item.id,
-        );
-      }
-      if (!mounted) return;
-      _showSnack(
-        approve ? 'Đã duyệt ngoại lệ.' : 'Đã chuyển ngoại lệ sang xem lại.',
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _exceptions = previous;
-      });
-      _showSnack('Không thể cập nhật ngoại lệ.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _updatingExceptionIds.remove(item.id);
         });
       }
     }
@@ -392,6 +429,22 @@ class _DashboardTabState extends State<DashboardTab> {
       }
     }
     return out.join();
+  }
+
+  static String _nameToInitials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return '?';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
+        .toUpperCase();
   }
 
   Widget _buildDashboardContent() {
@@ -677,6 +730,7 @@ class _DashboardTabState extends State<DashboardTab> {
   }
 
   Widget _buildWeeklyChartCard() {
+    final monthLabel = DateFormat('MM/yyyy').format(_weeklyMonth);
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -688,8 +742,58 @@ class _DashboardTabState extends State<DashboardTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 560;
+                final monthPicker = Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgPage,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: _loadingWeekly ? null : () => _shiftWeeklyMonth(-1),
+                        icon: const Icon(Icons.chevron_left, size: 18),
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: compact ? 64 : 72),
+                        child: Text(
+                          monthLabel,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _loadingWeekly ? null : () => _shiftWeeklyMonth(1),
+                        icon: const Icon(Icons.chevron_right, size: 18),
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                return monthPicker;
+              },
+            ),
+            const SizedBox(height: 8),
             const Text(
-              'Xu hướng chấm công hàng tuần',
+              'Xu hướng chấm công hàng tháng',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
@@ -859,11 +963,11 @@ class _DashboardTabState extends State<DashboardTab> {
             if (!_loadingExceptions && _exceptions.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
-                child: Text('Không có ngoại lệ đang chờ duyệt.'),
+                child: Text('Không có ngoại lệ chưa được giải quyết.'),
               ),
             if (!_loadingExceptions)
               ..._exceptions.map((item) {
-                final busy = _updatingExceptionIds.contains(item.id);
+                final palette = exceptionStatusPalette(item.status);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(10),
@@ -913,32 +1017,10 @@ class _DashboardTabState extends State<DashboardTab> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      InkWell(
-                        onTap: busy
-                            ? null
-                            : () => _handleExceptionAction(
-                                item: item,
-                                approve: true,
-                              ),
-                        borderRadius: BorderRadius.circular(999),
-                        child: const _StatusBadge(
-                          label: 'Chờ duyệt',
-                          color: Color(0xFFD97706),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: busy
-                            ? null
-                            : () => _handleExceptionAction(
-                                item: item,
-                                approve: false,
-                              ),
-                        borderRadius: BorderRadius.circular(999),
-                        child: const _StatusBadge(
-                          label: 'Xem lại',
-                          color: Color(0xFF1A56DB),
-                        ),
+                      _StatusBadge(
+                        label: exceptionStatusLabel(item.status),
+                        backgroundColor: palette.bg,
+                        textColor: palette.text,
                       ),
                     ],
                   ),
@@ -962,23 +1044,31 @@ class _DashboardTabState extends State<DashboardTab> {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label, required this.color});
+  const _StatusBadge({
+    required this.label,
+    this.color,
+    this.backgroundColor,
+    this.textColor,
+  });
 
   final String label;
-  final Color color;
+  final Color? color;
+  final Color? backgroundColor;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context) {
+    final foreground = textColor ?? color ?? AppColors.textPrimary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: backgroundColor ?? foreground.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: color,
+          color: foreground,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -1104,104 +1194,155 @@ class _MockWeeklyChart extends StatelessWidget {
 
     return SizedBox(
       height: 240,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 26,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: yLabels
-                  .map(
-                    (v) => Text(
-                      '$v',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: chartData.map((item) {
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              final h = constraints.maxHeight;
-                              return Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: List.generate(
-                                        5,
-                                        (_) => Container(
-                                          height: 1,
-                                          color: const Color(0xFFF1F5F9),
-                                        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          final axisWidth = compact ? 32.0 : 36.0;
+          final barWidth = compact ? 6.0 : 10.0;
+          final barGap = compact ? 2.0 : 4.0;
+          final columnPadding = compact ? 2.0 : 6.0;
+          final labelFontSize = compact ? 10.0 : 12.0;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: axisWidth,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: yLabels
+                      .map(
+                        (v) => FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$v',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              SizedBox(width: compact ? 4 : 8),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, chartConstraints) {
+                    final minColumnWidth = chartData.length > 20
+                        ? 26.0
+                        : chartData.length > 10
+                            ? 34.0
+                            : (compact ? 44.0 : 56.0);
+                    final chartWidth = math.max(
+                      chartConstraints.maxWidth,
+                      chartData.length * minColumnWidth,
+                    );
+                    final labelStride = chartData.length > 20
+                        ? 5
+                        : chartData.length > 12
+                            ? 2
+                            : 1;
+
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: chartWidth,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: chartData.asMap().entries.map((entry) {
+                            final item = entry.value;
+                            final showLabel =
+                                entry.key % labelStride == 0 ||
+                                entry.key == chartData.length - 1;
+                            return SizedBox(
+                              width: chartWidth / chartData.length,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(horizontal: columnPadding),
+                                child: Column(
+                                  children: [
+                                    Expanded(
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final h = constraints.maxHeight;
+                                          return Stack(
+                                            children: [
+                                              Positioned.fill(
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.spaceBetween,
+                                                  children: List.generate(
+                                                    5,
+                                                    (_) => Container(
+                                                      height: 1,
+                                                      color: const Color(0xFFF1F5F9),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              Align(
+                                                alignment: Alignment.bottomCenter,
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.end,
+                                                  children: [
+                                                    _MiniBar(
+                                                      width: barWidth,
+                                                      height: h * (item.onTime / maxY),
+                                                      color: const Color(0xFF16A34A),
+                                                      loading: loading,
+                                                    ),
+                                                    SizedBox(width: barGap),
+                                                    _MiniBar(
+                                                      width: barWidth,
+                                                      height: h * (item.late / maxY),
+                                                      color: const Color(0xFFD97706),
+                                                      loading: loading,
+                                                    ),
+                                                    SizedBox(width: barGap),
+                                                    _MiniBar(
+                                                      width: barWidth,
+                                                      height: h * (item.outOfRange / maxY),
+                                                      color: const Color(0xFFDC2626),
+                                                      loading: loading,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
                                       ),
                                     ),
-                                  ),
-                                  Align(
-                                    alignment: Alignment.bottomCenter,
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        _MiniBar(
-                                          height: h * (item.onTime / maxY),
-                                          color: const Color(0xFF16A34A),
-                                          loading: loading,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        _MiniBar(
-                                          height: h * (item.late / maxY),
-                                          color: const Color(0xFFD97706),
-                                          loading: loading,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        _MiniBar(
-                                          height: h * (item.outOfRange / maxY),
-                                          color: const Color(0xFFDC2626),
-                                          loading: loading,
-                                        ),
-                                      ],
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      showLabel ? item.day : '',
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: labelFontSize,
+                                        color: const Color(0xFF64748B),
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(growable: false),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          item.day,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1209,11 +1350,13 @@ class _MockWeeklyChart extends StatelessWidget {
 
 class _MiniBar extends StatelessWidget {
   const _MiniBar({
+    required this.width,
     required this.height,
     required this.color,
     required this.loading,
   });
 
+  final double width;
   final double height;
   final Color color;
   final bool loading;
@@ -1221,7 +1364,7 @@ class _MiniBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bar = Container(
-      width: 10,
+      width: width,
       height: height.clamp(8.0, 220.0),
       decoration: BoxDecoration(
         color: color,

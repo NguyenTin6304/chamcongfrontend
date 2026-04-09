@@ -102,6 +102,79 @@ class AttendanceLogItem {
   final List<String> riskFlags;
 }
 
+class EmployeeExceptionTimelineItem {
+  const EmployeeExceptionTimelineItem({
+    required this.id,
+    required this.eventType,
+    required this.nextStatus,
+    required this.actorType,
+    required this.createdAt,
+    this.previousStatus,
+    this.actorEmail,
+  });
+
+  final int id;
+  final String eventType;
+  final String? previousStatus;
+  final String nextStatus;
+  final String actorType;
+  final String? actorEmail;
+  final DateTime? createdAt;
+}
+
+class EmployeeExceptionItem {
+  const EmployeeExceptionItem({
+    required this.id,
+    required this.employeeId,
+    required this.workDate,
+    required this.exceptionType,
+    required this.status,
+    required this.sourceCheckinLogId,
+    required this.canSubmitExplanation,
+    this.employeeCode,
+    this.fullName,
+    this.groupCode,
+    this.groupName,
+    this.note,
+    this.sourceCheckinTime,
+    this.detectedAt,
+    this.expiresAt,
+    this.employeeExplanation,
+    this.employeeSubmittedAt,
+    this.adminNote,
+    this.adminDecidedAt,
+    this.decidedByEmail,
+    this.createdAt,
+    this.timeline = const [],
+  });
+
+  final int id;
+  final int employeeId;
+  final String? employeeCode;
+  final String? fullName;
+  final String? groupCode;
+  final String? groupName;
+  final String workDate;
+  final String exceptionType;
+  final String status;
+  final String? note;
+  final int sourceCheckinLogId;
+  final DateTime? sourceCheckinTime;
+  final DateTime? detectedAt;
+  final DateTime? expiresAt;
+  final String? employeeExplanation;
+  final DateTime? employeeSubmittedAt;
+  final String? adminNote;
+  final DateTime? adminDecidedAt;
+  final String? decidedByEmail;
+  final DateTime? createdAt;
+  final bool canSubmitExplanation;
+  final List<EmployeeExceptionTimelineItem> timeline;
+
+  bool get canEditExplanation =>
+      status == 'PENDING_EMPLOYEE' && canSubmitExplanation && employeeSubmittedAt == null;
+}
+
 class AttendanceActionException implements Exception {
   const AttendanceActionException({
     required this.message,
@@ -183,6 +256,64 @@ class AttendanceApi {
 
     final data = _parseJsonMap(response.body);
     throw Exception(_extractErrorMessage(data, 'Load history failed (${response.statusCode})'));
+  }
+
+  Future<List<EmployeeExceptionItem>> listMyExceptions(
+    String token, {
+    String? status,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance-exceptions/me').replace(
+      queryParameters: {
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+    final response = await http.get(uri, headers: _authHeaders(token));
+
+    if (response.statusCode == 200) {
+      final list = _parseJsonList(response.body);
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(_employeeExceptionFromMap)
+          .toList();
+    }
+
+    final data = _parseJsonMap(response.body);
+    throw Exception(_extractErrorMessage(data, 'Load exceptions failed (${response.statusCode})'));
+  }
+
+  Future<EmployeeExceptionItem> getMyExceptionDetail({
+    required String token,
+    required int exceptionId,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance-exceptions/me/$exceptionId');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseJsonMap(response.body);
+
+    if (response.statusCode == 200) {
+      return _employeeExceptionFromMap(data);
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Load exception detail failed (${response.statusCode})'));
+  }
+
+  Future<EmployeeExceptionItem> submitExceptionExplanation({
+    required String token,
+    required int exceptionId,
+    required String explanation,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/submit-explanation');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode({'explanation': explanation}),
+    );
+    final data = _parseJsonMap(response.body);
+
+    if (response.statusCode == 200) {
+      return _employeeExceptionFromMap(data);
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Submit explanation failed (${response.statusCode})'));
   }
 
   Future<AttendanceActionResult> checkin({
@@ -362,6 +493,60 @@ class AttendanceApi {
       return value.toDouble();
     }
     return double.tryParse(value.toString());
+  }
+
+  DateTime? _toDateTime(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    return DateTime.tryParse(value.toString());
+  }
+
+  EmployeeExceptionItem _employeeExceptionFromMap(Map<String, dynamic> data) {
+    return EmployeeExceptionItem(
+      id: _toInt(data['id']) ?? 0,
+      employeeId: _toInt(data['employee_id']) ?? 0,
+      employeeCode: data['employee_code'] as String?,
+      fullName: data['full_name'] as String?,
+      groupCode: data['group_code'] as String?,
+      groupName: data['group_name'] as String?,
+      workDate: data['work_date']?.toString() ?? '',
+      exceptionType: data['exception_type'] as String? ?? 'UNKNOWN',
+      status: data['status'] as String? ?? 'PENDING_EMPLOYEE',
+      note: data['note'] as String?,
+      sourceCheckinLogId: _toInt(data['source_checkin_log_id']) ?? 0,
+      sourceCheckinTime: _toDateTime(data['source_checkin_time']),
+      detectedAt: _toDateTime(data['detected_at']),
+      expiresAt: _toDateTime(data['expires_at']),
+      employeeExplanation: data['employee_explanation'] as String?,
+      employeeSubmittedAt: _toDateTime(data['employee_submitted_at']),
+      adminNote: data['admin_note'] as String?,
+      adminDecidedAt: _toDateTime(data['admin_decided_at']),
+      decidedByEmail: data['decided_by_email'] as String?,
+      createdAt: _toDateTime(data['created_at']),
+      canSubmitExplanation: data['can_submit_explanation'] as bool? ?? false,
+      timeline: _employeeExceptionTimelineFromList(data['timeline']),
+    );
+  }
+
+  List<EmployeeExceptionTimelineItem> _employeeExceptionTimelineFromList(dynamic value) {
+    if (value is! List) {
+      return const [];
+    }
+    return value.whereType<Map<String, dynamic>>().map((item) {
+      return EmployeeExceptionTimelineItem(
+        id: _toInt(item['id']) ?? 0,
+        eventType: item['event_type'] as String? ?? '',
+        previousStatus: item['previous_status'] as String?,
+        nextStatus: item['next_status'] as String? ?? '',
+        actorType: item['actor_type'] as String? ?? '',
+        actorEmail: item['actor_email'] as String?,
+        createdAt: _toDateTime(item['created_at']),
+      );
+    }).toList();
   }
 }
 

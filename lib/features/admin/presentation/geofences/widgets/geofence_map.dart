@@ -6,11 +6,7 @@ extension _GeofenceMapX on _GeofencesTabState {
   Widget _buildGeofencesPageExtracted() {
     final total = _geofences.length;
     final active = _geofences.where((e) => e.active).length;
-    final noSignal = _geofences.where((e) => !e.active).length;
-    final totalMembers = _geofences.fold<int>(
-      0,
-      (sum, item) => sum + item.memberCount,
-    );
+    final inactive = _geofences.where((e) => !e.active).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -22,7 +18,7 @@ extension _GeofenceMapX on _GeofencesTabState {
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Tong vung',
+                label: 'Tổng vùng',
                 value: _loadingGeofences ? '--' : _formatThousands(total),
                 icon: Icons.map_outlined,
                 iconColor: AppColors.primary,
@@ -33,7 +29,7 @@ extension _GeofenceMapX on _GeofencesTabState {
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Dang hoat dong',
+                label: 'Đang hoạt động',
                 value: _loadingGeofences ? '--' : _formatThousands(active),
                 icon: Icons.check_circle_outline,
                 iconColor: AppColors.success,
@@ -44,24 +40,11 @@ extension _GeofenceMapX on _GeofencesTabState {
             SizedBox(
               width: 230,
               child: KpiCard(
-                label: 'Khong tin hieu',
-                value: _loadingGeofences ? '--' : _formatThousands(noSignal),
+                label: 'Không hoạt động',
+                value: _loadingGeofences ? '--' : _formatThousands(inactive),
                 icon: Icons.wifi_off_outlined,
                 iconColor: AppColors.warning,
                 valueColor: AppColors.warning,
-                loading: _loadingGeofences,
-              ),
-            ),
-            SizedBox(
-              width: 230,
-              child: KpiCard(
-                label: 'Tong nhan vien',
-                value: _loadingGeofences
-                    ? '--'
-                    : _formatThousands(totalMembers),
-                icon: Icons.people_outline,
-                iconColor: AppColors.overtime,
-                valueColor: AppColors.overtime,
                 loading: _loadingGeofences,
               ),
             ),
@@ -96,35 +79,32 @@ extension _GeofenceMapX on _GeofencesTabState {
   void _ensureGeofenceLayers() {
     if (_cachedGeofenceCircles != null &&
         identical(_cachedGeofenceListRef, _geofences) &&
-        _cachedGeofenceSelectedId == _selectedGeofence?.id) {
+        _cachedGeofenceSelectedId == _editingGeofence?.id) {
       return;
     }
-    final visible = _geofences
-        .where((e) => e.latitude != null && e.longitude != null)
-        .toList(growable: false);
-    _cachedGeofenceCircles = visible.asMap().entries.map((entry) {
+    _cachedGeofenceCircles = _geofences.asMap().entries.map((entry) {
       final color = _colorForGeofenceIndex(entry.key);
-      final zone = entry.value;
+      final geo = entry.value;
       return CircleMarker(
-        point: LatLng(zone.latitude!, zone.longitude!),
-        radius: (zone.radiusMeters ?? 100).toDouble(),
+        point: LatLng(geo.latitude, geo.longitude),
+        radius: geo.radiusM.toDouble(),
         useRadiusInMeter: true,
         color: color.withValues(alpha: 0.12),
         borderStrokeWidth: 2,
         borderColor: color,
       );
     }).toList(growable: false);
-    _cachedGeofenceMarkers = visible.asMap().entries.map((entry) {
+    _cachedGeofenceMarkers = _geofences.asMap().entries.map((entry) {
       final color = _colorForGeofenceIndex(entry.key);
-      final zone = entry.value;
-      final isSelected = _selectedGeofence?.id == zone.id;
+      final geo = entry.value;
+      final isSelected = _editingGeofence?.id == geo.id;
       return Marker(
-        point: LatLng(zone.latitude!, zone.longitude!),
+        point: LatLng(geo.latitude, geo.longitude),
         width: 36,
         height: 36,
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
-          onTap: () => _selectGeofenceForEdit(zone),
+          onTap: () => _startEdit(geo),
           child: Icon(
             Icons.location_on,
             size: isSelected ? 34 : 30,
@@ -134,7 +114,7 @@ extension _GeofenceMapX on _GeofencesTabState {
       );
     }).toList(growable: false);
     _cachedGeofenceListRef = _geofences;
-    _cachedGeofenceSelectedId = _selectedGeofence?.id;
+    _cachedGeofenceSelectedId = _editingGeofence?.id;
   }
 
   List<CircleMarker> get _geofenceCirclesCache {
@@ -150,9 +130,9 @@ extension _GeofenceMapX on _GeofencesTabState {
   Widget _buildGeofenceMapCardExtracted() {
     final tileUrl =
         'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}';
-    final selected = _selectedGeofence;
-    final center = selected?.latitude != null && selected?.longitude != null
-        ? LatLng(selected!.latitude!, selected.longitude!)
+    final editing = _editingGeofence;
+    final center = editing != null
+        ? LatLng(editing.latitude, editing.longitude)
         : LatLng(AppConfig.defaultMapCenterLat, AppConfig.defaultMapCenterLng);
 
     return Container(
@@ -172,7 +152,7 @@ extension _GeofenceMapX on _GeofencesTabState {
                   onSubmitted: _searchGeofencePlaces,
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Tim dia diem...',
+                    hintText: 'Tìm địa điểm...',
                     prefixIcon: const Icon(Icons.search, size: 18),
                     suffixIcon: IconButton(
                       onPressed: () =>
@@ -207,7 +187,7 @@ extension _GeofenceMapX on _GeofencesTabState {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Text(
-                  'Cham ban do de dat diem moi',
+                  'Chạm bản đồ để chọn địa điểm',
                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ),
@@ -255,12 +235,11 @@ extension _GeofenceMapX on _GeofencesTabState {
                     onTap: () {
                       setState(() {
                         _placeSuggestions = const [];
-                        _zoneLatController.text = item.latitude.toStringAsFixed(
-                          6,
-                        );
-                        _zoneLngController.text =
+                        _formLatController.text =
+                            item.latitude.toStringAsFixed(6);
+                        _formLngController.text =
                             item.longitude.toStringAsFixed(6);
-                        _zoneAddressController.text = item.formatted;
+                        _formAddressController.text = item.formatted;
                         _newGeofencePoint = LatLng(
                           item.latitude,
                           item.longitude,
@@ -292,7 +271,8 @@ extension _GeofenceMapX on _GeofencesTabState {
                         onTap: (_, point) => _onGeofenceMapTap(point),
                         onPositionChanged: (position, _) {
                           final zoom = position.zoom;
-                          if ((zoom - _geofenceZoomNotifier.value).abs() >= 0.05) {
+                          if ((zoom - _geofenceZoomNotifier.value).abs() >=
+                              0.05) {
                             _geofenceZoomNotifier.value = zoom;
                           }
                         },
@@ -319,12 +299,12 @@ extension _GeofenceMapX on _GeofencesTabState {
                       ],
                     ),
                   ),
-                  if (selected != null)
+                  if (editing != null)
                     Positioned(
                       left: 12,
                       top: 12,
                       child: Container(
-                        width: 270,
+                        width: 220,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: AppColors.bgCard,
@@ -338,7 +318,7 @@ extension _GeofenceMapX on _GeofencesTabState {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              selected.name,
+                              editing.name,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textPrimary,
@@ -346,36 +326,22 @@ extension _GeofenceMapX on _GeofencesTabState {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Thanh vien: ${_formatThousands(selected.memberCount)}',
+                              'Bán kính: ${editing.radiusM}m',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textMuted,
                               ),
                             ),
                             Text(
-                              'Dang hien dien: ${_formatThousands(selected.presentCount ?? 0)}',
-                              style: const TextStyle(
+                              editing.active
+                                  ? 'Đang hoạt động'
+                                  : 'Không hoạt động',
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.textMuted,
+                                color: editing.active
+                                    ? AppColors.success
+                                    : AppColors.textMuted,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                OutlinedButton(
-                                  onPressed: () => widget.onNavigateTo('logs'),
-                                  child: const Text('Nhat ky'),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () {},
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primary,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  child: const Text('Chinh sua'),
-                                ),
-                              ],
                             ),
                           ],
                         ),

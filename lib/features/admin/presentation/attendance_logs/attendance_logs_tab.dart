@@ -119,13 +119,15 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
         fromDate: _fromDate,
         toDate: _toDate,
         groupId: _groupId,
+        status: _status,
+        search: _search,
       );
       await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
       if (!mounted) return;
-      _showSnack('Xuất CSV thành công.');
+      _showSnack('Xuất Excel thành công.');
     } catch (_) {
       if (!mounted) return;
-      _showSnack('Không thể xuất CSV. Vui lòng thử lại.');
+      _showSnack('Không thể xuất Excel. Vui lòng thử lại.');
     } finally {
       if (mounted) setState(() => _exportingCsv = false);
     }
@@ -497,7 +499,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                     ),
                   )
                 : const Icon(Icons.download_outlined),
-            label: const Text('Xuất CSV'),
+            label: const Text('Xuất Excel'),
           ),
         ],
       ),

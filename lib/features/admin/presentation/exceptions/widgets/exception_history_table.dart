@@ -18,18 +18,22 @@ class ExceptionHistoryTable extends StatefulWidget {
     required this.statusFilter,
     required this.dateRange,
     required this.groupId,
+    required this.employeeId,
     required this.exceptionTypeFilter,
     required this.searchQuery,
     required this.reloadToken,
     super.key,
+    this.onViewDetail,
   });
 
   final String? statusFilter;
   final DateRange? dateRange;
   final String? groupId;
+  final int? employeeId;
   final String? exceptionTypeFilter;
   final String searchQuery;
   final int reloadToken;
+  final ValueChanged<AttendanceExceptionItem>? onViewDetail;
 
   @override
   State<ExceptionHistoryTable> createState() => _ExceptionHistoryTableState();
@@ -67,12 +71,13 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     super.didUpdateWidget(oldWidget);
     final needsRefetch =
         oldWidget.groupId != widget.groupId ||
+        oldWidget.employeeId != widget.employeeId ||
+        oldWidget.statusFilter != widget.statusFilter ||
         oldWidget.exceptionTypeFilter != widget.exceptionTypeFilter ||
         oldWidget.reloadToken != widget.reloadToken ||
         oldWidget.dateRange?.from != widget.dateRange?.from ||
         oldWidget.dateRange?.to != widget.dateRange?.to;
     final needsPageReset = needsRefetch ||
-        oldWidget.statusFilter != widget.statusFilter ||
         oldWidget.searchQuery != widget.searchQuery;
     if (needsRefetch) {
       _page = 1;
@@ -116,6 +121,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
               fromDate: range?.from,
               toDate: range?.to,
               groupId: groupId,
+              employeeId: widget.employeeId,
               exceptionType: type,
             ),
           )
@@ -164,6 +170,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     DateTime? fromDate,
     DateTime? toDate,
     int? groupId,
+    int? employeeId,
     required String exceptionType,
   }) async {
     try {
@@ -172,40 +179,22 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         fromDate: fromDate,
         toDate: toDate,
         groupId: groupId,
+        employeeId: employeeId,
         exceptionType: exceptionType,
-        statusFilter: null,
+        statusFilter: widget.statusFilter,
       );
     } catch (_) {
       return const [];
     }
   }
 
-  bool _isPendingStatus(String value) {
-    final lower = value.toLowerCase();
-    return lower.contains('open') || lower.contains('pending');
-  }
-
-  bool _isApprovedStatus(String value) {
-    final lower = value.toLowerCase();
-    return lower.contains('resolve') || lower.contains('approve');
-  }
-
-  bool _isRejectedStatus(String value) {
-    final lower = value.toLowerCase();
-    return lower.contains('reject') || lower.contains('deny');
-  }
-
   List<AttendanceExceptionItem> get _filteredRows {
-    final status = (widget.statusFilter ?? 'all').toLowerCase();
+    final status = widget.statusFilter?.toUpperCase();
     final keyword = widget.searchQuery.trim().toLowerCase();
     return _allRows.where((row) {
-      if (status == 'pending' && !_isPendingStatus(row.status)) {
-        return false;
-      }
-      if (status == 'approved' && !_isApprovedStatus(row.status)) {
-        return false;
-      }
-      if (status == 'rejected' && !_isRejectedStatus(row.status)) {
+      if (status != null &&
+          status.isNotEmpty &&
+          row.status.toUpperCase() != status) {
         return false;
       }
       if (keyword.isEmpty) {
@@ -350,6 +339,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                     DataColumn(label: Text('LÝ DO')),
                     DataColumn(label: Text('TRẠNG THÁI')),
                     DataColumn(label: Text('NGƯỜI DUYỆT')),
+                    DataColumn(label: Text('CHI TIẾT')),
                   ],
                   rows: rows.asMap().entries.map((entry) {
                     final index = entry.key;
@@ -405,7 +395,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                                         ),
                                       ),
                                       Text(
-                                        item.employeeCode,
+                                        '${item.employeeCode} - ${item.groupName ?? item.groupCode ?? '--'}',
                                         style: const TextStyle(
                                           fontSize: 11,
                                           color: AppColors.textMuted,
@@ -461,7 +451,17 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                           ),
                         ),
                         DataCell(_ReviewStatusBadge(status: item.status)),
-                        DataCell(Text(item.resolvedByEmail ?? '—')),
+                        DataCell(
+                          Text(item.decidedByEmail ?? item.resolvedByEmail ?? '—'),
+                        ),
+                        DataCell(
+                          TextButton(
+                            onPressed: widget.onViewDetail == null
+                                ? null
+                                : () => widget.onViewDetail!(item),
+                            child: const Text('Xem'),
+                          ),
+                        ),
                       ],
                     );
                   }).toList(growable: false),
@@ -552,6 +552,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
           DataColumn(label: Text('LÝ DO')),
           DataColumn(label: Text('TRẠNG THÁI')),
           DataColumn(label: Text('NGƯỜI DUYỆT')),
+          DataColumn(label: Text('CHI TIẾT')),
         ],
         rows: List.generate(
           3,
@@ -566,6 +567,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
               DataCell(_ShimmerCell(width: 170)),
               DataCell(_ShimmerCell(width: 90)),
               DataCell(_ShimmerCell(width: 120)),
+              DataCell(_ShimmerCell(width: 60)),
             ],
           ),
         ),
@@ -597,29 +599,14 @@ class _ReviewStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lower = status.toLowerCase();
-    late final String label;
-    late final Color background;
-    late final Color foreground;
-
-    if (lower.contains('reject') || lower.contains('deny')) {
-      label = 'Từ chối';
-      background = AppColors.badgeBgOutOfRange;
-      foreground = AppColors.badgeTextOutOfRange;
-    } else if (lower.contains('resolve') || lower.contains('approve')) {
-      label = 'Đã duyệt';
-      background = AppColors.badgeBgOnTime;
-      foreground = AppColors.badgeTextOnTime;
-    } else {
-      label = 'Chờ duyệt';
-      background = AppColors.badgeBgLate;
-      foreground = AppColors.badgeTextLate;
-    }
+    final normalized = status.toUpperCase();
+    final label = exceptionStatusLabel(normalized);
+    final palette = exceptionStatusPalette(normalized);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: background,
+        color: palette.bg,
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text(
@@ -627,7 +614,7 @@ class _ReviewStatusBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: foreground,
+          color: palette.text,
         ),
       ),
     );

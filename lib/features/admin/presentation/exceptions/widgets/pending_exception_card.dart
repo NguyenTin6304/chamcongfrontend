@@ -19,6 +19,7 @@ class ExceptionModel {
     required this.reason,
     required this.reviewerName,
     required this.createdAt,
+    this.canAdminDecide = false,
   });
 
   final int id;
@@ -34,6 +35,7 @@ class ExceptionModel {
   final String reason;
   final String reviewerName;
   final DateTime? createdAt;
+  final bool canAdminDecide;
 }
 
 class PendingExceptionCard extends StatelessWidget {
@@ -44,13 +46,15 @@ class PendingExceptionCard extends StatelessWidget {
     required this.onViewDetail,
     super.key,
     this.isProcessing = false,
+    this.canDecide = false,
   });
 
   final ExceptionModel exception;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+  final VoidCallback? onApprove;
+  final VoidCallback? onReject;
   final VoidCallback onViewDetail;
   final bool isProcessing;
+  final bool canDecide;
 
   String _initials(String fullName) {
     final parts = fullName
@@ -281,7 +285,7 @@ class PendingExceptionCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               OutlinedButton(
-                onPressed: isProcessing ? null : onReject,
+                onPressed: isProcessing || !canDecide ? null : onReject,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.danger),
                   foregroundColor: AppColors.danger,
@@ -300,7 +304,7 @@ class PendingExceptionCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: isProcessing ? null : onApprove,
+                onPressed: isProcessing || !canDecide ? null : onApprove,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.success,
                   foregroundColor: Colors.white,

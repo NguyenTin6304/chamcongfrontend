@@ -507,7 +507,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
                     const SizedBox(height: 10),
                     TextField(
                       controller: nameController,
-                      decoration: _decoration('Họ tên *', Icons.person_outline),
+                      decoration: _decoration('Họ tên', Icons.person_outline),
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<int?>(
@@ -602,16 +602,18 @@ class _EmployeesTabState extends State<EmployeesTab> {
   }
 
   String _employeeGroupName(EmployeeLite employee) {
-    if (employee.groupName != null && employee.groupName!.trim().isNotEmpty) {
-      return employee.groupName!;
-    }
     if (employee.groupId == null) {
       return 'Chưa phân nhóm';
     }
+    // Always prefer live _groups data so renames are reflected immediately
     for (final group in _groups) {
       if (group.id == employee.groupId) {
         return group.name;
       }
+    }
+    // Fallback to cached name from server response if group not found locally
+    if (employee.groupName != null && employee.groupName!.trim().isNotEmpty) {
+      return employee.groupName!;
     }
     return 'Nhóm #${employee.groupId}';
   }

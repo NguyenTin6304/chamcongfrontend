@@ -7,7 +7,6 @@ extension _GroupCreatePanelX on _GroupsTabState {
     final isEdit = group != null;
     final nameController = TextEditingController(text: group?.name ?? '');
     final codeController = TextEditingController(text: group?.code ?? '');
-    final descriptionController = TextEditingController();
     final startController = TextEditingController(
       text: group?.startTime ?? '08:00',
     );
@@ -18,14 +17,10 @@ extension _GroupCreatePanelX on _GroupsTabState {
       text: (group?.graceMinutes ?? 15).toString(),
     );
     final autoCheckoutController = TextEditingController(
-      text: group?.checkoutGraceMinutes == null
-          ? '18:00'
-          : '${(group!.checkoutGraceMinutes! ~/ 60).toString().padLeft(2, '0')}:${(group.checkoutGraceMinutes! % 60).toString().padLeft(2, '0')}',
+      text: (group?.checkoutGraceMinutes ?? 30).toString(),
     );
     bool active = group?.active ?? true;
     bool autoCheckout = group?.checkoutGraceMinutes != null;
-    int selectedColor = 0;
-    int? selectedGeofenceId;
 
     await showGeneralDialog<void>(
       context: context,
@@ -61,15 +56,15 @@ extension _GroupCreatePanelX on _GroupsTabState {
                 }
                 int? checkoutMinutes;
                 if (autoCheckout) {
-                  final text = autoCheckoutController.text.trim();
-                  final match = RegExp(r'^(\d{2}):(\d{2})$').firstMatch(text);
-                  if (match == null) {
-                    _showSnack('Giờ tự động checkout không hợp lệ.');
+                  checkoutMinutes = int.tryParse(
+                    autoCheckoutController.text.trim(),
+                  );
+                  if (checkoutMinutes == null ||
+                      checkoutMinutes < 0 ||
+                      checkoutMinutes > 240) {
+                    _showSnack('Grace checkout phải là số phút từ 0 đến 240.');
                     return;
                   }
-                  final hh = int.parse(match.group(1)!);
-                  final mm = int.parse(match.group(2)!);
-                  checkoutMinutes = hh * 60 + mm;
                 }
                 setPanelState(() {
                   _savingGroup = true;
@@ -128,9 +123,16 @@ extension _GroupCreatePanelX on _GroupsTabState {
                     return;
                   }
                   _showSnack('Không thể lưu nhóm.');
-                } finally {
-                  if (mounted) {
+                  // dialog vẫn còn mở khi có lỗi — reset button state
+                  if (context.mounted) {
                     setPanelState(() {
+                      _savingGroup = false;
+                    });
+                  }
+                } finally {
+                  // reset outer state (dialog đã đóng khi thành công)
+                  if (mounted) {
+                    setState(() {
                       _savingGroup = false;
                     });
                   }
@@ -183,51 +185,18 @@ extension _GroupCreatePanelX on _GroupsTabState {
                               TextField(
                                 controller: nameController,
                                 decoration: _decoration(
-                                  'Tên nhóm *',
+                                  'Tên nhóm',
                                   Icons.groups_2_outlined,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: descriptionController,
-                                decoration: _decoration(
-                                  'Mô tả',
-                                  Icons.subject_outlined,
                                 ),
                               ),
                               const SizedBox(height: 10),
                               TextField(
                                 controller: codeController,
                                 decoration: _decoration(
-                                  'Mã nhóm *',
+                                  'Mã nhóm',
                                   Icons.badge_outlined,
                                 ),
                                 readOnly: isEdit,
-                              ),
-                              const SizedBox(height: 10),
-                              DropdownButtonFormField<int?>(
-                                initialValue: selectedGeofenceId,
-                                decoration: _decoration(
-                                  'Vùng địa lý',
-                                  Icons.map_outlined,
-                                ),
-                                items: [
-                                  const DropdownMenuItem<int?>(
-                                    value: null,
-                                    child: Text('Chưa chọn vùng'),
-                                  ),
-                                  ..._geofenceOptions.map(
-                                    (item) => DropdownMenuItem<int?>(
-                                      value: item.id,
-                                      child: Text(item.name),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setPanelState(() {
-                                    selectedGeofenceId = value;
-                                  });
-                                },
                               ),
                               const SizedBox(height: 10),
                               Row(
@@ -277,59 +246,13 @@ extension _GroupCreatePanelX on _GroupsTabState {
                                 const SizedBox(height: 8),
                                 TextField(
                                   controller: autoCheckoutController,
+                                  keyboardType: TextInputType.number,
                                   decoration: _decoration(
-                                    'Giờ tự động checkout',
+                                    'Giới hạn tự động checkout (phút tối đa 240)',
                                     Icons.alarm_outlined,
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 10),
-                              const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'Màu nhóm',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: List.generate(6, (index) {
-                                  const colors = <Color>[
-                                    Color(0xFF3B82F6),
-                                    Color(0xFF10B981),
-                                    Color(0xFFF59E0B),
-                                    Color(0xFFEF4444),
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF14B8A6),
-                                  ];
-                                  final selected = selectedColor == index;
-                                  return GestureDetector(
-                                    onTap: () {
-                                      setPanelState(() {
-                                        selectedColor = index;
-                                      });
-                                    },
-                                    child: Container(
-                                      width: 28,
-                                      height: 28,
-                                      margin: const EdgeInsets.only(right: 8),
-                                      decoration: BoxDecoration(
-                                        color: colors[index],
-                                        shape: BoxShape.circle,
-                                        border: selected
-                                            ? Border.all(
-                                                color: AppColors.textPrimary,
-                                                width: 2,
-                                              )
-                                            : null,
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
                               const SizedBox(height: 10),
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
@@ -409,7 +332,6 @@ extension _GroupCreatePanelX on _GroupsTabState {
     );
     nameController.dispose();
     codeController.dispose();
-    descriptionController.dispose();
     startController.dispose();
     endController.dispose();
     graceController.dispose();

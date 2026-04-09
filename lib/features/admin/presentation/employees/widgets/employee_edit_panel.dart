@@ -26,9 +26,6 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                 Text('Mã nhân viên: ${employee.code}'),
                 Text('Email: ${employee.email ?? _userEmailById(employee.userId)}'),
                 Text('Số điện thoại: ${employee.phone ?? '--'}'),
-                Text(
-                  'Phòng ban: ${employee.departmentName ?? _employeeGroupName(employee)}',
-                ),
                 Text('Nhóm: ${_employeeGroupName(employee)}'),
                 Text('Vai trò: ${employee.role ?? '--'}'),
                 Text('Trạng thái: ${_employeeStatusLabel(employee)}'),
@@ -53,9 +50,7 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
       text: employee.email ?? _userEmailById(employee.userId),
     );
     final phoneController = TextEditingController(text: employee.phone ?? '');
-    final departmentController = TextEditingController(
-      text: employee.departmentName ?? _employeeGroupName(employee),
-    );
+    // departmentName is read-only: not included in patchEmployee body
     final users = _users;
     final groups = _groups;
 
@@ -238,14 +233,6 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              TextField(
-                                controller: departmentController,
-                                decoration: _decoration(
-                                  'Phòng ban',
-                                  Icons.apartment_outlined,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
                               DropdownButtonFormField<int?>(
                                 initialValue: selectedGroupId,
                                 decoration: _decoration(
@@ -379,6 +366,5 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
     codeController.dispose();
     emailController.dispose();
     phoneController.dispose();
-    departmentController.dispose();
   }
 }

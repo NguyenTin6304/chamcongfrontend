@@ -62,7 +62,6 @@ extension _EmployeeTableX on _EmployeesTabState {
                         DataColumn(label: Text('STT')),
                         DataColumn(label: Text('NHÂN VIÊN')),
                         DataColumn(label: Text('MÃ NV')),
-                        DataColumn(label: Text('PHÒNG BAN')),
                         DataColumn(label: Text('NHÓM')),
                         DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
                         DataColumn(label: Text('TRẠNG THÁI')),
@@ -128,12 +127,6 @@ extension _EmployeeTableX on _EmployeesTabState {
                                   ),
                                 ),
                                 DataCell(Text(employee.code)),
-                                DataCell(
-                                  Text(
-                                    employee.departmentName ??
-                                        _employeeGroupName(employee),
-                                  ),
-                                ),
                                 DataCell(Text(_employeeGroupName(employee))),
                                 DataCell(Text(employee.phone ?? '--')),
                                 DataCell(
@@ -237,7 +230,6 @@ extension _EmployeeTableX on _EmployeesTabState {
           DataColumn(label: Text('STT')),
           DataColumn(label: Text('NHÂN VIÊN')),
           DataColumn(label: Text('MÃ NV')),
-          DataColumn(label: Text('PHÒNG BAN')),
           DataColumn(label: Text('NHÓM')),
           DataColumn(label: Text('SỐ ĐIỆN THOẠI')),
           DataColumn(label: Text('TRẠNG THÁI')),
@@ -248,9 +240,8 @@ extension _EmployeeTableX on _EmployeesTabState {
           (_) => const DataRow(
             cells: [
               DataCell(_SkeletonCell(width: 20)),
-              DataCell(_SkeletonCell(width: 140)),
+              DataCell(_SkeletonCell(width: 200)),
               DataCell(_SkeletonCell(width: 70)),
-              DataCell(_SkeletonCell(width: 80)),
               DataCell(_SkeletonCell(width: 80)),
               DataCell(_SkeletonCell(width: 90)),
               DataCell(_SkeletonCell(width: 80)),

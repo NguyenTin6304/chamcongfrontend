@@ -30,14 +30,12 @@ class _GroupsTabState extends State<GroupsTab> {
 
   bool _loadingGroups = false;
   bool _loadingEmployees = false;
-  bool _loadingGeofenceOptions = false;
   bool _loadingGroupGeofenceCards = false;
   bool _savingGroup = false;
   bool _deletingGroup = false;
 
   List<GroupLite> _groups = const [];
   List<EmployeeLite> _employees = const [];
-  List<DashboardGeofenceItem> _geofenceOptions = const [];
 
   final _groupsSearchController = TextEditingController();
   String _groupsSearch = '';
@@ -75,7 +73,6 @@ class _GroupsTabState extends State<GroupsTab> {
     await Future.wait<void>([
       _loadGroups(token),
       _loadEmployees(token),
-      _loadGeofenceOptions(token),
     ]);
     await _loadGroupGeofenceCards();
   }
@@ -103,7 +100,7 @@ class _GroupsTabState extends State<GroupsTab> {
       if (!mounted) {
         return;
       }
-      _showSnack('Khong the tai danh sach nhom.');
+      _showSnack('Không thể tải danh sách nhóm.');
     } finally {
       if (mounted) {
         setState(() {
@@ -129,7 +126,7 @@ class _GroupsTabState extends State<GroupsTab> {
       if (!mounted) {
         return;
       }
-      _showSnack('Khong the tai danh sach nhan vien.');
+      _showSnack('Không thể tải danh sách nhân viên.');
     } finally {
       if (mounted) {
         setState(() {
@@ -139,34 +136,6 @@ class _GroupsTabState extends State<GroupsTab> {
     }
   }
 
-  Future<void> _loadGeofenceOptions(String token) async {
-    setState(() {
-      _loadingGeofenceOptions = true;
-    });
-    try {
-      final geofences = await _api.listDashboardGeofences(token: token);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _geofenceOptions = geofences;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _geofenceOptions = const [];
-      });
-      _showSnack('Khong the tai danh sach vung dia ly.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingGeofenceOptions = false;
-        });
-      }
-    }
-  }
 
   List<GroupLite> get _groupsView {
     final filterKey = '$_groupsSearch|$_groupsStatus';
@@ -283,7 +252,7 @@ class _GroupsTabState extends State<GroupsTab> {
   Future<void> _assignEmployeeToGroup(EmployeeLite employee, int? groupId) async {
     final token = _token;
     if (token == null || token.isEmpty) {
-      _showSnack('Phien dang nhap da het han.');
+      _showSnack('Phiên đăng nhập đã hết hạn.');
       return;
     }
     try {
@@ -301,30 +270,30 @@ class _GroupsTabState extends State<GroupsTab> {
             .map((item) => item.id == updated.id ? updated : item)
             .toList(growable: false);
       });
-      _showSnack('Da cap nhat nhom cho nhan vien.');
+      _showSnack('Đã cập nhật nhóm cho nhân viên.');
     } catch (_) {
       if (!mounted) {
         return;
       }
-      _showSnack('Khong the cap nhat nhom cho nhan vien.');
+      _showSnack('Không thể cập nhật nhóm cho nhân viên.');
     }
   }
 
   Future<void> _deleteGroupItem(GroupLite group) async {
     final token = _token;
     if (token == null || token.isEmpty) {
-      _showSnack('Phien dang nhap da het han.');
+      _showSnack('Phiên đăng nhập đã hết hạn.');
       return;
     }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xoa nhom'),
-        content: Text('Ban co chac muon xoa nhom "${group.name}"?'),
+        title: const Text('Xóa nhóm'),
+        content: Text('Bạn có chắc muốn xóa nhóm "${group.name}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Huy'),
+            child: const Text('Hủy'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -332,7 +301,7 @@ class _GroupsTabState extends State<GroupsTab> {
               backgroundColor: AppColors.danger,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Xoa'),
+            child: const Text('Xóa'),
           ),
         ],
       ),
@@ -357,12 +326,12 @@ class _GroupsTabState extends State<GroupsTab> {
       });
       await _loadGroupGeofenceCards();
       await _loadEmployees(token);
-      _showSnack('Da xoa nhom.');
+      _showSnack('Đã xoá nhóm.');
     } catch (_) {
       if (!mounted) {
         return;
       }
-      _showSnack('Khong the xoa nhom.');
+      _showSnack('Không thể xoá nhóm.');
     } finally {
       if (mounted) {
         setState(() {
@@ -382,8 +351,8 @@ class _GroupsTabState extends State<GroupsTab> {
         position.dy,
       ),
       items: const [
-        PopupMenuItem<String>(value: 'edit', child: Text('Chinh sua')),
-        PopupMenuItem<String>(value: 'delete', child: Text('Xoa')),
+        PopupMenuItem<String>(value: 'edit', child: Text('Chỉnh sửa')),
+        PopupMenuItem<String>(value: 'delete', child: Text('Xóa')),
       ],
     );
     if (selected == 'edit') {

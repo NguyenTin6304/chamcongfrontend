@@ -886,6 +886,16 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.report_problem_outlined),
+                    title: const Text('Ngoại lệ chấm công'),
+                    subtitle: const Text('Xem trạng thái và gửi giải trình khi hệ thống yêu cầu.'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).pushNamed('/home/exceptions'),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -1020,7 +1030,6 @@ class _AttendanceDayGroup {
   final DateTime? dayDate;
   final List<_AttendancePair> items;
 }
-
 
 
 
