@@ -22,7 +22,6 @@ class _ReportsTabState extends State<ReportsTab> {
 
   String? _token;
   List<GroupLite> _groups = const [];
-  DashboardSummaryResult? _reportsSummary;
   List<DashboardWeeklyTrendItem> _reportsTrends = const [];
   List<DashboardAttendanceLogItem> _reportsLogs = const [];
   List<DashboardAttendanceLogItem> _reportsLateTop = const [];
@@ -32,7 +31,6 @@ class _ReportsTabState extends State<ReportsTab> {
   String _reportsStatus = 'all';
   String _reportsTrendPeriod = 'day';
 
-  bool _loadingReportsSummary = false;
   bool _loadingReportsTrends = false;
   bool _loadingReportsLogs = false;
   bool _loadingReportsLateTop = false;
@@ -61,7 +59,6 @@ class _ReportsTabState extends State<ReportsTab> {
     if (token == null || token.isEmpty) return;
     await Future.wait([
       _loadGroups(token),
-      _loadReportsSummary(token),
       _loadReportsTrends(token),
       _loadReportsLogs(token),
       _loadReportsTopLate(token),
@@ -88,25 +85,6 @@ class _ReportsTabState extends State<ReportsTab> {
     } catch (_) {}
   }
 
-  Future<void> _loadReportsSummary(String token) async {
-    setState(() => _loadingReportsSummary = true);
-    try {
-      final data = await _adminApi.getDashboardSummary(
-        token: token,
-        date: _reportsFromDate,
-        groupId: _reportsGroupId,
-        status: _reportsStatus,
-      );
-      if (!mounted) return;
-      setState(() => _reportsSummary = data);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _reportsSummary = null);
-      _showSnack('Không thể tải tổng quan báo cáo.');
-    } finally {
-      if (mounted) setState(() => _loadingReportsSummary = false);
-    }
-  }
 
   Future<void> _loadReportsTrends(String token) async {
     setState(() => _loadingReportsTrends = true);
@@ -178,7 +156,6 @@ class _ReportsTabState extends State<ReportsTab> {
     final token = _token;
     if (token == null || token.isEmpty) return;
     await Future.wait([
-      _loadReportsSummary(token),
       _loadReportsTrends(token),
       _loadReportsLogs(token),
       _loadReportsTopLate(token),
@@ -257,7 +234,10 @@ class _ReportsTabState extends State<ReportsTab> {
         return h + (m / 60);
       }
     }
-    return double.tryParse(raw.replaceAll(',', '.')) ?? 0;
+    // Backend returns "8.5h" format — strip the "h" suffix before parsing
+    final stripped = raw.replaceAll(RegExp(r'[hH]$'), '').trim();
+    final parsed = double.tryParse(stripped.replaceAll(',', '.')) ?? 0;
+    return parsed < 0 ? 0 : parsed; // guard against bad data (checkout < checkin)
   }
 
   double _reportsTotalHours() {
@@ -448,12 +428,11 @@ class _ReportsTabState extends State<ReportsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final summary = _reportsSummary;
     final totalLogs = _reportsLogs.length;
     final onTimeCount = _countByBadgeType(_reportsLogs, StatusBadgeType.onTime);
     final lateCount = _countByBadgeType(_reportsLogs, StatusBadgeType.late);
     final outOfRangeCount =
-        _countByBadgeType(_reportsLogs, StatusBadgeType.outOfRange);
+        _reportsLogs.where((r) => r.locationStatus == 'outside').length;
     final overtimeCount =
         _countByBadgeType(_reportsLogs, StatusBadgeType.overtime);
     final onTimeRate =
@@ -473,26 +452,24 @@ class _ReportsTabState extends State<ReportsTab> {
               width: 220,
               child: KpiCard(
                 label: 'Tổng lượt',
-                value: _loadingReportsSummary
-                    ? '--'
-                    : _formatThousands(summary?.checkedIn ?? totalLogs),
+                value: _loadingReportsLogs ? '--' : _formatThousands(totalLogs),
                 icon: Icons.fact_check_outlined,
                 iconColor: AppColors.primary,
                 valueColor: AppColors.primary,
-                loading: _loadingReportsSummary,
+                loading: _loadingReportsLogs,
               ),
             ),
             SizedBox(
               width: 220,
               child: KpiCard(
                 label: 'Tỷ lệ đúng giờ',
-                value: _loadingReportsSummary
+                value: _loadingReportsLogs
                     ? '--'
-                    : '${_formatPercent(summary?.attendanceRatePercent ?? onTimeRate)}%',
+                    : '${_formatPercent(onTimeRate)}%',
                 icon: Icons.check_circle_outline,
                 iconColor: AppColors.success,
                 valueColor: AppColors.success,
-                loading: _loadingReportsSummary,
+                loading: _loadingReportsLogs,
               ),
             ),
             SizedBox(
@@ -525,13 +502,13 @@ class _ReportsTabState extends State<ReportsTab> {
               width: 220,
               child: KpiCard(
                 label: 'Ngoài vùng',
-                value: _loadingReportsSummary
+                value: _loadingReportsLogs
                     ? '--'
                     : '${_formatPercent(outOfRangeRate)}%',
                 icon: Icons.location_off_outlined,
                 iconColor: AppColors.danger,
                 valueColor: AppColors.danger,
-                loading: _loadingReportsSummary,
+                loading: _loadingReportsLogs,
               ),
             ),
           ],

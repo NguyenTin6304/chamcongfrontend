@@ -3,6 +3,24 @@
 part of '../geofences_tab.dart';
 
 extension _GeofenceConfigFormX on _GeofencesTabState {
+  void _onManualLatLngChanged() {
+    final lat = double.tryParse(_formLatController.text.trim());
+    final lng = double.tryParse(_formLngController.text.trim());
+    if (lat != null && lng != null) {
+      setState(() {
+        _newGeofencePoint = LatLng(lat, lng);
+      });
+    }
+  }
+
+  Future<void> _onManualLatLngSubmitted() async {
+    final lat = double.tryParse(_formLatController.text.trim());
+    final lng = double.tryParse(_formLngController.text.trim());
+    if (lat != null && lng != null) {
+      await _reverseFormAddress();
+    }
+  }
+
   Widget _buildGeofenceConfigFormExtracted() {
     final isEditing = _editingGeofence != null;
     final title = _isCreating
@@ -34,16 +52,26 @@ extension _GeofenceConfigFormX on _GeofencesTabState {
               Expanded(
                 child: TextField(
                   controller: _formLatController,
-                  readOnly: true,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
                   decoration: _decoration('Vĩ độ', Icons.my_location_outlined),
+                  onChanged: (_) => _onManualLatLngChanged(),
+                  onSubmitted: (_) => _onManualLatLngSubmitted(),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _formLngController,
-                  readOnly: true,
-                  decoration: _decoration('Kinh độ', Icons.explore_outlined),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  decoration: _decoration('Kinh độ', Icons.explore_outlined),
+                  onChanged: (_) => _onManualLatLngChanged(),
+                  onSubmitted: (_) => _onManualLatLngSubmitted(),
                 ),
               ),
             ],
