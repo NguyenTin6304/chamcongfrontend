@@ -42,7 +42,13 @@ class _HomePageState extends State<HomePage> {
 
   AttendanceStatusResult? _status;
   AttendanceActionResult? _lastAction;
+  AttendanceActionException? _lastActionError;
   List<AttendanceLogItem> _history = const [];
+
+  // ── Memoisation ────────────────────────────────────────────────────────────
+  List<_AttendanceDayGroup>? _groupedHistoryCache;
+  List<AttendanceLogItem>? _groupedHistoryCacheRef;
+  // ───────────────────────────────────────────────────────────────────────────
 
   bool get _isAnyLoading =>
       _loadingStatus || _loadingHistory || _loadingLocation || _loadingAction;
@@ -220,11 +226,19 @@ class _HomePageState extends State<HomePage> {
       }
 
       final result = isCheckin
-          ? await _attendanceApi.checkin(token: token, lat: position.latitude, lng: position.longitude)
+          ? await _attendanceApi.checkin(
+              token: token,
+              lat: position.latitude,
+              lng: position.longitude,
+              accuracyM: position.accuracy > 0 ? position.accuracy : null,
+              timestampClient: DateTime.now().toUtc(),
+            )
           : await _attendanceApi.checkout(
               token: token,
               lat: position.latitude,
               lng: position.longitude,
+              accuracyM: position.accuracy > 0 ? position.accuracy : null,
+              timestampClient: DateTime.now().toUtc(),
             );
 
       if (!mounted) {
@@ -233,6 +247,7 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _lastAction = result;
+        _lastActionError = null;
       });
 
       final timingNotice = _timingNotice(result);
@@ -241,6 +256,14 @@ class _HomePageState extends State<HomePage> {
       );
       await _refreshStatus(showSnack: false);
       await _refreshHistory(showSnack: false);
+    } on AttendanceActionException catch (error) {
+      if (mounted) {
+        setState(() {
+          _lastAction = null;
+          _lastActionError = error;
+        });
+      }
+      _showSnack('${isCheckin ? 'Check-in' : 'Check-out'} thất bại: ${error.message}');
     } catch (error) {
       _showSnack('${isCheckin ? 'Check-in' : 'Check-out'} thất bại: $error');
     } finally {
@@ -416,6 +439,72 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Color _riskTone(String? level) {
+    switch ((level ?? '').toUpperCase()) {
+      case 'HIGH':
+        return Colors.red;
+      case 'MEDIUM':
+        return Colors.orange;
+      case 'LOW':
+        return Colors.green;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  String _riskDecisionLabel(String? decision) {
+    switch ((decision ?? '').toUpperCase()) {
+      case 'BLOCK':
+        return 'Từ chối chấm công';
+      case 'ALLOW_WITH_EXCEPTION':
+        return 'Cho phép nhưng tạo ngoại lệ';
+      case 'ALLOW':
+        return 'Cho phép';
+      default:
+        return '-';
+    }
+  }
+
+  Widget _buildRiskCard() {
+    final result = _lastAction;
+    final error = _lastActionError;
+
+    final score = result?.riskScore ?? error?.riskScore;
+    final level = result?.riskLevel ?? error?.riskLevel;
+    final decision = result?.decision ?? error?.decision;
+    final flags = result?.riskFlags ?? error?.riskFlags ?? const <String>[];
+
+    if (score == null && (flags.isEmpty) && (decision == null || decision.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+
+    final tone = _riskTone(level);
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: tone.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Risk: ${level ?? '-'} | Score: ${score?.toString() ?? '-'}',
+            style: TextStyle(color: tone, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text('Decision: ${_riskDecisionLabel(decision)}'),
+          if (flags.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Flags: ${flags.join(', ')}'),
+          ],
+        ],
+      ),
+    );
+  }
+
   Color _stateColor(String? state) {
     switch (state) {
       case 'IN':
@@ -565,6 +654,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<_AttendanceDayGroup> _buildGroupedHistory(List<AttendanceLogItem> logs) {
+    if (_groupedHistoryCache != null &&
+        identical(_groupedHistoryCacheRef, logs)) {
+      return _groupedHistoryCache!;
+    }
+    final result = _computeGroupedHistory(logs);
+    _groupedHistoryCacheRef = logs;
+    _groupedHistoryCache = result;
+    return result;
+  }
+
+  /// Pure helper — no state reads; safe to call outside build().
+  List<_AttendanceDayGroup> _computeGroupedHistory(
+    List<AttendanceLogItem> logs,
+  ) {
     final pairs = _buildHistoryPairs(logs);
     final map = <String, List<_AttendancePair>>{};
     final dateByKey = <String, DateTime?>{};
@@ -580,7 +683,8 @@ class _HomePageState extends State<HomePage> {
     }
 
     final groups = map.entries.map((entry) {
-      final items = entry.value..sort((a, b) => _pairSortTime(b).compareTo(_pairSortTime(a)));
+      final items = entry.value
+        ..sort((a, b) => _pairSortTime(b).compareTo(_pairSortTime(a)));
       return _AttendanceDayGroup(
         dayKey: entry.key,
         dayDate: dateByKey[entry.key],
@@ -591,15 +695,9 @@ class _HomePageState extends State<HomePage> {
     groups.sort((a, b) {
       final ad = a.dayDate;
       final bd = b.dayDate;
-      if (ad == null && bd == null) {
-        return 0;
-      }
-      if (ad == null) {
-        return 1;
-      }
-      if (bd == null) {
-        return -1;
-      }
+      if (ad == null && bd == null) return 0;
+      if (ad == null) return 1;
+      if (bd == null) return -1;
       return bd.compareTo(ad);
     });
 
@@ -788,6 +886,16 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.report_problem_outlined),
+                    title: const Text('Ngoại lệ chấm công'),
+                    subtitle: const Text('Xem trạng thái và gửi giải trình khi hệ thống yêu cầu.'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).pushNamed('/home/exceptions'),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -852,6 +960,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                         const SizedBox(height: 6),
                         Text('Message: ${_lastAction?.message ?? '-'}'),
+                        _buildRiskCard(),
                       ],
                     ),
                   ),
@@ -921,7 +1030,6 @@ class _AttendanceDayGroup {
   final DateTime? dayDate;
   final List<_AttendancePair> items;
 }
-
 
 
 

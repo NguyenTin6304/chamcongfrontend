@@ -1,11 +1,13 @@
-﻿import 'dart:ui' show PointerDeviceKind;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
-import 'features/admin/presentation/admin_page.dart';
+import 'core/theme/app_colors.dart';
+import 'features/admin/presentation/shell/admin_shell_page.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
+import 'features/attendance/presentation/employee_exceptions_screen.dart';
 import 'features/home/presentation/home_page.dart';
 
 void main() {
@@ -20,7 +22,15 @@ class MainApp extends StatelessWidget {
     '/forgot-password',
     '/reset-password',
     '/admin',
+    '/admin/attendance',
+    '/admin/employees',
+    '/admin/groups',
+    '/admin/geofences',
+    '/admin/reports',
+    '/admin/exceptions',
+    '/admin/settings',
     '/home',
+    '/home/exceptions',
   };
 
   String _extractEmailArg(RouteSettings settings) {
@@ -72,10 +82,34 @@ class MainApp extends StatelessWidget {
         page = const ResetPasswordPage();
         break;
       case '/admin':
-        page = AdminPage(email: _extractEmailArg(settings));
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'dashboard');
+        break;
+      case '/admin/attendance':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'logs');
+        break;
+      case '/admin/employees':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'employees');
+        break;
+      case '/admin/groups':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'groups');
+        break;
+      case '/admin/geofences':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'geofences');
+        break;
+      case '/admin/reports':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'reports');
+        break;
+      case '/admin/exceptions':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'exceptions');
+        break;
+      case '/admin/settings':
+        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'settings');
         break;
       case '/home':
         page = HomePage(email: _extractEmailArg(settings));
+        break;
+      case '/home/exceptions':
+        page = const EmployeeExceptionsScreen();
         break;
       default:
         page = const LoginPage();
@@ -89,7 +123,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Chấm Công App',
+      title: 'Chấm Công App',
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         dragDevices: {
           PointerDeviceKind.touch,
@@ -101,7 +135,8 @@ class MainApp extends StatelessWidget {
         scrollbars: true,
       ),
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
+        scaffoldBackgroundColor: AppColors.bgPage,
         useMaterial3: true,
       ),
       initialRoute: _resolveInitialRouteFromUrl(),

@@ -34,6 +34,13 @@ class EmployeeLite {
     required this.fullName,
     this.userId,
     this.groupId,
+    this.email,
+    this.phone,
+    this.departmentName,
+    this.groupName,
+    this.role,
+    this.active,
+    this.joinedAt,
   });
 
   final int id;
@@ -41,6 +48,13 @@ class EmployeeLite {
   final String fullName;
   final int? userId;
   final int? groupId;
+  final String? email;
+  final String? phone;
+  final String? departmentName;
+  final String? groupName;
+  final String? role;
+  final bool? active;
+  final DateTime? joinedAt;
 }
 
 class UserLite {
@@ -119,6 +133,15 @@ class AttendanceExceptionItem {
     this.resolvedAt,
     this.resolvedBy,
     this.resolvedByEmail,
+    this.detectedAt,
+    this.expiresAt,
+    this.employeeExplanation,
+    this.employeeSubmittedAt,
+    this.adminNote,
+    this.adminDecidedAt,
+    this.decidedByEmail,
+    this.canAdminDecide = false,
+    this.timeline = const <Map<String, dynamic>>[],
   });
 
   final int id;
@@ -138,6 +161,151 @@ class AttendanceExceptionItem {
   final DateTime? resolvedAt;
   final int? resolvedBy;
   final String? resolvedByEmail;
+  final DateTime? detectedAt;
+  final DateTime? expiresAt;
+  final String? employeeExplanation;
+  final DateTime? employeeSubmittedAt;
+  final String? adminNote;
+  final DateTime? adminDecidedAt;
+  final String? decidedByEmail;
+  final bool canAdminDecide;
+  final List<Map<String, dynamic>> timeline;
+}
+
+class DashboardSummaryResult {
+  const DashboardSummaryResult({
+    required this.totalEmployees,
+    required this.checkedIn,
+    required this.attendanceRatePercent,
+    required this.lateCount,
+    required this.lateRatePercent,
+    required this.outOfRangeCount,
+    required this.geofenceCount,
+    required this.inactiveGeofenceCount,
+    required this.employeeGrowthPercent,
+  });
+
+  final int totalEmployees;
+  final int checkedIn;
+  final double attendanceRatePercent;
+  final int lateCount;
+  final double lateRatePercent;
+  final int outOfRangeCount;
+  final int geofenceCount;
+  final int inactiveGeofenceCount;
+  final double employeeGrowthPercent;
+}
+
+class DashboardAttendanceLogItem {
+  const DashboardAttendanceLogItem({
+    required this.id,
+    required this.employeeName,
+    required this.employeeCode,
+    required this.departmentName,
+    required this.workDate,
+    required this.checkInTime,
+    required this.checkOutTime,
+    required this.totalHours,
+    required this.locationStatus,
+    required this.attendanceStatus,
+    required this.latitude,
+    required this.longitude,
+    this.entryCount,
+  });
+
+  final int id;
+  final String employeeName;
+  final String employeeCode;
+  final String departmentName;
+  final DateTime? workDate;
+  final String checkInTime;
+  final String checkOutTime;
+  final String totalHours;
+  final String locationStatus;
+  final String attendanceStatus;
+  final double? latitude;
+  final double? longitude;
+  final int? entryCount;
+}
+
+class DashboardWeeklyTrendItem {
+  const DashboardWeeklyTrendItem({
+    required this.day,
+    required this.onTime,
+    required this.late,
+    required this.outOfRange,
+  });
+
+  final String day;
+  final int onTime;
+  final int late;
+  final int outOfRange;
+}
+
+class DashboardGeofenceItem {
+  const DashboardGeofenceItem({
+    required this.id,
+    required this.name,
+    required this.memberCount,
+    required this.active,
+    this.latitude,
+    this.longitude,
+    this.radiusMeters,
+    this.presentCount,
+    this.groupId,
+    this.groupName,
+    this.startTime,
+    this.endTime,
+    this.overtimeEnabled,
+    this.overtimeStartTime,
+    this.address,
+  });
+
+  final int id;
+  final String name;
+  final int memberCount;
+  final bool active;
+  final double? latitude;
+  final double? longitude;
+  final int? radiusMeters;
+  final int? presentCount;
+  final int? groupId;
+  final String? groupName;
+  final String? startTime;
+  final String? endTime;
+  final bool? overtimeEnabled;
+  final String? overtimeStartTime;
+  final String? address;
+}
+
+class GeoPlaceSuggestion {
+  const GeoPlaceSuggestion({
+    required this.formatted,
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final String formatted;
+  final double latitude;
+  final double longitude;
+}
+
+class DashboardExceptionItem {
+  const DashboardExceptionItem({
+    required this.id,
+    required this.initials,
+    required this.name,
+    required this.reason,
+    required this.timeLabel,
+    required this.status,
+  });
+
+  final int id;
+  final String initials;
+  final String name;
+  final String reason;
+  final String timeLabel;
+  final String status;
 }
 
 class AdminApi {
@@ -234,8 +402,28 @@ class AdminApi {
     );
   }
 
-  Future<List<EmployeeLite>> listEmployees(String token) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees');
+  Future<List<EmployeeLite>> listEmployees(
+    String token, {
+    String? query,
+    int? groupId,
+    String? status,
+  }) async {
+    final queryMap = <String, String>{};
+    if (query != null && query.trim().isNotEmpty) {
+      queryMap['q'] = query.trim();
+    }
+    if (groupId != null) {
+      queryMap['group_id'] = groupId.toString();
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      queryMap['status'] = status;
+      if (status == 'inactive') {
+        queryMap['unassigned_only'] = 'true';
+      }
+    }
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/employees',
+    ).replace(queryParameters: queryMap.isEmpty ? null : queryMap);
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
@@ -569,6 +757,49 @@ class AdminApi {
     );
   }
 
+  /// Aggregate endpoint — fetches all group geofences in a single request.
+  /// Returns a map of groupId -> list of geofences.
+  /// Groups with no geofences are absent from the map (treat as empty list).
+  Future<Map<int, List<GroupGeofenceLite>>> listGroupGeofencesSummary({
+    required String token,
+    List<int>? groupIds,
+    bool activeOnly = false,
+  }) async {
+    final params = <String, String>{};
+    if (groupIds != null && groupIds.isNotEmpty) {
+      params['group_ids'] = groupIds.join(',');
+    }
+    if (activeOnly) params['active_only'] = 'true';
+    final uri =
+        Uri.parse('${AppConfig.apiBaseUrl}/groups/geofences/summary').replace(
+      queryParameters: params.isEmpty ? null : params,
+    );
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final raw = _parseJsonMap(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      final result = <int, List<GroupGeofenceLite>>{};
+      raw.forEach((key, value) {
+        final groupId = int.tryParse(key.toString());
+        if (groupId == null) return;
+        final list = value is List ? value : <dynamic>[];
+        result[groupId] = list
+            .whereType<Map<String, dynamic>>()
+            .map(_groupGeofenceFromMap)
+            .toList(growable: false);
+      });
+      return result;
+    }
+    final data = _parseJsonMap(response.body);
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load geofences summary failed (${response.statusCode})',
+      ),
+    );
+  }
+
   Future<GroupGeofenceLite> createGroupGeofence({
     required String token,
     required int groupId,
@@ -684,6 +915,8 @@ class AdminApi {
     DateTime? toDate,
     int? employeeId,
     int? groupId,
+    String? status,
+    String? search,
     bool includeEmpty = false,
   }) async {
     final query = <String, String>{};
@@ -698,6 +931,12 @@ class AdminApi {
     }
     if (groupId != null) {
       query['group_id'] = groupId.toString();
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      query['status'] = status;
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      query['search'] = search.trim();
     }
     if (includeEmpty) {
       query['include_empty'] = 'true';
@@ -735,10 +974,13 @@ class AdminApi {
     DateTime? toDate,
     int? employeeId,
     int? groupId,
-    String exceptionType = 'MISSED_CHECKOUT',
+    String? exceptionType,
     String? statusFilter,
   }) async {
-    final query = <String, String>{'exception_type': exceptionType};
+    final query = <String, String>{};
+    if (exceptionType != null && exceptionType.isNotEmpty) {
+      query['exception_type'] = exceptionType;
+    }
     if (fromDate != null) {
       query['from'] = _formatDateOnly(fromDate);
     }
@@ -761,7 +1003,9 @@ class AdminApi {
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final data = _parseJsonList(response.body);
+      final data = _parseJsonListAny(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
       return data
           .whereType<Map<String, dynamic>>()
           .map(_attendanceExceptionFromMap)
@@ -773,6 +1017,115 @@ class AdminApi {
       _extractErrorMessage(
         data,
         'Load attendance exceptions failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> getAttendanceExceptionDetail({
+    required String token,
+    required int exceptionId,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId',
+    );
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+
+    if (response.statusCode == 200) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load attendance exception detail failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> approveAttendanceException({
+    required String token,
+    required int exceptionId,
+    String? adminNote,
+    DateTime? actualCheckoutTime,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/approve',
+    );
+    final body = <String, dynamic>{};
+    final note = adminNote?.trim();
+    if (note != null && note.isNotEmpty) {
+      body['admin_note'] = note;
+    }
+    if (actualCheckoutTime != null) {
+      body['actual_checkout_time'] = actualCheckoutTime.toUtc().toIso8601String();
+    }
+
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 204) {
+      return getAttendanceExceptionDetail(
+        token: token,
+        exceptionId: exceptionId,
+      );
+    }
+
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Approve attendance exception failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> rejectAttendanceException({
+    required String token,
+    required int exceptionId,
+    required String adminNote,
+  }) async {
+    final note = adminNote.trim();
+    if (note.isEmpty) {
+      throw ArgumentError('admin_note is required to reject exception');
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/reject',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(<String, dynamic>{'admin_note': note}),
+    );
+    if (response.statusCode == 204) {
+      return getAttendanceExceptionDetail(
+        token: token,
+        exceptionId: exceptionId,
+      );
+    }
+
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Reject attendance exception failed (${response.statusCode})',
       ),
     );
   }
@@ -845,6 +1198,458 @@ class AdminApi {
     );
   }
 
+  Future<EmployeeLite> patchEmployee({
+    required String token,
+    required int employeeId,
+    String? fullName,
+    int? groupId,
+    int? userId,
+    String? email,
+    String? phone,
+    String? departmentName,
+    String? role,
+    bool? active,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees/$employeeId');
+    final body = <String, dynamic>{};
+    if (fullName != null) {
+      body['full_name'] = fullName;
+    }
+    // Always include group_id and user_id so null means "unassign"
+    body['group_id'] = groupId;
+    body['user_id'] = userId;
+
+    final response = await http.put(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+    final data = _parseJsonMap(response.body);
+    if (response.statusCode == 200) {
+      return _employeeFromMap(data);
+    }
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Update employee failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<DashboardSummaryResult> getDashboardSummary({
+    required String token,
+    required DateTime date,
+    int? groupId,
+    String? status,
+  }) async {
+    final query = <String, String>{'date': _formatDateOnly(date)};
+    if (groupId != null) {
+      query['group_id'] = groupId.toString();
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      query['status'] = status;
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/dashboard',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    if (response.statusCode == 200) {
+      final payload = _extractPayloadMap(data);
+      return DashboardSummaryResult(
+        totalEmployees: _toInt(payload['total_employees']) ?? 0,
+        checkedIn: _toInt(payload['checked_in']) ?? 0,
+        attendanceRatePercent: _toDouble(payload['attendance_rate']) ?? 0,
+        lateCount: _toInt(payload['late_count']) ?? 0,
+        lateRatePercent: _toDouble(payload['late_rate']) ?? 0,
+        outOfRangeCount: _toInt(payload['out_of_range_count']) ?? 0,
+        geofenceCount: _toInt(payload['geofence_count']) ?? 0,
+        inactiveGeofenceCount: _toInt(payload['inactive_geofence_count']) ?? 0,
+        employeeGrowthPercent:
+            _toDouble(payload['employee_growth_percent']) ?? 0,
+      );
+    }
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load dashboard summary failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<({List<DashboardAttendanceLogItem> items, int total})> listDashboardAttendanceLogs({
+    required String token,
+    DateTime? date,
+    DateTime? fromDate,
+    DateTime? toDate,
+    int? groupId,
+    String? status,
+    String? search,
+    String? sort,
+    int? page,
+    int? limit,
+  }) async {
+    final query = <String, String>{};
+    if (date != null) {
+      query['date'] = _formatDateOnly(date);
+    }
+    if (fromDate != null) {
+      query['from'] = _formatDateOnly(fromDate);
+    }
+    if (toDate != null) {
+      query['to'] = _formatDateOnly(toDate);
+    }
+    if (groupId != null) {
+      query['group_id'] = groupId.toString();
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      query['status'] = status;
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      query['search'] = search.trim();
+    }
+    if (sort != null && sort.trim().isNotEmpty) {
+      query['sort'] = sort.trim();
+    }
+    if (page != null && page > 0) {
+      query['page'] = page.toString();
+    }
+    if (limit != null && limit > 0) {
+      query['limit'] = limit.toString();
+    }
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-logs',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final envelope = _parseJsonMap(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      final dataRaw = envelope['data'];
+      final rows = dataRaw is List ? dataRaw : <dynamic>[];
+      final total = _toInt(envelope['total']) ?? 0;
+      final items = rows
+          .whereType<Map<String, dynamic>>()
+          .map((e) {
+            return DashboardAttendanceLogItem(
+              id: _toInt(e['id']) ?? 0,
+              employeeName:
+                  e['employee_name'] as String? ??
+                  e['full_name'] as String? ??
+                  '-',
+              employeeCode:
+                  e['employee_code'] as String? ?? e['code'] as String? ?? '-',
+              departmentName:
+                  e['department_name'] as String? ??
+                  e['group_name'] as String? ??
+                  '-',
+              workDate:
+                  _toDateTime(e['work_date']) ??
+                  _toDateTime(e['date']) ??
+                  _toDateTime(e['log_date']),
+              checkInTime: _toClockLabel(
+                e['check_in_time'] ?? e['checkin_time'],
+              ),
+              checkOutTime: _toClockLabel(
+                e['check_out_time'] ?? e['checkout_time'],
+              ),
+              totalHours:
+                  e['total_hours']?.toString() ??
+                  e['work_hours']?.toString() ??
+                  '--',
+              locationStatus: (e['location_status'] as String? ?? 'inside')
+                  .toLowerCase(),
+              attendanceStatus:
+                  (e['status'] as String? ??
+                          e['attendance_status'] as String? ??
+                          'on_time')
+                      .toLowerCase(),
+              latitude:
+                  _toDouble(e['latitude']) ??
+                  _toDouble(e['lat']) ??
+                  _toDouble(e['checkin_latitude']),
+              longitude:
+                  _toDouble(e['longitude']) ??
+                  _toDouble(e['lng']) ??
+                  _toDouble(e['checkin_longitude']),
+              entryCount: _toInt(e['count']) ?? _toInt(e['entry_count']),
+            );
+          })
+          .toList(growable: false);
+      return (items: items, total: total);
+    }
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load attendance logs failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<List<DashboardWeeklyTrendItem>> getDashboardWeeklyTrends({
+    required String token,
+    required DateTime date,
+    int? groupId,
+    String? status,
+    String? period,
+  }) async {
+    final query = <String, String>{'date': _formatDateOnly(date)};
+    if (groupId != null) {
+      query['group_id'] = groupId.toString();
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      query['status'] = status;
+    }
+    if (period != null && period.trim().isNotEmpty) {
+      query['period'] = period.trim();
+    }
+
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/weekly-trends',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final rows = _parseJsonListAny(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      return rows
+          .whereType<Map<String, dynamic>>()
+          .map((e) {
+            return DashboardWeeklyTrendItem(
+              day: e['day'] as String? ?? e['day_label'] as String? ?? '-',
+              onTime: _toInt(e['on_time']) ?? _toInt(e['on_time_count']) ?? 0,
+              late: _toInt(e['late']) ?? 0,
+              outOfRange: _toInt(e['out_of_range']) ?? _toInt(e['oor']) ?? 0,
+            );
+          })
+          .toList(growable: false);
+    }
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load weekly trends failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<List<DashboardGeofenceItem>> listDashboardGeofences({
+    required String token,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/geofence/list');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final rows = _parseJsonListAny(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      return rows
+          .whereType<Map<String, dynamic>>()
+          .map(_dashboardGeofenceFromMap)
+          .toList(growable: false);
+    }
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load geofence list failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<List<GeoPlaceSuggestion>> searchGeoapifyPlaces({
+    required String query,
+    int limit = 6,
+  }) async {
+    final text = query.trim();
+    if (text.isEmpty || AppConfig.geoapifyApiKey.trim().isEmpty) {
+      return const [];
+    }
+    final uri = Uri.https('api.geoapify.com', '/v1/geocode/autocomplete', {
+      'text': text,
+      'limit': '$limit',
+      'lang': 'vi',
+      'apiKey': AppConfig.geoapifyApiKey,
+    });
+    final response = await http.get(uri);
+    if (response.statusCode == 200) {
+      final data = _parseJsonMap(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      final features = data['features'];
+      if (features is List) {
+        return features
+            .whereType<Map<String, dynamic>>()
+            .map((feature) {
+              final properties = feature['properties'];
+              final geometry = feature['geometry'];
+              final coordinates = geometry is Map<String, dynamic>
+                  ? geometry['coordinates']
+                  : null;
+              final lon = coordinates is List && coordinates.isNotEmpty
+                  ? _toDouble(coordinates[0])
+                  : null;
+              final lat = coordinates is List && coordinates.length > 1
+                  ? _toDouble(coordinates[1])
+                  : null;
+              final formatted = properties is Map<String, dynamic>
+                  ? properties['formatted'] as String?
+                  : null;
+              if (lat == null ||
+                  lon == null ||
+                  formatted == null ||
+                  formatted.isEmpty) {
+                return null;
+              }
+              return GeoPlaceSuggestion(
+                formatted: formatted,
+                latitude: lat,
+                longitude: lon,
+              );
+            })
+            .whereType<GeoPlaceSuggestion>()
+            .toList(growable: false);
+      }
+      return const [];
+    }
+    return const [];
+  }
+
+  Future<String?> reverseGeocodeAddress({
+    required String token,
+    required double latitude,
+    required double longitude,
+  }) async {
+    if (AppConfig.geoapifyApiKey.trim().isEmpty) {
+      return null;
+    }
+    final uri = Uri.https('api.geoapify.com', '/v1/geocode/reverse', {
+      'lat': latitude.toString(),
+      'lon': longitude.toString(),
+      'apiKey': AppConfig.geoapifyApiKey,
+    });
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      return null;
+    }
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    final features = data['features'];
+    if (features is List && features.isNotEmpty) {
+      final first = features.first;
+      if (first is Map<String, dynamic>) {
+        final properties = first['properties'];
+        if (properties is Map<String, dynamic>) {
+          final formatted = properties['formatted'] as String?;
+          if (formatted != null && formatted.trim().isNotEmpty) {
+            return formatted.trim();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<List<DashboardExceptionItem>> listDashboardExceptions({
+    required String token,
+    String status = 'PENDING_ADMIN',
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/exceptions',
+    ).replace(queryParameters: {'status': status});
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final rows = _parseJsonListAny(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
+      return rows
+          .whereType<Map<String, dynamic>>()
+          .map((e) {
+            final name =
+                e['name'] as String? ??
+                e['employee_name'] as String? ??
+                e['full_name'] as String? ??
+                '-';
+            final initials = _nameToInitials(name);
+            return DashboardExceptionItem(
+              id: _toInt(e['id']) ?? 0,
+              initials: initials,
+              name: name,
+              reason:
+                  e['reason'] as String? ??
+                  e['exception_type'] as String? ??
+                  '-',
+              timeLabel: _toClockLabel(e['time'] ?? e['created_at']),
+              status: e['status']?.toString() ?? status,
+            );
+          })
+          .toList(growable: false);
+    }
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load dashboard exceptions failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<ReportDownloadResult> exportDashboardExcel({
+    required String token,
+    required DateTime fromDate,
+    required DateTime toDate,
+    int? groupId,
+    String? status,
+  }) async {
+    final body = <String, dynamic>{
+      'from': _formatDateOnly(fromDate),
+      'to': _formatDateOnly(toDate),
+    };
+    if (groupId != null) {
+      body['group_id'] = groupId;
+    }
+    if (status != null && status.isNotEmpty && status != 'all') {
+      body['status'] = status;
+    }
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/export-excel');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 200) {
+      final disposition = response.headers['content-disposition'];
+      final fileName =
+          _extractFilenameFromDisposition(disposition) ??
+          'attendance_report.xlsx';
+      return ReportDownloadResult(
+        fileName: fileName,
+        bytes: response.bodyBytes,
+      );
+    }
+    final data = _parseJsonMap(
+      utf8.decode(response.bodyBytes, allowMalformed: true),
+    );
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Export dashboard report failed (${response.statusCode})',
+      ),
+    );
+  }
+
   EmployeeLite _employeeFromMap(Map<String, dynamic> e) {
     return EmployeeLite(
       id: (e['id'] as num?)?.toInt() ?? 0,
@@ -852,6 +1657,49 @@ class AdminApi {
       fullName: e['full_name'] as String? ?? '-',
       userId: (e['user_id'] as num?)?.toInt(),
       groupId: (e['group_id'] as num?)?.toInt(),
+      email: e['email'] as String?,
+      phone: e['phone'] as String? ?? e['phone_number'] as String?,
+      departmentName: e['department_name'] as String?,
+      groupName: e['group_name'] as String?,
+      role: e['role'] as String?,
+      active: _toBool(e['active'] ?? e['is_active']),
+      joinedAt:
+          _toDateTime(e['joined_at']) ??
+          _toDateTime(e['created_at']) ??
+          _toDateTime(e['start_date']),
+    );
+  }
+
+  DashboardGeofenceItem _dashboardGeofenceFromMap(Map<String, dynamic> e) {
+    return DashboardGeofenceItem(
+      id: _toInt(e['id']) ?? 0,
+      name: e['name'] as String? ?? e['zone_name'] as String? ?? '-',
+      memberCount:
+          _toInt(e['member_count']) ??
+          _toInt(e['members']) ??
+          _toInt(e['employee_count']) ??
+          0,
+      active: _toBool(e['active'] ?? e['is_active']) ?? false,
+      latitude:
+          _toDouble(e['latitude']) ??
+          _toDouble(e['lat']) ??
+          _toDouble(e['center_lat']),
+      longitude:
+          _toDouble(e['longitude']) ??
+          _toDouble(e['lng']) ??
+          _toDouble(e['center_lng']),
+      radiusMeters:
+          _toInt(e['radius_meters']) ??
+          _toInt(e['radius_meter']) ??
+          _toInt(e['radius_m']),
+      presentCount: _toInt(e['present_count']) ?? _toInt(e['present']),
+      groupId: _toInt(e['group_id']),
+      groupName: e['group_name'] as String?,
+      startTime: e['start_time'] as String?,
+      endTime: e['end_time'] as String?,
+      overtimeEnabled: _toBool(e['overtime_enabled']),
+      overtimeStartTime: e['overtime_start_time'] as String?,
+      address: e['address'] as String? ?? e['formatted_address'] as String?,
     );
   }
 
@@ -883,6 +1731,8 @@ class AdminApi {
   AttendanceExceptionItem _attendanceExceptionFromMap(Map<String, dynamic> e) {
     final workDateRaw = e['work_date']?.toString() ?? '';
     final workDate = DateTime.tryParse(workDateRaw) ?? DateTime(1970, 1, 1);
+    final decidedByEmail = e['decided_by_email'] as String?;
+    final resolvedByEmail = e['resolved_by_email'] as String?;
     return AttendanceExceptionItem(
       id: _toInt(e['id']) ?? 0,
       employeeId: _toInt(e['employee_id']) ?? 0,
@@ -892,15 +1742,24 @@ class AdminApi {
       groupName: e['group_name'] as String?,
       workDate: workDate,
       exceptionType: e['exception_type'] as String? ?? '-',
-      status: e['status'] as String? ?? '-',
+      status: e['status']?.toString() ?? '-',
       note: e['note'] as String?,
       sourceCheckinLogId: _toInt(e['source_checkin_log_id']) ?? 0,
       sourceCheckinTime: _toDateTime(e['source_checkin_time']),
       actualCheckoutTime: _toDateTime(e['actual_checkout_time']),
       createdAt: _toDateTime(e['created_at']),
-      resolvedAt: _toDateTime(e['resolved_at']),
+      resolvedAt: _toDateTime(e['resolved_at'] ?? e['admin_decided_at']),
       resolvedBy: _toInt(e['resolved_by']),
-      resolvedByEmail: e['resolved_by_email'] as String?,
+      resolvedByEmail: resolvedByEmail ?? decidedByEmail,
+      detectedAt: _toDateTime(e['detected_at']),
+      expiresAt: _toDateTime(e['expires_at']),
+      employeeExplanation: e['employee_explanation'] as String?,
+      employeeSubmittedAt: _toDateTime(e['employee_submitted_at']),
+      adminNote: e['admin_note'] as String?,
+      adminDecidedAt: _toDateTime(e['admin_decided_at']),
+      decidedByEmail: decidedByEmail,
+      canAdminDecide: _toBool(e['can_admin_decide']) ?? false,
+      timeline: _toMapList(e['timeline']),
     );
   }
 
@@ -962,6 +1821,36 @@ class AdminApi {
     return <dynamic>[];
   }
 
+  List<dynamic> _parseJsonListAny(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is List<dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map<String, dynamic>) {
+        final directData = decoded['data'];
+        if (directData is List<dynamic>) {
+          return directData;
+        }
+        final payload = _extractPayloadMap(decoded);
+        final candidate =
+            payload['items'] ?? payload['rows'] ?? payload['data'];
+        if (candidate is List<dynamic>) {
+          return candidate;
+        }
+      }
+    } catch (_) {}
+    return <dynamic>[];
+  }
+
+  Map<String, dynamic> _extractPayloadMap(Map<String, dynamic> data) {
+    final payload = data['data'];
+    if (payload is Map<String, dynamic>) {
+      return payload;
+    }
+    return data;
+  }
+
   String _extractErrorMessage(Map<String, dynamic> data, String fallback) {
     final error = data['error'];
     if (error is Map<String, dynamic>) {
@@ -1007,5 +1896,77 @@ class AdminApi {
       return null;
     }
     return DateTime.tryParse(value.toString());
+  }
+
+  List<Map<String, dynamic>> _toMapList(dynamic value) {
+    if (value is! List) {
+      return const <Map<String, dynamic>>[];
+    }
+    return value
+        .whereType<Map>()
+        .map(
+          (item) => item.map(
+            (key, value) => MapEntry(key.toString(), value),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  bool? _toBool(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is bool) {
+      return value;
+    }
+    if (value is num) {
+      return value != 0;
+    }
+    final normalized = value.toString().trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0') {
+      return false;
+    }
+    return null;
+  }
+
+  String _toClockLabel(dynamic value) {
+    if (value == null) {
+      return '--';
+    }
+    final raw = value.toString();
+    if (raw.isEmpty) {
+      return '--';
+    }
+    if (RegExp(r'^\d{2}:\d{2}$').hasMatch(raw)) {
+      return raw;
+    }
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      return raw;
+    }
+    final local = parsed.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  String _nameToInitials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return '--';
+    }
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    final first = parts.first.substring(0, 1).toUpperCase();
+    final last = parts.last.substring(0, 1).toUpperCase();
+    return '$first$last';
   }
 }

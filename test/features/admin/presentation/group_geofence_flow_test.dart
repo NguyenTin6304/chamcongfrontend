@@ -47,13 +47,11 @@ class _FakeGeoapifyClient extends GeoapifyClient {
 class _FakeAdminApi extends AdminApi {
   _FakeAdminApi({
     this.groups = const <GroupLite>[],
-    this.employees = const <EmployeeLite>[],
-    this.geofences = const <GroupGeofenceLite>[],
   });
 
   final List<GroupLite> groups;
-  final List<EmployeeLite> employees;
-  final List<GroupGeofenceLite> geofences;
+  final List<EmployeeLite> employees = const [];
+  final List<GroupGeofenceLite> geofences = const [];
 
   int createGeofenceCalls = 0;
   int updateGeofenceCalls = 0;
@@ -75,7 +73,12 @@ class _FakeAdminApi extends AdminApi {
   }
 
   @override
-  Future<List<EmployeeLite>> listEmployees(String token) async {
+  Future<List<EmployeeLite>> listEmployees(
+    String token, {
+    int? groupId,
+    String? query,
+    String? status,
+  }) async {
     return employees;
   }
 
