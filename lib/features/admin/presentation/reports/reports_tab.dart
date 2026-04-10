@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../widgets/common/kpi_card.dart';
 import '../../../../widgets/common/status_badge.dart';
 import '../../data/admin_api.dart';
+import '../../data/admin_data_cache.dart';
 
 class ReportsTab extends StatefulWidget {
   const ReportsTab({super.key});
@@ -82,6 +83,8 @@ class _ReportsTabState extends State<ReportsTab> {
           _reportsGroupId = null;
         }
       });
+    } on UnauthorizedException {
+      AdminDataCache.instance.sessionExpired.value = true;
     } catch (_) {}
   }
 

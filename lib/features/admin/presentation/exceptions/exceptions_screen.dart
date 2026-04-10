@@ -8,6 +8,7 @@ import '../../../../core/download/file_downloader.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/admin_api.dart';
+import '../../data/admin_data_cache.dart';
 import '../../../../widgets/common/kpi_card.dart';
 import 'widgets/exception_history_table.dart';
 import 'widgets/exception_ui_helpers.dart';
@@ -119,6 +120,8 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         _rejectedCount = stats['rejected'] ?? 0;
         _reloadToken += 1;
       });
+    } on UnauthorizedException {
+      AdminDataCache.instance.sessionExpired.value = true;
     } catch (_) {
       if (!mounted) {
         return;

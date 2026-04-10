@@ -60,6 +60,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   void initState() {
     super.initState();
     _activeNav = _initialNavFromSection(widget.initialSection);
+    AdminDataCache.instance.sessionExpired.addListener(_onSessionExpired);
     _bootstrap();
   }
 
@@ -101,10 +102,24 @@ class _AdminShellPageState extends State<AdminShellPage> {
 
   @override
   void dispose() {
+    AdminDataCache.instance.sessionExpired.removeListener(_onSessionExpired);
     AdminDataCache.instance.invalidate();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSessionExpired() {
+    if (!AdminDataCache.instance.sessionExpired.value) return;
+    AdminDataCache.instance.sessionExpired.value = false;
+    _handleUnauthorized();
+  }
+
+  Future<void> _handleUnauthorized() async {
+    await _tokenStorage.clearToken();
+    AdminDataCache.instance.invalidate();
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
   }
 
   Future<void> _bootstrap() async {
@@ -114,9 +129,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
     }
 
     if (token == null || token.isEmpty) {
-      setState(() {
-        _error = 'Thiếu token đăng nhập. Hãy đăng nhập lại.';
-      });
+      await _handleUnauthorized();
       return;
     }
 
@@ -337,6 +350,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
       setState(() {
         _exceptions = items;
       });
+    } on UnauthorizedException {
+      await _handleUnauthorized();
+      return;
     } catch (error) {
       if (!mounted) {
         return;

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'admin_api.dart';
 
 /// In-memory cache for shared admin list data.
@@ -10,6 +12,10 @@ import 'admin_api.dart';
 class AdminDataCache {
   AdminDataCache._();
   static final instance = AdminDataCache._();
+
+  /// Set to `true` when any API call returns HTTP 401.
+  /// `AdminShellPage` listens to this and redirects to login.
+  final sessionExpired = ValueNotifier<bool>(false);
 
   List<GroupLite>? _groups;
   List<EmployeeLite>? _employees;
@@ -33,6 +39,9 @@ class AdminDataCache {
       final groups = await future;
       _groups = groups;
       return groups;
+    } on UnauthorizedException {
+      sessionExpired.value = true;
+      rethrow;
     } finally {
       _groupsFuture = null;
     }
@@ -81,6 +90,9 @@ class AdminDataCache {
       final employees = await future;
       _employees = employees;
       return employees;
+    } on UnauthorizedException {
+      sessionExpired.value = true;
+      rethrow;
     } finally {
       _employeesFuture = null;
     }
@@ -101,6 +113,9 @@ class AdminDataCache {
       final users = await future;
       _users = users;
       return users;
+    } on UnauthorizedException {
+      sessionExpired.value = true;
+      rethrow;
     } finally {
       _usersFuture = null;
     }

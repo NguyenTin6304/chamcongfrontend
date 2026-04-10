@@ -5,6 +5,12 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/config/app_config.dart';
 
+/// Thrown when the backend returns HTTP 401 (token missing or expired).
+/// Catch this to redirect the user to the login screen.
+class UnauthorizedException implements Exception {
+  const UnauthorizedException();
+}
+
 class ActiveRuleResult {
   const ActiveRuleResult({
     required this.latitude,
@@ -314,7 +320,7 @@ class AdminApi {
   Future<ActiveRuleResult?> getActiveRule(String token) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/rules/active');
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200) {
       return ActiveRuleResult(
@@ -381,7 +387,7 @@ class AdminApi {
       body: jsonEncode(body),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200) {
       return ActiveRuleResult(
@@ -434,7 +440,7 @@ class AdminApi {
           .toList();
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -462,7 +468,7 @@ class AdminApi {
       }),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return _employeeFromMap(data);
@@ -491,7 +497,7 @@ class AdminApi {
       }).toList();
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(data, 'Load users failed (${response.statusCode})'),
     );
@@ -511,7 +517,7 @@ class AdminApi {
       body: jsonEncode({'user_id': userId}),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200) {
       return _employeeFromMap(data);
@@ -536,7 +542,7 @@ class AdminApi {
       body: jsonEncode({'group_id': groupId}),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200) {
       return _employeeFromMap(data);
@@ -561,7 +567,7 @@ class AdminApi {
       return;
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -583,7 +589,7 @@ class AdminApi {
       return data.whereType<Map<String, dynamic>>().map(_groupFromMap).toList();
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(data, 'Load groups failed (${response.statusCode})'),
     );
@@ -624,7 +630,7 @@ class AdminApi {
       body: jsonEncode(body),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return _groupFromMap(data);
@@ -695,7 +701,7 @@ class AdminApi {
       body: jsonEncode(body),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200) {
       return _groupFromMap(data);
@@ -720,7 +726,7 @@ class AdminApi {
       return;
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -748,7 +754,7 @@ class AdminApi {
           .toList();
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -791,7 +797,7 @@ class AdminApi {
       });
       return result;
     }
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -822,7 +828,7 @@ class AdminApi {
       }),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       return _groupGeofenceFromMap(data);
@@ -872,7 +878,7 @@ class AdminApi {
       body: jsonEncode(body),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
 
     if (response.statusCode == 200) {
       return _groupGeofenceFromMap(data);
@@ -900,7 +906,7 @@ class AdminApi {
       return;
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -958,6 +964,7 @@ class AdminApi {
       );
     }
 
+    if (response.statusCode == 401) throw const UnauthorizedException();
     final bodyText = utf8.decode(response.bodyBytes, allowMalformed: true);
     final data = _parseJsonMap(bodyText);
     throw Exception(
@@ -1012,7 +1019,7 @@ class AdminApi {
           .toList(growable: false);
     }
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -1029,9 +1036,7 @@ class AdminApi {
       '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId',
     );
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
 
     if (response.statusCode == 200) {
       return _attendanceExceptionFromMap(_extractPayloadMap(data));
@@ -1075,9 +1080,7 @@ class AdminApi {
       );
     }
 
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     if (response.statusCode == 200 || response.statusCode == 201) {
       return _attendanceExceptionFromMap(_extractPayloadMap(data));
     }
@@ -1115,9 +1118,7 @@ class AdminApi {
       );
     }
 
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     if (response.statusCode == 200 || response.statusCode == 201) {
       return _attendanceExceptionFromMap(_extractPayloadMap(data));
     }
@@ -1153,7 +1154,7 @@ class AdminApi {
       body: jsonEncode(body),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     if (response.statusCode == 200) {
       return _attendanceExceptionFromMap(data);
     }
@@ -1185,7 +1186,7 @@ class AdminApi {
       body: jsonEncode(body),
     );
 
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     if (response.statusCode == 200) {
       return _attendanceExceptionFromMap(data);
     }
@@ -1224,7 +1225,7 @@ class AdminApi {
       headers: _authHeaders(token),
       body: jsonEncode(body),
     );
-    final data = _parseJsonMap(response.body);
+    final data = _parseResponse(response);
     if (response.statusCode == 200) {
       return _employeeFromMap(data);
     }
@@ -1254,9 +1255,7 @@ class AdminApi {
       '${AppConfig.apiBaseUrl}/reports/dashboard',
     ).replace(queryParameters: query);
     final response = await http.get(uri, headers: _authHeaders(token));
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     if (response.statusCode == 200) {
       final payload = _extractPayloadMap(data);
       return DashboardSummaryResult(
@@ -1381,9 +1380,7 @@ class AdminApi {
           .toList(growable: false);
       return (items: items, total: total);
     }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -1430,9 +1427,7 @@ class AdminApi {
           })
           .toList(growable: false);
     }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -1455,9 +1450,7 @@ class AdminApi {
           .map(_dashboardGeofenceFromMap)
           .toList(growable: false);
     }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -1541,9 +1534,7 @@ class AdminApi {
     if (response.statusCode != 200) {
       return null;
     }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     final features = data['features'];
     if (features is List && features.isNotEmpty) {
       final first = features.first;
@@ -1595,9 +1586,7 @@ class AdminApi {
           })
           .toList(growable: false);
     }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -1639,9 +1628,7 @@ class AdminApi {
         bytes: response.bodyBytes,
       );
     }
-    final data = _parseJsonMap(
-      utf8.decode(response.bodyBytes, allowMalformed: true),
-    );
+    final data = _parseResponseBytes(response);
     throw Exception(
       _extractErrorMessage(
         data,
@@ -1799,6 +1786,19 @@ class AdminApi {
     }
 
     return null;
+  }
+
+  /// Parses [response.body] as a JSON map.
+  /// Throws [UnauthorizedException] if the response status is 401.
+  Map<String, dynamic> _parseResponse(http.Response response) {
+    if (response.statusCode == 401) throw const UnauthorizedException();
+    return _parseResponse(response);
+  }
+
+  /// Like [_parseResponse] but decodes bodyBytes with UTF-8 before parsing.
+  Map<String, dynamic> _parseResponseBytes(http.Response response) {
+    if (response.statusCode == 401) throw const UnauthorizedException();
+    return _parseJsonMap(utf8.decode(response.bodyBytes, allowMalformed: true));
   }
 
   Map<String, dynamic> _parseJsonMap(String body) {
