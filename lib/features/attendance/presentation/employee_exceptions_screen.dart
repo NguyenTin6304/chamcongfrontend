@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/storage/token_storage.dart';
+import '../../../core/theme/app_colors.dart';
 import '../data/attendance_api.dart';
 
 class EmployeeExceptionsScreen extends StatefulWidget {
@@ -34,11 +35,11 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     super.dispose();
   }
 
+  // ── Logic (unchanged) ────────────────────────────────────────────────────
+
   Future<void> _bootstrap() async {
     final token = await _tokenStorage.getToken();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     if (token == null || token.isEmpty) {
       setState(() {
         _token = null;
@@ -53,18 +54,14 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
 
   Future<void> _loadExceptions() async {
     final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
+    if (token == null || token.isEmpty) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final items = await _api.listMyExceptions(token);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       final selectedId = _selected?.id;
       final nextSelected = selectedId == null
           ? (items.isNotEmpty ? items.first : null)
@@ -76,9 +73,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
       });
       _syncExplanationController();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = error.toString();
@@ -88,9 +83,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
 
   Future<void> _selectException(EmployeeExceptionItem item) async {
     final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
+    if (token == null || token.isEmpty) return;
     setState(() {
       _selected = item;
       _error = null;
@@ -101,12 +94,11 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
         token: token,
         exceptionId: item.id,
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _selected = detail;
-        _exceptions = _exceptions.map((entry) => entry.id == detail.id ? detail : entry).toList();
+        _exceptions =
+            _exceptions.map((e) => e.id == detail.id ? detail : e).toList();
       });
       _syncExplanationController();
     } catch (_) {
@@ -131,19 +123,16 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
         exceptionId: selected.id,
         explanation: explanation,
       );
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _selected = updated;
-        _exceptions = _exceptions.map((entry) => entry.id == updated.id ? updated : entry).toList();
+        _exceptions =
+            _exceptions.map((e) => e.id == updated.id ? updated : e).toList();
         _submitting = false;
       });
       _syncExplanationController();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _submitting = false;
         _error = error.toString();
@@ -163,11 +152,91 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
         !_submitting;
   }
 
+  EmployeeExceptionItem? _firstWhereOrNull(List<EmployeeExceptionItem> items, int id) {
+    for (final item in items) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  // FIX 1 — translate raw system note to friendly Vietnamese
+  String _translateSystemNote(String? note) {
+    if (note == null || note.trim().isEmpty) return 'Không có thông tin';
+    if (note.contains('auto closed session at cross-day cutoff')) {
+      return 'Hệ thống tự động đóng ca vì bạn không checkout trước 04:00';
+    }
+    if (note.contains('GPS risk detected')) {
+      return 'Phát hiện bất thường về vị trí GPS khi chấm công';
+    }
+    if (note.contains('MISSED_CHECKOUT')) {
+      return 'Không có dữ liệu checkout sau giờ làm việc';
+    }
+    if (note.contains('LARGE_TIME_DEVIATION')) {
+      return 'Thời gian chấm công lệch lớn so với ca làm việc';
+    }
+    // Fallback: strip technical parts
+    return note.split('|').first.split('score=').first.trim();
+  }
+
+  // FIX 2 — friendly exception type labels
+  String _translateExceptionType(String type) {
+    return switch (type) {
+      'AUTO_CLOSED' => 'Tự động đóng ca',
+      'MISSED_CHECKOUT' => 'Quên checkout',
+      'LOCATION_RISK' => 'Bất thường vị trí',
+      'SUSPECTED_LOCATION_SPOOF' => 'Bất thường vị trí',
+      'LARGE_TIME_DEVIATION' => 'Lệch giờ lớn',
+      _ => type,
+    };
+  }
+
+  // FIX 3 — unified date/time formatters
+  String _formatDateTime(DateTime? value) {
+    if (value == null) return '—';
+    final local = value.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/'
+        '${local.year} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatWorkDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return '—';
+    final dt = DateTime.tryParse(dateStr);
+    if (dt == null) return dateStr;
+    const weekdays = ['', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
+    return '${weekdays[dt.weekday]}, '
+        '${dt.day.toString().padLeft(2, '0')}/'
+        '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+  }
+
+  Color _borderColor(String status) {
+    return switch (status) {
+      'PENDING_EMPLOYEE' => AppColors.warning,
+      'PENDING_ADMIN' => AppColors.primary,
+      'APPROVED' => AppColors.success,
+      'REJECTED' => AppColors.error,
+      _ => AppColors.border,
+    };
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Ngoại lệ chấm công'),
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        title: const Text(
+          'Ngoại lệ chấm công',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        ),
         actions: [
           IconButton(
             tooltip: 'Tải lại',
@@ -217,146 +286,367 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     );
   }
 
+  // FIX 2 — clean list cards
   Widget _buildExceptionList() {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _exceptions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final item = _exceptions[index];
-        final selected = item.id == _selected?.id;
-        return Card(
-          elevation: selected ? 3 : 1,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ListTile(
-            onTap: () => _selectException(item),
-            title: Text(_exceptionTypeLabel(item.exceptionType)),
-            subtitle: Text('Ngày: ${item.workDate}\n${item.note ?? 'Không có lý do bổ sung'}'),
-            isThreeLine: true,
-            trailing: _StatusBadge(status: item.status),
+        final isSelected = item.id == _selected?.id;
+        return GestureDetector(
+          onTap: () => _selectException(item),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.primaryLight : AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primary
+                    : _borderColor(item.status).withValues(alpha: 0.4),
+                width: isSelected ? 1.5 : 0.8,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _translateExceptionType(item.exceptionType),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    _StatusBadge(status: item.status),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatWorkDate(item.workDate),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
     );
   }
 
+  // FIX 4, 5, 6 — detail panel
   Widget _buildDetailPanel() {
     final item = _selected;
+
+    // FIX 6 — empty state when nothing selected
     if (item == null) {
-      return const Center(child: Text('Chọn một ngoại lệ để xem chi tiết.'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.task_alt_outlined,
+              size: 48,
+              color: AppColors.textSecondary.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Chọn một ngoại lệ để xem chi tiết',
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
     }
+
     final canSubmit = _canSubmit(item);
+    final status = item.status;
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        // Header row
         Row(
           children: [
             Expanded(
               child: Text(
-                _exceptionTypeLabel(item.exceptionType),
-                style: Theme.of(context).textTheme.headlineSmall,
+                _translateExceptionType(item.exceptionType),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
-            _StatusBadge(status: item.status),
+            _StatusBadge(status: status),
           ],
         ),
-        const SizedBox(height: 16),
-        _InfoTile(label: 'Ngày công', value: item.workDate),
-        _InfoTile(label: 'Lý do hệ thống', value: item.note ?? 'Không có'),
-        _InfoTile(label: 'Thời điểm phát hiện', value: _formatDateTime(item.detectedAt)),
-        _InfoTile(label: 'Hạn giải trình', value: _formatDateTime(item.expiresAt)),
-        if (item.adminDecidedAt != null) _InfoTile(label: 'Ngày admin quyết định', value: _formatDateTime(item.adminDecidedAt)),
-        if (item.decidedByEmail != null) _InfoTile(label: 'Người duyệt', value: item.decidedByEmail!),
-        if (item.adminNote != null && item.adminNote!.isNotEmpty) _InfoTile(label: 'Ghi chú admin', value: item.adminNote!),
         const SizedBox(height: 20),
-        Text('Giải trình của nhân viên', style: Theme.of(context).textTheme.titleMedium),
+
+        // FIX 4 — detail fields with visual hierarchy
+        _buildDetailField('LOẠI NGOẠI LỆ', _translateExceptionType(item.exceptionType)),
+        _buildDetailField('NGÀY CÔNG', _formatWorkDate(item.workDate)),
+        _buildDetailField('LÝ DO HỆ THỐNG', _translateSystemNote(item.note)),
+        _buildDetailField('THỜI ĐIỂM PHÁT HIỆN', _formatDateTime(item.detectedAt)),
+        if (status == 'PENDING_EMPLOYEE')
+          _buildDetailField('HẠN GIẢI TRÌNH', _formatDateTime(item.expiresAt)),
+        if (item.adminDecidedAt != null)
+          _buildDetailField('NGÀY ADMIN QUYẾT ĐỊNH', _formatDateTime(item.adminDecidedAt)),
+        if (item.decidedByEmail != null && item.decidedByEmail!.isNotEmpty)
+          _buildDetailField('NGƯỜI DUYỆT', item.decidedByEmail!),
+
         const SizedBox(height: 8),
-        TextField(
-          controller: _explanationController,
-          enabled: canSubmit,
-          minLines: 4,
-          maxLines: 8,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            hintText: canSubmit ? 'Nhập giải trình...' : _disabledExplanationHint(item),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_error != null)
+        const Divider(color: AppColors.border),
+        const SizedBox(height: 16),
+
+        // FIX 5 — explanation section
+        _buildExplanationSection(item, canSubmit),
+
+        // Error message
+        if (_error != null) ...[
+          const SizedBox(height: 12),
           Text(
             _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            style: const TextStyle(color: AppColors.error, fontSize: 13),
           ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: canSubmit && _explanationController.text.trim().isNotEmpty ? _submitExplanation : null,
-          icon: _submitting
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.send),
-          label: Text(_submitting ? 'Đang gửi...' : 'Gửi giải trình'),
-        ),
+        ],
+
+        // Timeline
         if (item.timeline.isNotEmpty) ...[
           const SizedBox(height: 24),
-          Text('Lịch sử xử lý', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const Text(
+            'LỊCH SỬ XỬ LÝ',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 10),
           for (final event in item.timeline)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(event.eventType),
-              subtitle: Text('${event.previousStatus ?? '-'} -> ${event.nextStatus}'),
-              trailing: Text(_formatDateTime(event.createdAt)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(right: 10, top: 4),
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${event.previousStatus ?? '—'} → ${event.nextStatus}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          _formatDateTime(event.createdAt),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
         ],
+        const SizedBox(height: 32),
       ],
     );
   }
 
-  String _disabledExplanationHint(EmployeeExceptionItem item) {
-    if (item.employeeSubmittedAt != null) {
-      return 'Đã gửi giải trình.';
-    }
-    if (item.status == 'EXPIRED') {
-      return 'Đã qua hạn giải trình.';
-    }
-    return 'Không thể gửi giải trình ở trạng thái này.';
+  // FIX 4 — info field with uppercase label above value
+  Widget _buildDetailField(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  EmployeeExceptionItem? _firstWhereOrNull(List<EmployeeExceptionItem> items, int id) {
-    for (final item in items) {
-      if (item.id == id) {
-        return item;
-      }
-    }
-    return null;
-  }
+  // FIX 5 — explanation section: editable vs read-only
+  Widget _buildExplanationSection(EmployeeExceptionItem item, bool canSubmit) {
+    final status = item.status;
 
-  String _formatDateTime(DateTime? value) {
-    if (value == null) {
-      return '-';
+    if (canSubmit) {
+      // Active text area + submit button
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'GIẢI TRÌNH CỦA BẠN',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _explanationController,
+            minLines: 4,
+            maxLines: 8,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              hintText: 'Nhập giải trình của bạn...',
+              hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: _explanationController.text.trim().isNotEmpty ? _submitExplanation : null,
+              icon: _submitting
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.send, size: 18),
+              label: Text(_submitting ? 'Đang gửi...' : 'Gửi giải trình'),
+            ),
+          ),
+        ],
+      );
     }
-    final local = value.toLocal();
-    final date = '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
-    final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-    return '$date $time';
-  }
 
-  String _exceptionTypeLabel(String value) {
-    return switch (value) {
-      'MISSED_CHECKOUT' => 'Thiếu checkout',
-      'AUTO_CLOSED' => 'Tự động đóng ca',
-      'SUSPECTED_LOCATION_SPOOF' => 'Nghi ngờ giả lập vị trí',
-      'LARGE_TIME_DEVIATION' => 'Lệch thời gian lớn',
-      _ => value,
-    };
+    // Read-only: show submitted explanation if any
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (status == 'PENDING_ADMIN' || status == 'APPROVED' || status == 'REJECTED') ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'GIẢI TRÌNH ĐÃ GỬI',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.employeeExplanation?.isNotEmpty == true
+                      ? item.employeeExplanation!
+                      : '—',
+                  style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+                ),
+              ],
+            ),
+          ),
+          if (status == 'REJECTED' &&
+              item.adminNote != null &&
+              item.adminNote!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.errorLight,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.error, width: 0.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'LÝ DO TỪ CHỐI',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.error,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.adminNote!,
+                    style: const TextStyle(fontSize: 14, color: AppColors.error),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ],
+    );
   }
 }
+
+// ── Sub-widgets ───────────────────────────────────────────────────────────────
 
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status});
@@ -377,7 +667,8 @@ class _StatusBadge extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w700,
-          fontSize: 12,
+          fontSize: 11,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -396,7 +687,7 @@ class _StatusBadge extends StatelessWidget {
 
   String _statusLabel(String value) {
     return switch (value) {
-      'PENDING_EMPLOYEE' => 'Chờ giải trình',
+      'PENDING_EMPLOYEE' => 'Chờ giải trình',
       'PENDING_ADMIN' => 'Chờ admin',
       'APPROVED' => 'Đã duyệt',
       'REJECTED' => 'Từ chối',
@@ -406,34 +697,28 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 2),
-          Text(value),
-        ],
-      ),
-    );
-  }
-}
-
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Chưa có ngoại lệ cần xử lý.'));
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.check_circle_outline,
+            size: 56,
+            color: AppColors.textSecondary.withValues(alpha: 0.35),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Không có ngoại lệ nào cần xử lý',
+            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -451,11 +736,18 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(message, textAlign: TextAlign.center),
+            const Icon(Icons.error_outline, size: 40, color: AppColors.error),
             const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 16),
             FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
               onPressed: onRetry,
-              child: const Text('Tải lại'),
+              child: const Text('Tải lại'),
             ),
           ],
         ),

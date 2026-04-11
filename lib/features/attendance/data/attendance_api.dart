@@ -175,6 +175,26 @@ class EmployeeExceptionItem {
       status == 'PENDING_EMPLOYEE' && canSubmitExplanation && employeeSubmittedAt == null;
 }
 
+class EmployeeProfile {
+  const EmployeeProfile({
+    required this.id,
+    required this.code,
+    required this.fullName,
+    this.userId,
+    this.groupId,
+    this.groupName,
+    this.joinedAt,
+  });
+
+  final int id;
+  final String code;
+  final String fullName;
+  final int? userId;
+  final int? groupId;
+  final String? groupName;
+  final DateTime? joinedAt;
+}
+
 class AttendanceActionException implements Exception {
   const AttendanceActionException({
     required this.message,
@@ -223,8 +243,19 @@ class AttendanceApi {
     throw Exception(_extractErrorMessage(data, 'Load status failed (${response.statusCode})'));
   }
 
-  Future<List<AttendanceLogItem>> getMyLogs(String token) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/attendance/me');
+  Future<List<AttendanceLogItem>> getMyLogs(
+    String token, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    String fmt(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final params = <String, String>{
+      if (from != null) 'from': fmt(from),
+      if (to != null) 'to': fmt(to),
+    };
+    final base = Uri.parse('${AppConfig.apiBaseUrl}/attendance/me');
+    final uri = params.isEmpty ? base : base.replace(queryParameters: params);
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
@@ -314,6 +345,26 @@ class AttendanceApi {
     }
 
     throw Exception(_extractErrorMessage(data, 'Submit explanation failed (${response.statusCode})'));
+  }
+
+  Future<EmployeeProfile> getMyEmployeeProfile(String token) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees/me');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseJsonMap(response.body);
+
+    if (response.statusCode == 200) {
+      return EmployeeProfile(
+        id: _toInt(data['id']) ?? 0,
+        code: data['code'] as String? ?? '',
+        fullName: data['full_name'] as String? ?? '',
+        userId: _toInt(data['user_id']),
+        groupId: _toInt(data['group_id']),
+        groupName: data['group_name'] as String?,
+        joinedAt: _toDateTime(data['joined_at']),
+      );
+    }
+
+    throw Exception(_extractErrorMessage(data, 'Load employee profile failed (${response.statusCode})'));
   }
 
   Future<AttendanceActionResult> checkin({

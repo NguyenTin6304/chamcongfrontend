@@ -53,3 +53,4 @@ CODEBASE_OVERVIEW.md
 .claude
 docs
 SKILL.md
+.env.production
