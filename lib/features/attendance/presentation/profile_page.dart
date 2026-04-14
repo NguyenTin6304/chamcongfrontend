@@ -155,6 +155,181 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     }
   }
 
+  Future<void> _showChangePasswordDialog() async {
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    var obscureCurrent = true;
+    var obscureNew = true;
+    var obscureConfirm = true;
+    var saving = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          Future<void> onSave() async {
+            final current = currentCtrl.text;
+            final newPass = newCtrl.text;
+            final confirm = confirmCtrl.text;
+
+            if (current.isEmpty) {
+              setDialogState(() => errorText = 'Vui lòng nhập mật khẩu hiện tại.');
+              return;
+            }
+            if (newPass.length < 6) {
+              setDialogState(() => errorText = 'Mật khẩu mới phải có ít nhất 6 ký tự.');
+              return;
+            }
+            if (newPass != confirm) {
+              setDialogState(() => errorText = 'Mật khẩu xác nhận không khớp.');
+              return;
+            }
+
+            setDialogState(() { saving = true; errorText = null; });
+
+            final nav = Navigator.of(ctx);
+            final messenger = ScaffoldMessenger.of(context);
+
+            final token = await _tokenStorage.getToken();
+            if (!mounted) return;
+            if (token == null || token.isEmpty) {
+              setDialogState(() { saving = false; errorText = 'Phiên đăng nhập đã hết hạn.'; });
+              return;
+            }
+            try {
+              await _authApi.changePassword(
+                token: token,
+                currentPassword: current,
+                newPassword: newPass,
+              );
+              if (!mounted) return;
+              nav.pop();
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Đổi mật khẩu thành công.')),
+              );
+            } on AuthApiException catch (e) {
+              if (mounted) setDialogState(() { saving = false; errorText = e.message; });
+            } catch (_) {
+              if (mounted) setDialogState(() { saving = false; errorText = 'Đổi mật khẩu thất bại. Vui lòng thử lại.'; });
+            }
+          }
+
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Đổi mật khẩu',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: currentCtrl,
+                      obscureText: obscureCurrent,
+                      style: const TextStyle(fontSize: 15),
+                      decoration: InputDecoration(
+                        labelText: 'Mật khẩu hiện tại',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureCurrent ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setDialogState(() => obscureCurrent = !obscureCurrent),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: newCtrl,
+                      obscureText: obscureNew,
+                      style: const TextStyle(fontSize: 15),
+                      decoration: InputDecoration(
+                        labelText: 'Mật khẩu mới',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: confirmCtrl,
+                      obscureText: obscureConfirm,
+                      style: const TextStyle(fontSize: 15),
+                      decoration: InputDecoration(
+                        labelText: 'Xác nhận mật khẩu mới',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                        ),
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(Icons.error_outline, size: 16, color: AppColors.error),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              errorText!,
+                              style: const TextStyle(fontSize: 13, color: AppColors.error),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: saving ? null : () => Navigator.of(ctx).pop(),
+                          child: const Text('Huỷ'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: saving ? null : onSave,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                          ),
+                          child: saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text('Xác nhận', style: TextStyle(fontSize: 15)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    currentCtrl.dispose();
+    newCtrl.dispose();
+    confirmCtrl.dispose();
+  }
+
   String get _avatarInitials {
     if (_fullName.trim().isNotEmpty) {
       final parts = _fullName.trim().split(RegExp(r'\s+'));
@@ -571,6 +746,7 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
             icon: Icons.lock_outline,
             iconColor: AppColors.primary,
             label: 'Đổi mật khẩu',
+            onTap: _showChangePasswordDialog,
           ),
           _buildDivider(),
           _buildSettingItem(

@@ -434,11 +434,7 @@ class _ExplanationPolicySettingsTabState
           ),
           child: Row(
             children: [
-              TextButton.icon(
-                onPressed: _loading || _saving || _purging ? null : _loadPolicy,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Tải lại'),
-              ),
+        
               const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: _loading || _saving || _purging

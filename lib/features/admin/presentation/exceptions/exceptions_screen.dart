@@ -46,6 +46,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   int _pendingCount = 0;
   int _approvedCount = 0;
   int _rejectedCount = 0;
+  int _expiredCount = 0;
   int _gracePeriodDays = 30;
 
   static const List<String> _allExceptionTypes = <String>[
@@ -123,6 +124,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
             : stats['pending_admin'] ?? 0;
         _approvedCount = stats['approved'] ?? 0;
         _rejectedCount = stats['rejected'] ?? 0;
+        _expiredCount = stats['expired'] ?? 0;
         _gracePeriodDays = gracePeriodDays;
         _reloadToken += 1;
       });
@@ -203,6 +205,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
     final pendingAdmin = results[1];
     final approved = results[2];
     final rejected = results[3];
+    final expired = results[4];
     final merged = <int, AttendanceExceptionItem>{};
     for (final result in results) {
       for (final item in result) {
@@ -226,6 +229,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       'today': today,
       'approved': approved.length,
       'rejected': rejected.length,
+      'expired': expired.length,
     };
   }
 
@@ -369,7 +373,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Khong the tai chi tiet exception: $error')),
+        SnackBar(content: Text('Không thể tải chi tiết exception: $error')),
       );
     } finally {
       if (mounted) {
@@ -410,7 +414,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       if (!approve && note.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Vui long nhap admin_note khi tu choi.'),
+            content: Text('Vui lòng nhập admin_note khi từ chối.'),
           ),
         );
         return;
@@ -546,7 +550,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                       const _DialogSectionTitle('Timeline'),
                       if (timeline.isEmpty)
                         const Text(
-                          'Khong co timeline.',
+                          'Không có timeline.',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textMuted,
@@ -624,7 +628,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                           maxLines: 3,
                           decoration: const InputDecoration(
                             labelText: 'admin_note',
-                            hintText: 'Nhap ghi chu khi can',
+                            hintText: 'Nhập ghi chú khi cần',
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -632,7 +636,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                           const Padding(
                             padding: EdgeInsets.only(top: 6),
                             child: Text(
-                              'Bat buoc nhap note khi tu choi.',
+                              'Bắt buộc nhập note khi từ chối.',
                               style: TextStyle(
                                 color: AppColors.danger,
                                 fontSize: 12,
@@ -1108,7 +1112,10 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       ),
       (id: 'APPROVED', label: exceptionStatusLabel('APPROVED')),
       (id: 'REJECTED', label: exceptionStatusLabel('REJECTED')),
-      (id: 'EXPIRED', label: exceptionStatusLabel('EXPIRED')),
+      (
+        id: 'EXPIRED',
+        label: '${exceptionStatusLabel('EXPIRED')} ($_expiredCount)',
+      ),
     ];
 
     return Column(
@@ -1119,7 +1126,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
           runSpacing: 12,
           children: [
             SizedBox(
-              width: 250,
+              width: 230,
               child: KpiCard(
                 label: exceptionStatusLabel('PENDING_EMPLOYEE'),
                 value: '$_pendingEmployeeCount',
@@ -1130,7 +1137,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               ),
             ),
             SizedBox(
-              width: 250,
+              width: 230,
               child: KpiCard(
                 label: exceptionStatusLabel('PENDING_ADMIN'),
                 value: '$_pendingCount',
@@ -1141,7 +1148,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               ),
             ),
             SizedBox(
-              width: 250,
+              width: 230,
               child: KpiCard(
                 label: 'Đã duyệt',
                 value: '$_approvedCount',
@@ -1152,13 +1159,24 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               ),
             ),
             SizedBox(
-              width: 250,
+              width: 230,
               child: KpiCard(
                 label: 'Từ chối',
                 value: '$_rejectedCount',
                 valueColor: AppColors.danger,
                 icon: Icons.cancel_outlined,
                 iconColor: AppColors.danger,
+                loading: _loading,
+              ),
+            ),
+            SizedBox(
+              width: 230,
+              child: KpiCard(
+                label: 'Quá hạn',
+                value: '$_expiredCount',
+                valueColor: AppColors.textMuted,
+                icon: Icons.hourglass_empty_outlined,
+                iconColor: AppColors.textMuted,
                 loading: _loading,
               ),
             ),

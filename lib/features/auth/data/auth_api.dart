@@ -179,6 +179,32 @@ class AuthApi {
     );
   }
 
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/change-password');
+    final response = await _safePost(
+      uri,
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      }),
+      headers: {'Authorization': 'Bearer $token'},
+      timeoutMessage: 'Đổi mật khẩu quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
+    );
+
+    if (response.statusCode == 200) return;
+
+    final data = _parseJsonMap(response.body);
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Đổi mật khẩu thất bại (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
+  }
+
   Future<RegisterResult> register({
     required String email,
     required String password,
@@ -219,14 +245,12 @@ class AuthApi {
     required String body,
     required String timeoutMessage,
     required String networkMessage,
+    Map<String, String>? headers,
   }) async {
     try {
+      final mergedHeaders = {'Content-Type': 'application/json', ...?headers};
       return await http
-          .post(
-            uri,
-            headers: const {'Content-Type': 'application/json'},
-            body: body,
-          )
+          .post(uri, headers: mergedHeaders, body: body)
           .timeout(_requestTimeout);
     } on TimeoutException {
       throw AuthApiException(timeoutMessage);
