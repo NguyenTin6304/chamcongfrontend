@@ -33,6 +33,40 @@ class ActiveRuleResult {
   final int? crossDayCutoffMinutes;
 }
 
+class ExceptionPolicy {
+  const ExceptionPolicy({
+    required this.defaultDeadlineHours,
+    required this.gracePeriodDays,
+    this.autoClosedDeadlineHours,
+    this.missedCheckoutDeadlineHours,
+    this.locationRiskDeadlineHours,
+    this.largeTimeDeviationDeadlineHours,
+    this.updatedAt,
+    this.updatedByName,
+  });
+
+  final int defaultDeadlineHours;
+  final int? autoClosedDeadlineHours;
+  final int? missedCheckoutDeadlineHours;
+  final int? locationRiskDeadlineHours;
+  final int? largeTimeDeviationDeadlineHours;
+  final int gracePeriodDays;
+  final DateTime? updatedAt;
+  final String? updatedByName;
+}
+
+class PurgeExpiredExceptionsResult {
+  const PurgeExpiredExceptionsResult({
+    required this.deletedCount,
+    required this.expiredCount,
+    required this.gracePeriodDays,
+  });
+
+  final int deletedCount;
+  final int expiredCount;
+  final int gracePeriodDays;
+}
+
 class EmployeeLite {
   const EmployeeLite({
     required this.id,
@@ -47,6 +81,7 @@ class EmployeeLite {
     this.role,
     this.active,
     this.joinedAt,
+    this.resignedAt,
   });
 
   final int id;
@@ -61,14 +96,26 @@ class EmployeeLite {
   final String? role;
   final bool? active;
   final DateTime? joinedAt;
+  // Non-null means the employee has resigned (soft-deleted).
+  final DateTime? resignedAt;
+
+  bool get isResigned => resignedAt != null;
 }
 
 class UserLite {
-  const UserLite({required this.id, required this.email, required this.role});
+  const UserLite({
+    required this.id,
+    required this.email,
+    required this.role,
+    this.fullName,
+    this.phone,
+  });
 
   final int id;
   final String email;
   final String role;
+  final String? fullName;
+  final String? phone;
 }
 
 class GroupLite {
@@ -141,6 +188,7 @@ class AttendanceExceptionItem {
     this.resolvedByEmail,
     this.detectedAt,
     this.expiresAt,
+    this.extendedDeadlineAt,
     this.employeeExplanation,
     this.employeeSubmittedAt,
     this.adminNote,
@@ -169,6 +217,7 @@ class AttendanceExceptionItem {
   final String? resolvedByEmail;
   final DateTime? detectedAt;
   final DateTime? expiresAt;
+  final DateTime? extendedDeadlineAt;
   final String? employeeExplanation;
   final DateTime? employeeSubmittedAt;
   final String? adminNote;
@@ -176,6 +225,8 @@ class AttendanceExceptionItem {
   final String? decidedByEmail;
   final bool canAdminDecide;
   final List<Map<String, dynamic>> timeline;
+
+  DateTime? get effectiveDeadline => extendedDeadlineAt ?? expiresAt;
 }
 
 class DashboardSummaryResult {
@@ -408,6 +459,84 @@ class AdminApi {
     );
   }
 
+  Future<ExceptionPolicy> getExceptionPolicy(String token) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/rules/exception-policy');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseResponseBytes(response);
+
+    if (response.statusCode == 200) {
+      return _exceptionPolicyFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load exception policy failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<ExceptionPolicy> patchExceptionPolicy({
+    required String token,
+    required int defaultDeadlineHours,
+    required int gracePeriodDays,
+    int? autoClosedDeadlineHours,
+    int? missedCheckoutDeadlineHours,
+    int? locationRiskDeadlineHours,
+    int? largeTimeDeviationDeadlineHours,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/rules/exception-policy');
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(<String, dynamic>{
+        'default_deadline_hours': defaultDeadlineHours,
+        'auto_closed_deadline_hours': autoClosedDeadlineHours,
+        'missed_checkout_deadline_hours': missedCheckoutDeadlineHours,
+        'location_risk_deadline_hours': locationRiskDeadlineHours,
+        'large_time_deviation_deadline_hours': largeTimeDeviationDeadlineHours,
+        'grace_period_days': gracePeriodDays,
+      }),
+    );
+    final data = _parseResponseBytes(response);
+
+    if (response.statusCode == 200) {
+      return _exceptionPolicyFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Update exception policy failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<PurgeExpiredExceptionsResult> purgeExpiredExceptions({
+    required String token,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/purge-expired',
+    );
+    final response = await http.post(uri, headers: _authHeaders(token));
+    final data = _parseResponseBytes(response);
+
+    if (response.statusCode == 200) {
+      return PurgeExpiredExceptionsResult(
+        deletedCount: _toInt(data['deleted_count']) ?? 0,
+        expiredCount: _toInt(data['expired_count']) ?? 0,
+        gracePeriodDays: _toInt(data['grace_period_days']) ?? 30,
+      );
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Purge expired exceptions failed (${response.statusCode})',
+      ),
+    );
+  }
+
   Future<List<EmployeeLite>> listEmployees(
     String token, {
     String? query,
@@ -423,9 +552,6 @@ class AdminApi {
     }
     if (status != null && status.isNotEmpty && status != 'all') {
       queryMap['status'] = status;
-      if (status == 'inactive') {
-        queryMap['unassigned_only'] = 'true';
-      }
     }
     final uri = Uri.parse(
       '${AppConfig.apiBaseUrl}/employees',
@@ -453,19 +579,25 @@ class AdminApi {
     required String token,
     required String code,
     required String fullName,
+    String? phone,
     int? userId,
     int? groupId,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees');
+    final body = <String, dynamic>{
+      'code': code,
+      'full_name': fullName,
+      'user_id': userId,
+      'group_id': groupId,
+    };
+    if (phone != null && phone.trim().isNotEmpty) {
+      body['phone'] = phone.trim();
+    }
+
     final response = await http.post(
       uri,
       headers: _authHeaders(token),
-      body: jsonEncode({
-        'code': code,
-        'full_name': fullName,
-        'user_id': userId,
-        'group_id': groupId,
-      }),
+      body: jsonEncode(body),
     );
 
     final data = _parseResponse(response);
@@ -493,6 +625,8 @@ class AdminApi {
           id: (e['id'] as num?)?.toInt() ?? 0,
           email: e['email'] as String? ?? '-',
           role: e['role'] as String? ?? 'USER',
+          fullName: e['full_name'] as String?,
+          phone: e['phone'] as String?,
         );
       }).toList();
     }
@@ -572,6 +706,26 @@ class AdminApi {
       _extractErrorMessage(
         data,
         'Delete employee failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<EmployeeLite> restoreEmployee({
+    required String token,
+    required int employeeId,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/employees/$employeeId/restore',
+    );
+    final response = await http.put(uri, headers: _authHeaders(token));
+    final data = _parseResponse(response);
+    if (response.statusCode == 200) {
+      return _employeeFromMap(data);
+    }
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Restore employee failed (${response.statusCode})',
       ),
     );
   }
@@ -776,10 +930,9 @@ class AdminApi {
       params['group_ids'] = groupIds.join(',');
     }
     if (activeOnly) params['active_only'] = 'true';
-    final uri =
-        Uri.parse('${AppConfig.apiBaseUrl}/groups/geofences/summary').replace(
-      queryParameters: params.isEmpty ? null : params,
-    );
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/groups/geofences/summary',
+    ).replace(queryParameters: params.isEmpty ? null : params);
     final response = await http.get(uri, headers: _authHeaders(token));
     if (response.statusCode == 200) {
       final raw = _parseJsonMap(
@@ -1065,7 +1218,9 @@ class AdminApi {
       body['admin_note'] = note;
     }
     if (actualCheckoutTime != null) {
-      body['actual_checkout_time'] = actualCheckoutTime.toUtc().toIso8601String();
+      body['actual_checkout_time'] = actualCheckoutTime
+          .toUtc()
+          .toIso8601String();
     }
 
     final response = await http.post(
@@ -1127,6 +1282,39 @@ class AdminApi {
       _extractErrorMessage(
         data,
         'Reject attendance exception failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<AttendanceExceptionItem> extendExceptionDeadline({
+    required String token,
+    required int exceptionId,
+    required int extendHours,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/extend-deadline',
+    );
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(<String, dynamic>{'extend_hours': extendHours}),
+    );
+    if (response.statusCode == 204) {
+      return getAttendanceExceptionDetail(
+        token: token,
+        exceptionId: exceptionId,
+      );
+    }
+
+    final data = _parseResponseBytes(response);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return _attendanceExceptionFromMap(_extractPayloadMap(data));
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Extend attendance exception deadline failed (${response.statusCode})',
       ),
     );
   }
@@ -1204,7 +1392,11 @@ class AdminApi {
     required int employeeId,
     String? fullName,
     int? groupId,
+    bool setGroupId =
+        false, // pass true to send group_id (even when null = unassign)
     int? userId,
+    bool setUserId =
+        false, // pass true to send user_id (even when null = unassign)
     String? email,
     String? phone,
     String? departmentName,
@@ -1216,9 +1408,20 @@ class AdminApi {
     if (fullName != null) {
       body['full_name'] = fullName;
     }
-    // Always include group_id and user_id so null means "unassign"
-    body['group_id'] = groupId;
-    body['user_id'] = userId;
+    if (phone != null) {
+      body['phone'] = phone;
+    }
+    // Only include group_id / user_id when the caller explicitly opts in,
+    // so callers that only change `active` don't accidentally unlink the account.
+    if (setGroupId) {
+      body['group_id'] = groupId;
+    }
+    if (setUserId) {
+      body['user_id'] = userId;
+    }
+    if (active != null) {
+      body['active'] = active;
+    }
 
     final response = await http.put(
       uri,
@@ -1279,7 +1482,8 @@ class AdminApi {
     );
   }
 
-  Future<({List<DashboardAttendanceLogItem> items, int total})> listDashboardAttendanceLogs({
+  Future<({List<DashboardAttendanceLogItem> items, int total})>
+  listDashboardAttendanceLogs({
     required String token,
     DateTime? date,
     DateTime? fromDate,
@@ -1654,6 +1858,7 @@ class AdminApi {
           _toDateTime(e['joined_at']) ??
           _toDateTime(e['created_at']) ??
           _toDateTime(e['start_date']),
+      resignedAt: _toDateTime(e['resigned_at']),
     );
   }
 
@@ -1715,6 +1920,24 @@ class AdminApi {
     );
   }
 
+  ExceptionPolicy _exceptionPolicyFromMap(Map<String, dynamic> e) {
+    return ExceptionPolicy(
+      defaultDeadlineHours: _toInt(e['default_deadline_hours']) ?? 72,
+      autoClosedDeadlineHours: _toInt(e['auto_closed_deadline_hours']),
+      missedCheckoutDeadlineHours: _toInt(e['missed_checkout_deadline_hours']),
+      locationRiskDeadlineHours: _toInt(e['location_risk_deadline_hours']),
+      largeTimeDeviationDeadlineHours: _toInt(
+        e['large_time_deviation_deadline_hours'],
+      ),
+      gracePeriodDays: _toInt(e['grace_period_days']) ?? 30,
+      updatedAt: _toDateTime(e['updated_at']),
+      updatedByName:
+          e['updated_by_name'] as String? ??
+          e['updated_by_email'] as String? ??
+          e['updated_by'] as String?,
+    );
+  }
+
   AttendanceExceptionItem _attendanceExceptionFromMap(Map<String, dynamic> e) {
     final workDateRaw = e['work_date']?.toString() ?? '';
     final workDate = DateTime.tryParse(workDateRaw) ?? DateTime(1970, 1, 1);
@@ -1740,6 +1963,7 @@ class AdminApi {
       resolvedByEmail: resolvedByEmail ?? decidedByEmail,
       detectedAt: _toDateTime(e['detected_at']),
       expiresAt: _toDateTime(e['expires_at']),
+      extendedDeadlineAt: _toDateTime(e['extended_deadline_at']),
       employeeExplanation: e['employee_explanation'] as String?,
       employeeSubmittedAt: _toDateTime(e['employee_submitted_at']),
       adminNote: e['admin_note'] as String?,
@@ -1792,7 +2016,7 @@ class AdminApi {
   /// Throws [UnauthorizedException] if the response status is 401.
   Map<String, dynamic> _parseResponse(http.Response response) {
     if (response.statusCode == 401) throw const UnauthorizedException();
-    return _parseResponse(response);
+    return _parseJsonMap(response.body);
   }
 
   /// Like [_parseResponse] but decodes bodyBytes with UTF-8 before parsing.
@@ -1864,6 +2088,15 @@ class AdminApi {
     if (detail is String && detail.isNotEmpty) {
       return detail;
     }
+    if (detail is List && detail.isNotEmpty) {
+      final first = detail.first;
+      if (first is Map<String, dynamic>) {
+        final message = first['msg'] as String?;
+        if (message != null && message.isNotEmpty) {
+          return message;
+        }
+      }
+    }
 
     return fallback;
   }
@@ -1905,9 +2138,7 @@ class AdminApi {
     return value
         .whereType<Map>()
         .map(
-          (item) => item.map(
-            (key, value) => MapEntry(key.toString(), value),
-          ),
+          (item) => item.map((key, value) => MapEntry(key.toString(), value)),
         )
         .toList(growable: false);
   }

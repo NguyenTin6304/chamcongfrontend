@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
@@ -72,6 +72,7 @@ class AttendanceLogItem {
     required this.lat,
     required this.lng,
     required this.isOutOfRange,
+    this.workDate,
     this.distanceM,
     this.nearestDistanceM,
     this.matchedGeofence,
@@ -87,6 +88,10 @@ class AttendanceLogItem {
   final int id;
   final String type;
   final String time;
+
+  /// Backend-assigned work date (YYYY-MM-DD). Null for legacy logs that
+  /// pre-date the work_date column. Fall back to [time] when null.
+  final DateTime? workDate;
   final double lat;
   final double lng;
   final double? distanceM;
@@ -139,6 +144,7 @@ class EmployeeExceptionItem {
     this.sourceCheckinTime,
     this.detectedAt,
     this.expiresAt,
+    this.extendedDeadlineAt,
     this.employeeExplanation,
     this.employeeSubmittedAt,
     this.adminNote,
@@ -162,6 +168,7 @@ class EmployeeExceptionItem {
   final DateTime? sourceCheckinTime;
   final DateTime? detectedAt;
   final DateTime? expiresAt;
+  final DateTime? extendedDeadlineAt;
   final String? employeeExplanation;
   final DateTime? employeeSubmittedAt;
   final String? adminNote;
@@ -171,8 +178,45 @@ class EmployeeExceptionItem {
   final bool canSubmitExplanation;
   final List<EmployeeExceptionTimelineItem> timeline;
 
+  DateTime? get effectiveDeadline => extendedDeadlineAt ?? expiresAt;
+
+  bool get isDeadlineExpired {
+    final deadline = effectiveDeadline;
+    if (deadline == null) {
+      return false;
+    }
+    return !deadline.toLocal().isAfter(DateTime.now());
+  }
+
   bool get canEditExplanation =>
-      status == 'PENDING_EMPLOYEE' && canSubmitExplanation && employeeSubmittedAt == null;
+      status == 'PENDING_EMPLOYEE' &&
+      canSubmitExplanation &&
+      employeeSubmittedAt == null &&
+      !isDeadlineExpired;
+}
+
+class EmployeeProfile {
+  const EmployeeProfile({
+    required this.id,
+    required this.code,
+    required this.fullName,
+    this.phone,
+    this.userId,
+    this.groupId,
+    this.groupName,
+    this.joinedAt,
+    this.active = true,
+  });
+
+  final int id;
+  final String code;
+  final String fullName;
+  final String? phone;
+  final int? userId;
+  final int? groupId;
+  final String? groupName;
+  final DateTime? joinedAt;
+  final bool active;
 }
 
 class AttendanceActionException implements Exception {
@@ -194,15 +238,19 @@ class AttendanceActionException implements Exception {
   String toString() => message;
 }
 
+class EmployeeNotAssignedException implements Exception {
+  const EmployeeNotAssignedException();
+
+  @override
+  String toString() => 'Tài khoản chưa được gán nhân viên.';
+}
+
 class AttendanceApi {
   const AttendanceApi();
 
   Future<AttendanceStatusResult> getStatus(String token) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/attendance/status');
-    final response = await http.get(
-      uri,
-      headers: _authHeaders(token),
-    );
+    final response = await http.get(uri, headers: _authHeaders(token));
 
     final data = _parseJsonMap(response.body);
 
@@ -220,11 +268,27 @@ class AttendanceApi {
       );
     }
 
-    throw Exception(_extractErrorMessage(data, 'Load status failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(data, 'Load status failed (${response.statusCode})'),
+    );
   }
 
-  Future<List<AttendanceLogItem>> getMyLogs(String token) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/attendance/me');
+  Future<List<AttendanceLogItem>> getMyLogs(
+    String token, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    String fmt(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    // Backend parses date-only to_date at midnight, so advance one day to
+    // keep the requested date inclusive.
+    final inclusiveTo = to?.add(const Duration(days: 1));
+    final params = <String, String>{
+      if (from != null) 'from_date': fmt(from),
+      if (inclusiveTo != null) 'to_date': fmt(inclusiveTo),
+    };
+    final base = Uri.parse('${AppConfig.apiBaseUrl}/attendance/me');
+    final uri = params.isEmpty ? base : base.replace(queryParameters: params);
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
@@ -236,6 +300,7 @@ class AttendanceApi {
               id: (e['id'] as num?)?.toInt() ?? 0,
               type: e['type'] as String? ?? 'UNKNOWN',
               time: e['time'] as String? ?? '',
+              workDate: _toDateOnly(e['work_date']),
               lat: _toDouble(e['lat']) ?? 0,
               lng: _toDouble(e['lng']) ?? 0,
               distanceM: _toDouble(e['distance_m']),
@@ -255,18 +320,26 @@ class AttendanceApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Load history failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load history failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<List<EmployeeExceptionItem>> listMyExceptions(
     String token, {
     String? status,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance-exceptions/me').replace(
-      queryParameters: {
-        if (status != null && status.isNotEmpty) 'status': status,
-      },
-    );
+    final uri =
+        Uri.parse(
+          '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/me',
+        ).replace(
+          queryParameters: {
+            if (status != null && status.isNotEmpty) 'status': status,
+          },
+        );
     final response = await http.get(uri, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
@@ -278,14 +351,21 @@ class AttendanceApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Load exceptions failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load exceptions failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<EmployeeExceptionItem> getMyExceptionDetail({
     required String token,
     required int exceptionId,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance-exceptions/me/$exceptionId');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/me/$exceptionId',
+    );
     final response = await http.get(uri, headers: _authHeaders(token));
     final data = _parseJsonMap(response.body);
 
@@ -293,7 +373,12 @@ class AttendanceApi {
       return _employeeExceptionFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Load exception detail failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load exception detail failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<EmployeeExceptionItem> submitExceptionExplanation({
@@ -301,7 +386,9 @@ class AttendanceApi {
     required int exceptionId,
     required String explanation,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/submit-explanation');
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-exceptions/$exceptionId/submit-explanation',
+    );
     final response = await http.post(
       uri,
       headers: _authHeaders(token),
@@ -313,7 +400,43 @@ class AttendanceApi {
       return _employeeExceptionFromMap(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Submit explanation failed (${response.statusCode})'));
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Submit explanation failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<EmployeeProfile> getMyEmployeeProfile(String token) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/employees/me');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    final data = _parseJsonMap(response.body);
+
+    if (response.statusCode == 200) {
+      return EmployeeProfile(
+        id: _toInt(data['id']) ?? 0,
+        code: data['code'] as String? ?? '',
+        fullName: data['full_name'] as String? ?? '',
+        phone: data['phone'] as String?,
+        userId: _toInt(data['user_id']),
+        groupId: _toInt(data['group_id']),
+        groupName: data['group_name'] as String?,
+        joinedAt: _toDateTime(data['joined_at']),
+        active: data['active'] as bool? ?? true,
+      );
+    }
+
+    if (response.statusCode == 404) {
+      throw const EmployeeNotAssignedException();
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Load employee profile failed (${response.statusCode})',
+      ),
+    );
   }
 
   Future<AttendanceActionResult> checkin({
@@ -359,10 +482,7 @@ class AttendanceApi {
     DateTime? timestampClient,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}$path');
-    final payload = <String, dynamic>{
-      'lat': lat,
-      'lng': lng,
-    };
+    final payload = <String, dynamic>{'lat': lat, 'lng': lng};
     if (accuracyM != null) {
       payload['accuracy_m'] = accuracyM;
     }
@@ -388,21 +508,31 @@ class AttendanceApi {
         nearestDistanceM: _toDouble(log['nearest_distance_m']),
         isOutOfRange: log['is_out_of_range'] as bool? ?? false,
         matchedGeofence: log['matched_geofence'] as String?,
-        geofenceSource: (data['geofence_source'] as String?) ?? (log['geofence_source'] as String?),
-        fallbackReason: (data['fallback_reason'] as String?) ?? (log['fallback_reason'] as String?),
+        geofenceSource:
+            (data['geofence_source'] as String?) ??
+            (log['geofence_source'] as String?),
+        fallbackReason:
+            (data['fallback_reason'] as String?) ??
+            (log['fallback_reason'] as String?),
         message: data['message'] as String? ?? 'Success',
         punctualityStatus: log['punctuality_status'] as String?,
         checkoutStatus: log['checkout_status'] as String?,
         riskScore: _toInt(data['risk_score']) ?? _toInt(log['risk_score']),
-        riskLevel: (data['risk_level'] as String?) ?? (log['risk_level'] as String?),
-        riskFlags: responseFlags.isNotEmpty ? responseFlags : _toStringList(log['risk_flags']),
+        riskLevel:
+            (data['risk_level'] as String?) ?? (log['risk_level'] as String?),
+        riskFlags: responseFlags.isNotEmpty
+            ? responseFlags
+            : _toStringList(log['risk_flags']),
         decision: data['decision'] as String?,
       );
     }
 
     final details = _extractErrorDetails(data);
     throw AttendanceActionException(
-      message: _extractErrorMessage(data, 'Action failed (${response.statusCode})'),
+      message: _extractErrorMessage(
+        data,
+        'Action failed (${response.statusCode})',
+      ),
       riskScore: _toInt(details['risk_score']),
       riskLevel: details['risk_level'] as String?,
       riskFlags: _toStringList(details['risk_flags']),
@@ -505,6 +635,19 @@ class AttendanceApi {
     return DateTime.tryParse(value.toString());
   }
 
+  /// Parses a date-only string (e.g. "2026-04-13") into a midnight local
+  /// [DateTime]. Returns null when the value is null or unparseable.
+  DateTime? _toDateOnly(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    // Accept "YYYY-MM-DD" and ISO datetime strings — take only the date part.
+    final datePart = s.length >= 10 ? s.substring(0, 10) : s;
+    final parsed = DateTime.tryParse(datePart);
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
   EmployeeExceptionItem _employeeExceptionFromMap(Map<String, dynamic> data) {
     return EmployeeExceptionItem(
       id: _toInt(data['id']) ?? 0,
@@ -521,6 +664,7 @@ class AttendanceApi {
       sourceCheckinTime: _toDateTime(data['source_checkin_time']),
       detectedAt: _toDateTime(data['detected_at']),
       expiresAt: _toDateTime(data['expires_at']),
+      extendedDeadlineAt: _toDateTime(data['extended_deadline_at']),
       employeeExplanation: data['employee_explanation'] as String?,
       employeeSubmittedAt: _toDateTime(data['employee_submitted_at']),
       adminNote: data['admin_note'] as String?,
@@ -532,7 +676,9 @@ class AttendanceApi {
     );
   }
 
-  List<EmployeeExceptionTimelineItem> _employeeExceptionTimelineFromList(dynamic value) {
+  List<EmployeeExceptionTimelineItem> _employeeExceptionTimelineFromList(
+    dynamic value,
+  ) {
     if (value is! List) {
       return const [];
     }
@@ -549,4 +695,3 @@ class AttendanceApi {
     }).toList();
   }
 }
-

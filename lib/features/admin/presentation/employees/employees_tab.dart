@@ -110,6 +110,14 @@ class _EmployeesTabState extends State<EmployeesTab> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  String _friendlyError(Object error, {required String fallback}) {
+    var message = error.toString().trim();
+    if (message.startsWith('Exception: ')) {
+      message = message.substring('Exception: '.length).trim();
+    }
+    return message.isEmpty ? fallback : message;
+  }
+
   InputDecoration _decoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
@@ -180,7 +188,10 @@ class _EmployeesTabState extends State<EmployeesTab> {
           pageSize: _employeesPageSize,
         );
       }
-      AdminDataCache.instance.replaceEmployees(_employees);
+      // Don't replace cache when browsing resigned employees — it would evict active ones.
+      if (status != 'resigned') {
+        AdminDataCache.instance.replaceEmployees(_employees);
+      }
     } catch (_) {
       if (!mounted) {
         return;
@@ -196,88 +207,43 @@ class _EmployeesTabState extends State<EmployeesTab> {
   }
 
   Future<void> _refreshEmployeesOnly() async {
-    await _loadEmployees();
+    await _loadEmployees(
+      query: _employeesSearchController.text.trim().isEmpty
+          ? null
+          : _employeesSearchController.text.trim(),
+      groupId: _employeesGroupId,
+      status: _employeesStatus == 'all' ? null : _employeesStatus,
+    );
   }
 
   List<UserLite> _unassignedUsers() {
-    final assignedIds = _employees.map((e) => e.userId).whereType<int>().toSet();
+    final assignedIds = _employees
+        .map((e) => e.userId)
+        .whereType<int>()
+        .toSet();
     return _users
         .where((user) => !assignedIds.contains(user.id))
         .toList(growable: false);
   }
 
-  Future<void> _assignEmployee(
-    EmployeeLite employee, {
-    int? overrideUserId,
-  }) async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      _showSnack('Phiên đăng nhập đã hết hạn.');
-      return;
+  String _userOptionLabel(UserLite user) {
+    final fullName = user.fullName?.trim() ?? '';
+    if (fullName.isEmpty) {
+      return '${user.email} (${user.role})';
     }
-
-    final selectedUser = overrideUserId ?? _selectedUserByEmployee[employee.id];
-
-    setState(() {
-      _assigningEmployeeIds.add(employee.id);
-    });
-
-    try {
-      final updated = await _api.assignEmployeeUser(
-        token: token,
-        employeeId: employee.id,
-        userId: selectedUser,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      AdminDataCache.instance.upsertEmployee(updated);
-      setState(() {
-        _employees = _employees
-            .map((e) => e.id == updated.id ? updated : e)
-            .toList(growable: false);
-        _selectedUserByEmployee[updated.id] = updated.userId;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      _showSnack('Không thể cập nhật liên kết tài khoản.');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _assigningEmployeeIds.remove(employee.id);
-        });
-      }
-    }
+    return '$fullName - ${user.email} (${user.role})';
   }
 
-  Future<void> _confirmDeleteEmployee(EmployeeLite employee) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xóa nhân viên'),
-        content: Text(
-          'Bạn có chắc muốn xóa ${employee.code} - ${employee.fullName}?\nHành động này không thể hoàn tác.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton.tonal(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Xóa'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok == true) {
-      await _deleteEmployee(employee);
+  UserLite? _findUser(int? userId) {
+    if (userId == null) {
+      return null;
     }
+    for (final user in _users) {
+      if (user.id == userId) {
+        return user;
+      }
+    }
+    return null;
   }
 
   Future<void> _deleteEmployee(EmployeeLite employee) async {
@@ -298,6 +264,8 @@ class _EmployeesTabState extends State<EmployeesTab> {
         return;
       }
 
+      // Remove from current view in both stages (stage 1: employee moves to
+      // resigned list; stage 2: permanently deleted — neither case stays here).
       AdminDataCache.instance.removeEmployee(employee.id);
       setState(() {
         _employees = _employees
@@ -308,16 +276,71 @@ class _EmployeesTabState extends State<EmployeesTab> {
           _reportEmployeeId = null;
         }
       });
-      _showSnack('Đã xóa nhân viên ${employee.code}.');
-    } catch (_) {
+
+      if (employee.isResigned) {
+        _showSnack('Đã xóa vĩnh viễn nhân viên ${employee.code}.');
+      } else {
+        _showSnack(
+          '${employee.code} - ${employee.fullName} đã chuyển sang nghỉ việc.',
+        );
+      }
+    } catch (error) {
       if (!mounted) {
         return;
       }
-      _showSnack('Không thể xóa nhân viên.');
+      _showSnack(
+        _friendlyError(error, fallback: 'Không thể xóa nhân viên.'),
+      );
     } finally {
       if (mounted) {
         setState(() {
           _deletingEmployeeIds.remove(employee.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _restoreEmployee(EmployeeLite employee) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+
+    setState(() {
+      _assigningEmployeeIds.add(employee.id);
+    });
+
+    try {
+      final restored = await _api.restoreEmployee(
+        token: token,
+        employeeId: employee.id,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      // Remove from resigned view (now active again) and update cache.
+      AdminDataCache.instance.upsertEmployee(restored);
+      setState(() {
+        _employees = _employees
+            .where((item) => item.id != employee.id)
+            .toList(growable: false);
+        _selectedUserByEmployee.remove(employee.id);
+      });
+      _showSnack('Đã khôi phục nhân viên ${employee.code}.');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack(
+        _friendlyError(error, fallback: 'Không thể khôi phục nhân viên.'),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _assigningEmployeeIds.remove(employee.id);
         });
       }
     }
@@ -383,6 +406,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
   }
 
   String _employeeStatusLabel(EmployeeLite employee) {
+    if (employee.isResigned) return 'Đã nghỉ việc';
     return _isEmployeeActive(employee) ? 'Hoạt động' : 'Không hoạt động';
   }
 
@@ -394,44 +418,115 @@ class _EmployeesTabState extends State<EmployeesTab> {
     await _showEmployeeEditPanelDialog(employee);
   }
 
+  Future<void> _setEmployeeActive(EmployeeLite employee, bool active) async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+
+    setState(() {
+      _assigningEmployeeIds.add(employee.id);
+    });
+
+    try {
+      final updated = await _api.patchEmployee(
+        token: token,
+        employeeId: employee.id,
+        active: active,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      AdminDataCache.instance.upsertEmployee(updated);
+      setState(() {
+        _employees = _employees
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList(growable: false);
+      });
+      _showSnack(
+        active ? 'Đã kích hoạt nhân viên.' : 'Đã vô hiệu hoá nhân viên.',
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showSnack('Không thể cập nhật trạng thái nhân viên.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _assigningEmployeeIds.remove(employee.id);
+        });
+      }
+    }
+  }
+
   Future<void> _showEmployeesActionMenu(
     EmployeeLite employee,
     Offset position,
   ) async {
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx,
-        position.dy,
-      ),
-      items: const [
-        PopupMenuItem<String>(value: 'group', child: Text('Đổi nhóm')),
-        PopupMenuItem<String>(value: 'disable', child: Text('Vô hiệu hoá')),
-        PopupMenuItem<String>(value: 'delete', child: Text('Xoá')),
-      ],
+    final rect = RelativeRect.fromLTRB(
+      position.dx,
+      position.dy,
+      position.dx,
+      position.dy,
     );
-    if (selected == 'group') {
-      await _showEmployeeEditPanel(employee);
-      return;
-    }
-    if (selected == 'disable') {
-      await _assignEmployee(employee, overrideUserId: null);
-      await _refreshEmployeesOnly();
-      return;
-    }
-    if (selected == 'delete') {
-      await _confirmDeleteEmployee(employee);
+
+    if (employee.isResigned) {
+      final selected = await showMenu<String>(
+        context: context,
+        position: rect,
+        items: const [
+          PopupMenuItem<String>(
+            value: 'restore',
+            child: Text('Khôi phục'),
+          ),
+          PopupMenuItem<String>(
+            value: 'delete',
+            child: Text('Xoá vĩnh viễn'),
+          ),
+        ],
+      );
+      if (selected == 'restore') {
+        await _restoreEmployee(employee);
+      } else if (selected == 'delete') {
+        await _deleteEmployee(employee);
+      }
+    } else {
+      final selected = await showMenu<String>(
+        context: context,
+        position: rect,
+        items: [
+          const PopupMenuItem<String>(value: 'edit', child: Text('Chỉnh sửa')),
+          PopupMenuItem<String>(
+            value: 'toggle',
+            child: Text(
+              _isEmployeeActive(employee) ? 'Vô hiệu hoá' : 'Kích hoạt',
+            ),
+          ),
+          const PopupMenuItem<String>(value: 'delete', child: Text('Xoá')),
+        ],
+      );
+      if (selected == 'edit') {
+        await _showEmployeeEditPanel(employee);
+      } else if (selected == 'toggle') {
+        await _setEmployeeActive(employee, !_isEmployeeActive(employee));
+      } else if (selected == 'delete') {
+        await _deleteEmployee(employee);
+      }
     }
   }
 
   Future<void> _showCreateEmployeeDialog() async {
     final codeController = TextEditingController();
     final nameController = TextEditingController();
+    final phoneController = TextEditingController();
     int? selectedGroupId;
     int? selectedUserId;
     var creating = false;
+    var dialogOpen = true;
 
     await showDialog<void>(
       context: context,
@@ -446,6 +541,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
               }
               final code = codeController.text.trim();
               final fullName = nameController.text.trim();
+              final phone = phoneController.text.trim();
               if (code.isEmpty || fullName.isEmpty) {
                 _showSnack('Vui lòng nhập mã nhân viên và họ tên.');
                 return;
@@ -458,6 +554,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
                   token: token,
                   code: code,
                   fullName: fullName,
+                  phone: phone.isEmpty ? null : phone,
                   userId: selectedUserId,
                   groupId: selectedGroupId,
                 );
@@ -477,14 +574,17 @@ class _EmployeesTabState extends State<EmployeesTab> {
                 if (!context.mounted) {
                   return;
                 }
+                dialogOpen = false;
                 Navigator.of(context).pop();
-              } catch (_) {
+              } catch (error) {
                 if (!mounted) {
                   return;
                 }
-                _showSnack('Không thể thêm nhân viên.');
+                _showSnack(
+                  _friendlyError(error, fallback: 'Không thể thêm nhân viên.'),
+                );
               } finally {
-                if (mounted) {
+                if (dialogOpen && context.mounted) {
                   setDialogState(() {
                     creating = false;
                   });
@@ -501,13 +601,24 @@ class _EmployeesTabState extends State<EmployeesTab> {
                   children: [
                     TextField(
                       controller: codeController,
-                      decoration:
-                          _decoration('Mã nhân viên *', Icons.badge_outlined),
+                      decoration: _decoration(
+                        'Mã nhân viên *',
+                        Icons.badge_outlined,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: nameController,
                       decoration: _decoration('Họ tên', Icons.person_outline),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: _decoration(
+                        'Số điện thoại',
+                        Icons.phone_outlined,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<int?>(
@@ -543,16 +654,27 @@ class _EmployeesTabState extends State<EmployeesTab> {
                           value: null,
                           child: Text('Không liên kết'),
                         ),
-                        ..._unassignedUsers().map(
-                          (user) => DropdownMenuItem<int?>(
+                        ..._unassignedUsers().map((user) {
+                          return DropdownMenuItem<int?>(
                             value: user.id,
-                            child: Text('${user.email} (${user.role})'),
-                          ),
-                        ),
+                            child: Text(_userOptionLabel(user)),
+                          );
+                        }),
                       ],
                       onChanged: (value) {
+                        final selectedUser = _findUser(value);
                         setDialogState(() {
                           selectedUserId = value;
+                          if (selectedUser != null) {
+                            final fullName = selectedUser.fullName?.trim();
+                            final phone = selectedUser.phone?.trim();
+                            if (fullName != null && fullName.isNotEmpty) {
+                              nameController.text = fullName;
+                            }
+                            if (phone != null && phone.isNotEmpty) {
+                              phoneController.text = phone;
+                            }
+                          }
                         });
                       },
                     ),
@@ -563,7 +685,10 @@ class _EmployeesTabState extends State<EmployeesTab> {
                 TextButton(
                   onPressed: creating
                       ? null
-                      : () => Navigator.of(context).pop(),
+                      : () {
+                          dialogOpen = false;
+                          Navigator.of(context).pop();
+                        },
                   child: const Text('Huỷ'),
                 ),
                 ElevatedButton(
@@ -592,6 +717,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
 
     codeController.dispose();
     nameController.dispose();
+    phoneController.dispose();
   }
 
   bool _isEmployeeActive(EmployeeLite employee) {
@@ -833,6 +959,10 @@ class _EmployeesTabState extends State<EmployeesTab> {
                 DropdownMenuItem<String>(
                   value: 'inactive',
                   child: Text('Không hoạt động'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'resigned',
+                  child: Text('Đã nghỉ việc'),
                 ),
               ],
               onChanged: (value) {

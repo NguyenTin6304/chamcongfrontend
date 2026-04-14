@@ -1,229 +1,159 @@
-﻿import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/layout/responsive.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../attendance/data/attendance_api.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({
-    required this.email,
-    super.key,
-  });
+class HomePageBody extends StatefulWidget {
+  const HomePageBody({super.key, this.onNavigate, this.onAttendanceChanged});
 
-  final String email;
+  /// Called when this body wants to switch tabs in AppScaffold.
+  final ValueChanged<int>? onNavigate;
+
+  /// Called after a successful check-in or check-out so other tabs can refresh.
+  final VoidCallback? onAttendanceChanged;
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePageBody> createState() => _HomePageBodyState();
 }
 
-class _HomePageState extends State<HomePage> {
-  static const _vnOffset = Duration(hours: 7);
+class _HomePageBodyState extends State<HomePageBody> {
+  static const _vnWeekdays = [
+    'Thứ Hai',
+    'Thứ Ba',
+    'Thứ Tư',
+    'Thứ Năm',
+    'Thứ Sáu',
+    'Thứ Bảy',
+    'Chủ Nhật',
+  ];
 
   final _tokenStorage = TokenStorage();
   final _attendanceApi = const AttendanceApi();
-  final _vnDateTimeFormat = DateFormat('dd/MM/yyyy HH:mm:ss');
-  final _vnDateFormat = DateFormat('dd/MM/yyyy');
-  final _vnTimeFormat = DateFormat('HH:mm:ss');
-  final _dayKeyFormat = DateFormat('yyyy-MM-dd');
-  final _scrollController = ScrollController();
 
   String? _token;
-  Position? _position;
-  DateTime? _positionAt;
-
-  bool _loadingLocation = false;
-  bool _loadingStatus = false;
-  bool _loadingAction = false;
-  bool _loadingHistory = false;
-
-  String? _activeAction;
-
   AttendanceStatusResult? _status;
-  AttendanceActionResult? _lastAction;
-  AttendanceActionException? _lastActionError;
-  List<AttendanceLogItem> _history = const [];
+  Position? _currentPosition;
+  bool _isLoadingAction = false;
+  bool _isLoadingPage = true;
+  List<AttendanceLogItem> _recentLogs = [];
+  Timer? _clockTimer;
+  DateTime _now = DateTime.now();
 
-  // ── Memoisation ────────────────────────────────────────────────────────────
-  List<_AttendanceDayGroup>? _groupedHistoryCache;
-  List<AttendanceLogItem>? _groupedHistoryCacheRef;
-  // ───────────────────────────────────────────────────────────────────────────
-
-  bool get _isAnyLoading =>
-      _loadingStatus || _loadingHistory || _loadingLocation || _loadingAction;
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _bootstrap();
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _now = DateTime.now());
+      }
+    });
+    _loadPageData();
   }
 
-  Future<void> _bootstrap() async {
+  @override
+  void dispose() {
+    _clockTimer?.cancel();
+    super.dispose();
+  }
+
+  // ── Data Loading ──────────────────────────────────────────────────────────
+
+  Future<void> _loadPageData() async {
+    if (!mounted) return;
+    setState(() => _isLoadingPage = true);
+
     final token = await _tokenStorage.getToken();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (token == null || token.isEmpty) {
-      _showSnack('Chưa có token. Hãy đăng nhập lại.');
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
       return;
     }
 
-    setState(() {
-      _token = token;
-    });
+    setState(() => _token = token);
 
-    await _refreshAll(fetchLocation: true, showSnack: false);
+    await Future.wait([_loadStatus(token), _loadLogs(token), _fetchLocation()]);
+
+    if (mounted) setState(() => _isLoadingPage = false);
   }
 
-  Future<void> _refreshAll({required bool fetchLocation, bool showSnack = true}) async {
-    await _refreshStatus(showSnack: showSnack);
-    await _refreshHistory(showSnack: showSnack);
-    if (fetchLocation) {
-      await _fetchCurrentLocation(showSnack: showSnack);
-    }
-  }
-
-  Future<void> _refreshStatus({bool showSnack = true}) async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _loadingStatus = true;
-    });
-
+  Future<void> _loadStatus(String token) async {
     try {
       final status = await _attendanceApi.getStatus(token);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _status = status;
-      });
-    } catch (error) {
-      if (showSnack) {
-        _showSnack('Lấy trạng thái thất bại: $error');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingStatus = false;
-        });
-      }
-    }
+      if (mounted) setState(() => _status = status);
+    } catch (_) {}
   }
 
-  Future<void> _refreshHistory({bool showSnack = true}) async {
-    final token = _token;
-    if (token == null || token.isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _loadingHistory = true;
-    });
-
+  Future<void> _loadLogs(String token) async {
     try {
       final logs = await _attendanceApi.getMyLogs(token);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _history = logs;
-      });
-    } catch (error) {
-      if (showSnack) {
-        _showSnack('Lấy lịch sử thất bại: $error');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingHistory = false;
-        });
-      }
-    }
+      if (mounted) setState(() => _recentLogs = logs);
+    } catch (_) {}
   }
 
-  Future<Position?> _fetchCurrentLocation({bool showSnack = true}) async {
-    setState(() {
-      _loadingLocation = true;
-    });
-
+  Future<void> _fetchLocation() async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('Dịch vụ vị trí đang tắt. Hãy bật GPS.');
-      }
+      if (!serviceEnabled) return;
 
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
-      if (permission == LocationPermission.denied) {
-        throw Exception('Bạn chưa cấp quyền vị trí.');
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception('Quyền vị trí đã bị từ chối vĩnh viễn.');
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
-
-      if (!mounted) {
-        return position;
-      }
-
-      setState(() {
-        _position = position;
-        _positionAt = DateTime.now();
-      });
-
-      return position;
-    } catch (error) {
-      if (showSnack) {
-        _showSnack('Lấy GPS thất bại: $error');
-      }
-      return null;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingLocation = false;
-        });
-      }
-    }
+      if (mounted) setState(() => _currentPosition = position);
+    } catch (_) {}
   }
 
-  Future<void> _checkin() async {
-    await _doAttendanceAction(isCheckin: true);
-  }
+  // ── Action Handlers ───────────────────────────────────────────────────────
 
-  Future<void> _checkout() async {
-    await _doAttendanceAction(isCheckin: false);
-  }
+  Future<void> _handleCheckin() => _doAction(isCheckin: true);
+  Future<void> _handleCheckout() => _doAction(isCheckin: false);
 
-  Future<void> _doAttendanceAction({required bool isCheckin}) async {
+  Future<void> _doAction({required bool isCheckin}) async {
     final token = _token;
-    if (token == null || token.isEmpty) {
-      _showSnack('Thiếu token đăng nhập.');
-      return;
-    }
+    if (token == null) return;
 
-    setState(() {
-      _loadingAction = true;
-      _activeAction = isCheckin ? 'IN' : 'OUT';
-    });
-
+    setState(() => _isLoadingAction = true);
     try {
-      final position = await _fetchCurrentLocation(showSnack: true);
-      if (position == null) {
-        return;
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) throw Exception('Dịch vụ GPS đang tắt.');
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
       }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception('Chưa cấp quyền vị trí.');
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (mounted) setState(() => _currentPosition = position);
 
       final result = isCheckin
           ? await _attendanceApi.checkin(
@@ -241,143 +171,212 @@ class _HomePageState extends State<HomePage> {
               timestampClient: DateTime.now().toUtc(),
             );
 
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _lastAction = result;
-        _lastActionError = null;
-      });
-
-      final timingNotice = _timingNotice(result);
+      _showSnack(result.message);
+      widget.onAttendanceChanged?.call();
+      if (mounted) await Future.wait([_loadStatus(token), _loadLogs(token)]);
+    } on AttendanceActionException catch (e) {
       _showSnack(
-        timingNotice == null ? result.message : '${result.message} | $timingNotice',
+        '${isCheckin ? 'Điểm danh vào' : 'Điểm danh ra'} thất bại: ${e.message}',
       );
-      await _refreshStatus(showSnack: false);
-      await _refreshHistory(showSnack: false);
-    } on AttendanceActionException catch (error) {
-      if (mounted) {
-        setState(() {
-          _lastAction = null;
-          _lastActionError = error;
-        });
-      }
-      _showSnack('${isCheckin ? 'Check-in' : 'Check-out'} thất bại: ${error.message}');
-    } catch (error) {
-      _showSnack('${isCheckin ? 'Check-in' : 'Check-out'} thất bại: $error');
+    } catch (e) {
+      _showSnack('Lỗi: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _loadingAction = false;
-          _activeAction = null;
-        });
-      }
+      if (mounted) setState(() => _isLoadingAction = false);
     }
-  }
-
-  Future<void> _logout() async {
-    await _tokenStorage.clearToken();
-    if (!mounted) {
-      return;
-    }
-
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
   void _showSnack(String text) {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  DateTime? _parseToVn(String raw) {
-    if (raw.isEmpty) {
-      return null;
-    }
-    final dt = DateTime.tryParse(raw);
-    if (dt == null) {
-      return null;
-    }
-    return dt.toUtc().add(_vnOffset);
+  // ── Computed Getters ──────────────────────────────────────────────────────
+
+  /// Canonical work date for a log — uses backend-assigned [workDate] when
+  /// available, falls back to local calendar date of [time] for legacy logs.
+  DateTime _logWorkDate(AttendanceLogItem log) {
+    if (log.workDate != null) return log.workDate!;
+    return DateTime.tryParse(log.time)?.toLocal() ?? DateTime(2000);
   }
 
-  String _formatDateTimeVn(String raw) {
-    final dt = _parseToVn(raw);
-    if (dt == null) {
-      return raw.isEmpty ? '-' : raw;
-    }
-    return '${_vnDateTimeFormat.format(dt)} (VN)';
+  AttendanceLogItem? get _latestLog {
+    if (_recentLogs.isEmpty) return null;
+    final sorted = [..._recentLogs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(b.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(a.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
+    return sorted.first;
   }
 
-  String _formatTimeVn(String raw) {
-    final dt = _parseToVn(raw);
-    if (dt == null) {
-      return '--:--';
+  DateTime get _currentWorkDate {
+    final state = _status?.currentState.toUpperCase();
+    if (state == 'IN') {
+      final lastIn = _lastInLog;
+      if (lastIn != null) return _logWorkDate(lastIn);
     }
-    return _vnTimeFormat.format(dt);
+    if (state == 'OUT' && _status?.canCheckin == false) {
+      final latest = _latestLog;
+      if (latest != null) return _logWorkDate(latest);
+    }
+    return DateTime.now();
   }
 
-  String _formatDateVn(DateTime dt) => _vnDateFormat.format(dt);
-  String _formatWarningDate(String? rawDate) {
-    if (rawDate == null || rawDate.isEmpty) {
-      return '--';
-    }
-    final parsed = DateTime.tryParse(rawDate);
-    if (parsed == null) {
-      return rawDate;
-    }
-    return _vnDateFormat.format(parsed);
+  bool get _employeeNotAssigned => _status?.employeeAssigned == false;
+
+  bool get _isEmployeeInactive =>
+      _status?.currentState.toUpperCase() == 'INACTIVE';
+
+  List<AttendanceLogItem> get _todayLogs {
+    final today = _currentWorkDate;
+    return _recentLogs.where((log) {
+      final wd = _logWorkDate(log);
+      return wd.year == today.year &&
+          wd.month == today.month &&
+          wd.day == today.day;
+    }).toList();
   }
 
-  String? _warningMessage(String warningCode, String warningDate) {
-    switch (warningCode) {
-      case 'MISSED_CHECKOUT':
-        return 'Bạn quên checkout ngày $warningDate. Hệ thống đã ghi nhận ngoại lệ, hôm nay bạn vẫn có thể check-in bình thường.';
-      case 'AUTO_CLOSED':
-        return 'Phiên ngày $warningDate đã được hệ thống tự đóng tại cutoff. Nếu cần chỉnh giờ checkout thực tế, hãy liên hệ admin.';
-      default:
-        return null;
-    }
+  List<AttendanceLogItem> get _weekLogs {
+    final workDate = _currentWorkDate;
+    final weekStart = DateTime(
+      workDate.year,
+      workDate.month,
+      workDate.day - (workDate.weekday - 1),
+    );
+    return _recentLogs.where((log) {
+      final wd = _logWorkDate(log);
+      return !wd.isBefore(weekStart);
+    }).toList();
   }
 
-  Color _warningColor(String warningCode) {
-    switch (warningCode) {
-      case 'AUTO_CLOSED':
-        return Colors.blue;
-      case 'MISSED_CHECKOUT':
-      default:
-        return Colors.orange;
+  Duration get _todayWorkDuration => _computeWorkDuration(_todayLogs);
+  Duration get _weekWorkDuration => _computeWorkDuration(_weekLogs);
+
+  Duration _computeWorkDuration(List<AttendanceLogItem> logs) {
+    final sorted = [...logs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(a.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(b.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
+
+    var total = Duration.zero;
+    DateTime? inTime;
+
+    for (final log in sorted) {
+      final dt = DateTime.tryParse(log.time)?.toLocal();
+      if (dt == null) continue;
+      if (log.type.toUpperCase() == 'IN') {
+        inTime = dt;
+      } else if (log.type.toUpperCase() == 'OUT' && inTime != null) {
+        final delta = dt.difference(inTime);
+        if (!delta.isNegative) total += delta;
+        inTime = null;
+      }
     }
+
+    if (inTime != null && _status?.currentState == 'IN') {
+      final delta = DateTime.now().difference(inTime);
+      if (!delta.isNegative) total += delta;
+    }
+
+    return total;
   }
 
-  Widget? _buildWarningBanner(String warningCode, String warningDate) {
-    final message = _warningMessage(warningCode, warningDate);
-    if (message == null) {
-      return null;
-    }
+  AttendanceLogItem? get _lastInLog {
+    final inLogs =
+        _recentLogs.where((l) => l.type.toUpperCase() == 'IN').toList()
+          ..sort((a, b) {
+            final ta = DateTime.tryParse(b.time) ?? DateTime(0);
+            final tb = DateTime.tryParse(a.time) ?? DateTime(0);
+            return ta.compareTo(tb);
+          });
+    return inLogs.isEmpty ? null : inLogs.first;
+  }
 
-    final tone = _warningColor(warningCode);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tone.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  String? get _geofenceName {
+    return _latestLog?.matchedGeofence;
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = context.isDesktop;
+    final padding = context.pagePadding;
+
+    return SafeArea(
+      child: Column(
         children: [
-          Icon(Icons.warning_amber_rounded, color: tone),
-          const SizedBox(width: 8),
+          _buildHeader(isDesktop),
           Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: tone.withValues(alpha: 0.95),
-                fontWeight: FontWeight.w600,
-              ),
+            child: _isLoadingPage
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadPageData,
+                    child: ListView(
+                      padding: EdgeInsets.symmetric(horizontal: padding),
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildGpsChip(),
+                        if (_isEmployeeInactive) ...[
+                          const SizedBox(height: 12),
+                          _buildEmployeeInactiveNotice(),
+                        ] else if (_employeeNotAssigned) ...[
+                          const SizedBox(height: 12),
+                          _buildEmployeePendingNotice(),
+                        ],
+                        const SizedBox(height: 16),
+                        _buildClock(context),
+                        const SizedBox(height: 4),
+                        _buildDateText(),
+                        const SizedBox(height: 16),
+                        _buildStatusChips(),
+                        const SizedBox(height: 16),
+                        _buildMap(context),
+                        const SizedBox(height: 20),
+                        _buildCtaButton(context),
+                        const SizedBox(height: 24),
+                        _buildSummarySection(),
+                        const SizedBox(height: 24),
+                        _buildActivitySection(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Header ────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader(bool isDesktop) {
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.location_pin, color: AppColors.primary, size: 20),
+          const SizedBox(width: 4),
+          const Text(
+            'Chấm Công',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => widget.onNavigate?.call(2),
+            child: const CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.primaryLight,
+              child: Icon(Icons.person, color: AppColors.primary, size: 20),
             ),
           ),
         ],
@@ -385,652 +384,587 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  String _formatLocalAsVn(DateTime? value) {
-    if (value == null) {
-      return '-';
-    }
-    final vn = value.toUtc().add(_vnOffset);
-    return '${_vnDateTimeFormat.format(vn)} (VN)';
-  }
-  String? _timingNotice(AttendanceActionResult result) {
-    final type = result.type.toUpperCase();
-    if (type == 'IN') {
-      final status = (result.punctualityStatus ?? '').toUpperCase();
-      if (status.isEmpty) {
-        return null;
-      }
-      return 'Giờ vào: ${_checkinTimingLabel(status)}';
-    }
+  // ── GPS Chip ──────────────────────────────────────────────────────────────
 
-    if (type == 'OUT') {
-      final status = (result.checkoutStatus ?? '').toUpperCase();
-      if (status.isEmpty) {
-        return null;
-      }
-      return 'Giờ về: ${_checkoutTimingLabel(status)}';
-    }
-
-    return null;
-  }
-
-  String _checkinTimingLabel(String status) {
-    switch (status) {
-      case 'EARLY':
-        return 'Đi sớm';
-      case 'ON_TIME':
-        return 'Đúng giờ';
-      case 'LATE':
-        return 'Đi trễ';
-      default:
-        return status;
-    }
-  }
-
-  String _checkoutTimingLabel(String status) {
-    switch (status) {
-      case 'EARLY':
-        return 'Về sớm';
-      case 'ON_TIME':
-        return 'Về đúng giờ';
-      case 'LATE':
-        return 'Về trễ';
-      default:
-        return status;
-    }
-  }
-
-  Color _riskTone(String? level) {
-    switch ((level ?? '').toUpperCase()) {
-      case 'HIGH':
-        return Colors.red;
-      case 'MEDIUM':
-        return Colors.orange;
-      case 'LOW':
-        return Colors.green;
-      default:
-        return Colors.blueGrey;
-    }
-  }
-
-  String _riskDecisionLabel(String? decision) {
-    switch ((decision ?? '').toUpperCase()) {
-      case 'BLOCK':
-        return 'Từ chối chấm công';
-      case 'ALLOW_WITH_EXCEPTION':
-        return 'Cho phép nhưng tạo ngoại lệ';
-      case 'ALLOW':
-        return 'Cho phép';
-      default:
-        return '-';
-    }
-  }
-
-  Widget _buildRiskCard() {
-    final result = _lastAction;
-    final error = _lastActionError;
-
-    final score = result?.riskScore ?? error?.riskScore;
-    final level = result?.riskLevel ?? error?.riskLevel;
-    final decision = result?.decision ?? error?.decision;
-    final flags = result?.riskFlags ?? error?.riskFlags ?? const <String>[];
-
-    if (score == null && (flags.isEmpty) && (decision == null || decision.isEmpty)) {
-      return const SizedBox.shrink();
-    }
-
-    final tone = _riskTone(level);
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: tone.withValues(alpha: 0.35)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Risk: ${level ?? '-'} | Score: ${score?.toString() ?? '-'}',
-            style: TextStyle(color: tone, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          Text('Decision: ${_riskDecisionLabel(decision)}'),
-          if (flags.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text('Flags: ${flags.join(', ')}'),
+  Widget _buildGpsChip() {
+    final hasGps = _currentPosition != null;
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: hasGps ? AppColors.successLight : AppColors.warningLight,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: hasGps ? AppColors.success : AppColors.warning,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              hasGps ? 'GPS đang hoạt động' : 'GPS không hoạt động',
+              style: TextStyle(
+                color: hasGps ? AppColors.success : AppColors.warning,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmployeeInactiveNotice() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.errorLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.error, width: 0.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Icon(Icons.block, color: AppColors.error, size: 22),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tài khoản bị vô hiệu hoá',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.error,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Admin đã vô hiệu hoá tài khoản nhân viên của bạn. Vui lòng liên hệ quản trị viên để được hỗ trợ.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Color _stateColor(String? state) {
-    switch (state) {
-      case 'IN':
-        return Colors.green;
-      case 'OUT':
-        return Colors.blue;
-      case 'UNASSIGNED':
-        return Colors.orange;
-      default:
-        return Colors.blueGrey;
-    }
-  }
-
-  String _stateLabel(String? state) {
-    switch (state) {
-      case 'IN':
-        return 'Đang IN';
-      case 'OUT':
-        return 'Đang OUT';
-      case 'UNASSIGNED':
-        return 'Chưa gán nhân viên';
-      default:
-        return 'Chưa xác định';
-    }
-  }
-
-  Color _actionColor({required String type, required bool isOutOfRange}) {
-    if (isOutOfRange) {
-      return Colors.orange;
-    }
-    return type == 'OUT' ? Colors.blue : Colors.green;
-  }
-
-  Widget _buildStatusBadge(String? state) {
-    final color = _stateColor(state);
+  Widget _buildEmployeePendingNotice() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        color: AppColors.warningLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.warning, width: 0.5),
       ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.hourglass_empty, color: AppColors.warning, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Chưa được gán nhân viên',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Tài khoản của bạn chưa được admin gán nhân viên. Bạn chưa thể chấm công cho đến khi được duyệt.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Clock ─────────────────────────────────────────────────────────────────
+
+  Widget _buildClock(BuildContext context) {
+    return Center(
       child: Text(
-        _stateLabel(state),
+        DateFormat('HH:mm').format(_now),
         style: TextStyle(
-          color: color,
+          fontSize: context.clockSize,
           fontWeight: FontWeight.w700,
-          fontSize: 12,
+          color: AppColors.textPrimary,
+          height: 1,
         ),
       ),
     );
   }
 
-  Widget _buildRangeBadge({
-    required bool isOutOfRange,
-    String? type,
-  }) {
-    final normalizedType = (type ?? '').toUpperCase();
-    final color = isOutOfRange
-        ? Colors.orange
-        : (normalizedType == 'OUT' ? Colors.blue : Colors.green);
-    final label = isOutOfRange ? 'Ngoài vùng' : 'Trong vùng';
+  Widget _buildDateText() {
+    final weekday = _vnWeekdays[_now.weekday - 1];
+    return Center(
+      child: Text(
+        '$weekday, ngày ${_now.day} tháng ${_now.month}',
+        style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+      ),
+    );
+  }
+
+  // ── Status Chips ──────────────────────────────────────────────────────────
+
+  Widget _buildStatusChips() {
+    final punctuality = _lastInLog?.punctualityStatus;
+
+    if (_status?.currentState != 'IN' || punctuality == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Center(child: _buildPunctualityChip(punctuality));
+  }
+
+  Widget _buildPunctualityChip(String punctuality) {
+    final (Color bg, Color fg, String label) = switch (punctuality
+        .toUpperCase()) {
+      'EARLY' => (AppColors.successLight, AppColors.success, 'Vào sớm'),
+      'LATE' => (AppColors.warningLight, AppColors.warning, 'Vào muộn'),
+      _ => (AppColors.successLight, AppColors.success, 'Đúng giờ'),
+    };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12),
+        style: TextStyle(fontSize: 13, color: fg, fontWeight: FontWeight.w600),
       ),
     );
   }
 
-  Widget _buildActionChip({
-    required String type,
-    required bool isOutOfRange,
-  }) {
-    final color = _actionColor(type: type, isOutOfRange: isOutOfRange);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        type,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
+  // ── Map ───────────────────────────────────────────────────────────────────
+
+  Widget _buildMap(BuildContext context) {
+    final mapHeight = context.isDesktop ? 260.0 : 200.0;
+    final position = _currentPosition;
+
+    if (position == null) {
+      return Container(
+        height: mapHeight,
+        decoration: BoxDecoration(
+          color: AppColors.border,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Icon(
+            Icons.map_outlined,
+            size: 48,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    final center = LatLng(position.latitude, position.longitude);
+    final geofenceName = _geofenceName;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        height: mapHeight,
+        child: Stack(
+          children: [
+            FlutterMap(
+              options: MapOptions(
+                initialCenter: center,
+                initialZoom: 15,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.none,
+                ),
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate:
+                      'https://maps.geoapify.com/v1/tile/${AppConfig.geoapifyMapStyle}/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}',
+                  userAgentPackageName: 'com.example.birdle',
+                ),
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: center,
+                      radius: 8,
+                      color: AppColors.primary,
+                      borderColor: AppColors.surface,
+                      borderStrokeWidth: 2,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            if (geofenceName != null)
+              Positioned(
+                bottom: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.textPrimary.withValues(alpha: 0.12),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.pin_drop_outlined,
+                        size: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Lần gần nhất: $geofenceName',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  DateTime _logSortTime(AttendanceLogItem log) {
-    return _parseToVn(log.time) ?? DateTime.fromMillisecondsSinceEpoch(0);
+  // ── CTA Button ────────────────────────────────────────────────────────────
+
+  Widget _buildCtaButton(BuildContext context) {
+    final canCheckin = _status?.canCheckin ?? false;
+    final canCheckout = _status?.canCheckout ?? false;
+
+    final Color bgColor;
+    final String label;
+    final VoidCallback? onTap;
+
+    if (_isLoadingAction) {
+      bgColor = canCheckout ? AppColors.error : AppColors.primary;
+      label = '';
+      onTap = null;
+    } else if (_isEmployeeInactive) {
+      bgColor = AppColors.errorLight;
+      label = 'Tài khoản bị vô hiệu hoá';
+      onTap = null;
+    } else if (_employeeNotAssigned) {
+      bgColor = AppColors.border;
+      label = 'Chưa được gán nhân viên';
+      onTap = null;
+    } else if (canCheckin) {
+      bgColor = AppColors.primary;
+      label = 'Điểm danh vào →';
+      onTap = _handleCheckin;
+    } else if (canCheckout) {
+      bgColor = AppColors.success;
+      label = 'Điểm danh ra →';
+      onTap = _handleCheckout;
+    } else {
+      bgColor = AppColors.border;
+      label = 'Điểm danh vào →';
+      onTap = null;
+    }
+
+    final button = SizedBox(
+      height: 56,
+      child: Material(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(28),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28),
+          child: Center(
+            child: _isLoadingAction
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: AppColors.surface,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: TextStyle(
+                      color: _isEmployeeInactive
+                          ? AppColors.error
+                          : (onTap != null
+                              ? AppColors.surface
+                              : AppColors.textSecondary),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+
+    if (context.isDesktop) {
+      return Center(child: SizedBox(width: 480, child: button));
+    }
+    return SizedBox(width: double.infinity, child: button);
   }
 
-  DateTime _pairSortTime(_AttendancePair pair) {
-    final outTime = pair.outLog != null ? _parseToVn(pair.outLog!.time) : null;
-    if (outTime != null) {
-      return outTime;
-    }
-    final inTime = pair.inLog != null ? _parseToVn(pair.inLog!.time) : null;
-    if (inTime != null) {
-      return inTime;
-    }
-    return DateTime.fromMillisecondsSinceEpoch(0);
+  // ── Summary Section ───────────────────────────────────────────────────────
+
+  Widget _buildSummarySection() {
+    final todayWork = _todayWorkDuration;
+    final todayH = todayWork.inHours;
+    final todayM = todayWork.inMinutes % 60;
+    final weekWork = _weekWorkDuration;
+    final weekH = weekWork.inHours;
+    final weekM = weekWork.inMinutes % 60;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Tổng hợp hôm nay',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => widget.onNavigate?.call(1),
+              child: const Text(
+                'Xem nhật ký',
+                style: TextStyle(fontSize: 14, color: AppColors.primary),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildSummaryCard(
+                label: 'GIỜ CÔNG HÔM NAY',
+                value: '${todayH}h ${todayM.toString().padLeft(2, '0')}',
+                accentColor: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildSummaryCard(
+                label: 'GIỜ CÔNG TUẦN',
+                value: '${weekH}h ${weekM.toString().padLeft(2, '0')}',
+                accentColor: AppColors.overtime,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
-  List<_AttendancePair> _buildHistoryPairs(List<AttendanceLogItem> logs) {
-    if (logs.isEmpty) {
-      return const [];
-    }
-
-    final sorted = [...logs]..sort((a, b) => _logSortTime(a).compareTo(_logSortTime(b)));
-
-    final pairs = <_AttendancePair>[];
-    AttendanceLogItem? pendingIn;
-
-    for (final log in sorted) {
-      final type = log.type.toUpperCase();
-      if (type == 'IN') {
-        if (pendingIn != null) {
-          pairs.add(_AttendancePair(inLog: pendingIn));
-        }
-        pendingIn = log;
-      } else if (type == 'OUT') {
-        if (pendingIn != null) {
-          pairs.add(_AttendancePair(inLog: pendingIn, outLog: log));
-          pendingIn = null;
-        } else {
-          pairs.add(_AttendancePair(outLog: log));
-        }
-      }
-    }
-
-    if (pendingIn != null) {
-      pairs.add(_AttendancePair(inLog: pendingIn));
-    }
-
-    return pairs;
-  }
-
-  List<_AttendanceDayGroup> _buildGroupedHistory(List<AttendanceLogItem> logs) {
-    if (_groupedHistoryCache != null &&
-        identical(_groupedHistoryCacheRef, logs)) {
-      return _groupedHistoryCache!;
-    }
-    final result = _computeGroupedHistory(logs);
-    _groupedHistoryCacheRef = logs;
-    _groupedHistoryCache = result;
-    return result;
-  }
-
-  /// Pure helper — no state reads; safe to call outside build().
-  List<_AttendanceDayGroup> _computeGroupedHistory(
-    List<AttendanceLogItem> logs,
-  ) {
-    final pairs = _buildHistoryPairs(logs);
-    final map = <String, List<_AttendancePair>>{};
-    final dateByKey = <String, DateTime?>{};
-
-    for (final pair in pairs) {
-      final baseTime =
-          (pair.inLog != null ? _parseToVn(pair.inLog!.time) : null) ??
-          (pair.outLog != null ? _parseToVn(pair.outLog!.time) : null);
-
-      final key = baseTime == null ? 'unknown' : _dayKeyFormat.format(baseTime);
-      map.putIfAbsent(key, () => <_AttendancePair>[]).add(pair);
-      dateByKey[key] = baseTime;
-    }
-
-    final groups = map.entries.map((entry) {
-      final items = entry.value
-        ..sort((a, b) => _pairSortTime(b).compareTo(_pairSortTime(a)));
-      return _AttendanceDayGroup(
-        dayKey: entry.key,
-        dayDate: dateByKey[entry.key],
-        items: items,
-      );
-    }).toList();
-
-    groups.sort((a, b) {
-      final ad = a.dayDate;
-      final bd = b.dayDate;
-      if (ad == null && bd == null) return 0;
-      if (ad == null) return 1;
-      if (bd == null) return -1;
-      return bd.compareTo(ad);
-    });
-
-    return groups;
-  }
-
-  Widget _buildPairCard(_AttendancePair pair) {
-    final inLog = pair.inLog;
-    final outLog = pair.outLog;
-
-    final isOutOfRange = (inLog?.isOutOfRange ?? false) || (outLog?.isOutOfRange ?? false);
-
-    final inTime = inLog != null ? _formatTimeVn(inLog.time) : '--:--';
-    final outTime = outLog != null ? _formatTimeVn(outLog.time) : '--:--';
-
-    final tone = _actionColor(type: outLog != null ? 'OUT' : 'IN', isOutOfRange: isOutOfRange);
-
+  Widget _buildSummaryCard({
+    required String label,
+    required String value,
+    required Color accentColor,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tone.withValues(alpha: 0.22)),
-        color: tone.withValues(alpha: 0.03),
+        border: Border(left: BorderSide(color: accentColor, width: 3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: accentColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Activity Section ──────────────────────────────────────────────────────
+
+  Widget _buildActivitySection() {
+    final sorted = [..._recentLogs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(b.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(a.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
+    final recent = sorted.take(3).toList();
+    if (recent.isEmpty) return const SizedBox.shrink();
+
+    final firstDt = DateTime.tryParse(recent.first.time)?.toLocal();
+    final dateLabel = firstDt == null
+        ? ''
+        : '${_vnWeekdays[firstDt.weekday - 1]}, ${firstDt.day} tháng ${firstDt.month}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'SỰ KIỆN GẦN NHẤT',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            Text(
+              dateLabel,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...recent.map(_buildActivityItem),
+      ],
+    );
+  }
+
+  Widget _buildActivityItem(AttendanceLogItem log) {
+    final isIn = log.type.toUpperCase() == 'IN';
+    final dt = DateTime.tryParse(log.time)?.toLocal();
+    final timeStr = dt == null ? '--:--' : DateFormat('HH:mm').format(dt);
+    final amPm = dt == null ? '' : (dt.hour < 12 ? 'SA' : 'CH');
+    final isSuccess = !log.isOutOfRange;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: isIn ? AppColors.primaryLight : AppColors.errorLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              isIn ? Icons.login : Icons.logout,
+              size: 20,
+              color: isIn ? AppColors.primary : AppColors.error,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isIn ? 'Đã điểm danh vào' : 'Đã điểm danh ra',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  log.matchedGeofence ??
+                      (isIn ? 'Bắt đầu ca làm' : 'Kết thúc ca làm'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _buildActionChip(type: 'IN', isOutOfRange: isOutOfRange),
-              Text(inTime, style: const TextStyle(fontWeight: FontWeight.w600)),
-              const Icon(Icons.arrow_right_alt, size: 16),
-              _buildActionChip(type: 'OUT', isOutOfRange: isOutOfRange),
-              Text(outTime, style: const TextStyle(fontWeight: FontWeight.w600)),
-              _buildRangeBadge(isOutOfRange: isOutOfRange, type: outLog?.type ?? inLog?.type),
+              Text(
+                '$timeStr $amPm',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isSuccess ? 'THÀNH CÔNG' : 'NGOÀI PHẠM VI',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isSuccess ? AppColors.success : AppColors.error,
+                ),
+              ),
             ],
           ),
         ],
       ),
     );
   }
-
-  Widget _buildDaySection(_AttendanceDayGroup group, {required bool initiallyExpanded}) {
-    final title = group.dayDate == null ? 'Không xác định ngày' : _formatDateVn(group.dayDate!);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ExpansionTile(
-        key: PageStorageKey<String>('history-day-${group.dayKey}'),
-        initiallyExpanded: initiallyExpanded,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-            Text('${group.items.length} dòng'),
-          ],
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        children: group.items.map(_buildPairCard).toList(),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final canCheckin = _status?.canCheckin ?? false;
-    final canCheckout = _status?.canCheckout ?? false;
-    final groups = _buildGroupedHistory(_history);
-    final hasGps = _position != null;
-    final lastTimingNotice = _lastAction == null ? null : _timingNotice(_lastAction!);
-    final warningCode = (_status?.warningCode ?? '').toUpperCase();
-    final warningDate = _formatWarningDate(_status?.warningDate);
-    final warningBanner = warningCode.isEmpty ? null : _buildWarningBanner(warningCode, warningDate);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('User Demo'),
-        actions: [
-          IconButton(
-            onPressed: (_loadingStatus || _loadingHistory) ? null : () => _refreshAll(fetchLocation: false),
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Làm mới',
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Đăng xuất',
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          RefreshIndicator(
-            onRefresh: () => _refreshAll(fetchLocation: true, showSnack: false),
-            notificationPredicate: (_) => !kIsWeb,
-            child: ListView(
-              controller: _scrollController,
-              primary: false,
-              physics: const ClampingScrollPhysics(),
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  'Xin chào, ${widget.email}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 12),
-                if (warningBanner != null) ...[
-                  warningBanner,
-                  const SizedBox(height: 12),
-                ],
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Trạng thái chấm công',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            _buildStatusBadge(_status?.currentState),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text('Message: ${_status?.message ?? '-'}'),
-                        const SizedBox(height: 4),
-                        Text('Lần gần nhất: ${_status?.lastAction ?? '-'}'),
-                        const SizedBox(height: 4),
-                        Text('Thời gian: ${_formatDateTimeVn(_status?.lastActionTime ?? '')}'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Vị trí hiện tại',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            FilledButton.tonalIcon(
-                              onPressed: _loadingLocation ? null : _fetchCurrentLocation,
-                              icon: _loadingLocation
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.my_location),
-                              label: const Text('Lấy GPS'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text('Trạng thái GPS: ${hasGps ? 'Đã sẵn sàng' : 'Chưa lấy vị trí'}'),
-                        Text('Cập nhật: ${_formatLocalAsVn(_positionAt)}'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.report_problem_outlined),
-                    title: const Text('Ngoại lệ chấm công'),
-                    subtitle: const Text('Xem trạng thái và gửi giải trình khi hệ thống yêu cầu.'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.of(context).pushNamed('/home/exceptions'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: (_loadingAction || !canCheckin) ? null : _checkin,
-                        icon: _loadingAction && _activeAction == 'IN'
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.login),
-                        label: const Text('Check-in'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: (_loadingAction || !canCheckout) ? null : _checkout,
-                        icon: _loadingAction && _activeAction == 'OUT'
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.logout),
-                        label: const Text('Check-out'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Kết quả API gần nhất',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        Text('Type: ${_lastAction?.type ?? '-'}'),
-                        Text('Time: ${_formatDateTimeVn(_lastAction?.time ?? '')}'),
-                        if (lastTimingNotice != null) ...[
-                          const SizedBox(height: 4),
-                          Text(lastTimingNotice),
-                        ],
-                        const SizedBox(height: 6),
-                        _buildRangeBadge(
-                          isOutOfRange: _lastAction?.isOutOfRange ?? false,
-                          type: _lastAction?.type,
-                        ),
-                        const SizedBox(height: 6),
-                        Text('Message: ${_lastAction?.message ?? '-'}'),
-                        _buildRiskCard(),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Lịch sử chấm công',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _loadingHistory ? null : () => _refreshHistory(showSnack: true),
-                      child: const Text('Tải lại'),
-                    ),
-                  ],
-                ),
-                if (_history.isEmpty && !_loadingHistory)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('Chưa có dữ liệu lịch sử.'),
-                  ),
-                if (_history.isNotEmpty)
-                  ...groups.asMap().entries.map(
-                    (entry) => _buildDaySection(
-                      entry.value,
-                      initiallyExpanded: entry.key == 0,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-          if (_isAnyLoading)
-            const Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-        ],
-      ),
-    );
-  }
 }
-
-class _AttendancePair {
-  const _AttendancePair({
-    this.inLog,
-    this.outLog,
-  });
-
-  final AttendanceLogItem? inLog;
-  final AttendanceLogItem? outLog;
-}
-
-class _AttendanceDayGroup {
-  const _AttendanceDayGroup({
-    required this.dayKey,
-    required this.dayDate,
-    required this.items,
-  });
-
-  final String dayKey;
-  final DateTime? dayDate;
-  final List<_AttendancePair> items;
-}
-
-
-
-

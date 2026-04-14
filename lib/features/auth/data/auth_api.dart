@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -38,11 +38,33 @@ class UserMeResult {
     required this.id,
     required this.email,
     required this.role,
+    this.fullName,
+    this.phone,
   });
 
   final int id;
   final String email;
   final String role;
+  final String? fullName;
+  final String? phone;
+}
+
+class AuthApiException implements Exception {
+  const AuthApiException(this.message, {this.statusCode});
+
+  final String message;
+  final int? statusCode;
+
+  bool get isAuthFailure => statusCode == 401 || statusCode == 403;
+
+  @override
+  String toString() {
+    final code = statusCode;
+    if (code == null) {
+      return message;
+    }
+    return '$message ($code)';
+  }
 }
 
 class AuthApi {
@@ -80,7 +102,10 @@ class AuthApi {
       return _toLoginResult(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Login failed (${response.statusCode})'));
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Login failed (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<LoginResult> refresh({required String refreshToken}) async {
@@ -98,7 +123,13 @@ class AuthApi {
       return _toLoginResult(data);
     }
 
-    throw Exception(_extractErrorMessage(data, 'Refresh token failed (${response.statusCode})'));
+    throw AuthApiException(
+      _extractErrorMessage(
+        data,
+        'Refresh token failed (${response.statusCode})',
+      ),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<void> logout({required String refreshToken}) async {
@@ -115,16 +146,17 @@ class AuthApi {
     }
 
     final data = _parseJsonMap(response.body);
-    throw Exception(_extractErrorMessage(data, 'Logout failed (${response.statusCode})'));
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Logout failed (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<UserMeResult> me({required String token}) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/me');
     final response = await _safeGet(
       uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
+      headers: {'Authorization': 'Bearer $token'},
       timeoutMessage: 'Lấy hồ sơ quá thời gian. Vui lòng thử lại.',
       networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
@@ -136,20 +168,58 @@ class AuthApi {
         id: (data['id'] as num?)?.toInt() ?? 0,
         email: data['email'] as String? ?? '',
         role: data['role'] as String? ?? 'USER',
+        fullName: data['full_name'] as String?,
+        phone: data['phone'] as String?,
       );
     }
 
-    throw Exception(_extractErrorMessage(data, 'Get profile failed (${response.statusCode})'));
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Get profile failed (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
+  }
+
+  Future<void> changePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/change-password');
+    final response = await _safePost(
+      uri,
+      body: jsonEncode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      }),
+      headers: {'Authorization': 'Bearer $token'},
+      timeoutMessage: 'Đổi mật khẩu quá thời gian. Vui lòng thử lại.',
+      networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
+    );
+
+    if (response.statusCode == 200) return;
+
+    final data = _parseJsonMap(response.body);
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Đổi mật khẩu thất bại (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<RegisterResult> register({
     required String email,
     required String password,
+    required String fullName,
+    required String phone,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/register');
     final response = await _safePost(
       uri,
-      body: jsonEncode({'email': email, 'password': password}),
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'full_name': fullName,
+        'phone': phone,
+      }),
       timeoutMessage: 'Đăng ký quá thời gian. Vui lòng thử lại.',
       networkMessage: 'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng.',
     );
@@ -164,7 +234,10 @@ class AuthApi {
       );
     }
 
-    throw Exception(_extractErrorMessage(data, 'Register failed (${response.statusCode})'));
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Register failed (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<http.Response> _safePost(
@@ -172,19 +245,17 @@ class AuthApi {
     required String body,
     required String timeoutMessage,
     required String networkMessage,
+    Map<String, String>? headers,
   }) async {
     try {
+      final mergedHeaders = {'Content-Type': 'application/json', ...?headers};
       return await http
-          .post(
-            uri,
-            headers: const {'Content-Type': 'application/json'},
-            body: body,
-          )
+          .post(uri, headers: mergedHeaders, body: body)
           .timeout(_requestTimeout);
     } on TimeoutException {
-      throw Exception(timeoutMessage);
+      throw AuthApiException(timeoutMessage);
     } on http.ClientException {
-      throw Exception(networkMessage);
+      throw AuthApiException(networkMessage);
     }
   }
 
@@ -197,9 +268,9 @@ class AuthApi {
     try {
       return await http.get(uri, headers: headers).timeout(_requestTimeout);
     } on TimeoutException {
-      throw Exception(timeoutMessage);
+      throw AuthApiException(timeoutMessage);
     } on http.ClientException {
-      throw Exception(networkMessage);
+      throw AuthApiException(networkMessage);
     }
   }
 
@@ -208,7 +279,8 @@ class AuthApi {
       accessToken: data['access_token'] as String,
       refreshToken: data['refresh_token'] as String?,
       tokenType: data['token_type'] as String? ?? 'bearer',
-      accessExpiresInMinutes: (data['access_expires_in_minutes'] as num?)?.toInt(),
+      accessExpiresInMinutes: (data['access_expires_in_minutes'] as num?)
+          ?.toInt(),
       refreshExpiresInDays: (data['refresh_expires_in_days'] as num?)?.toInt(),
     );
   }

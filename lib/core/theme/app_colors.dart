@@ -55,4 +55,15 @@ class AppColors {
   static const Color exceptionTabApprovedBorder = Color(0xFFBBF7D0);
   static const Color exceptionTabRejectedBorder = Color(0xFFFECACA);
   static const Color exceptionCardMutedBg = Color(0xFFFAFAFA);
+
+  // DESIGN.md alias tokens (home + mobile UI)
+  static const Color primaryLight = Color(0xFFEEF1FF);
+  static const Color surface = bgCard;
+  static const Color background = bgPage;
+  static const Color textSecondary = textMuted;
+  static const Color error = danger;
+  static const Color successLight = badgeBgOnTime;
+  static const Color warningLight = badgeBgLate;
+  static const Color overtimeLight = badgeBgOvertime;
+  static const Color errorLight = badgeBgException;
 }

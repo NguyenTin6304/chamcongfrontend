@@ -12,17 +12,17 @@ class StatusBadge extends StatelessWidget {
   String get _label {
     switch (type) {
       case StatusBadgeType.onTime:
-        return '\u0110\u00fang gi\u1edd';
+        return 'Đúng giờ';
       case StatusBadgeType.late:
-        return 'V\u00e0o mu\u1ed9n';
+        return 'Vào muộn';
       case StatusBadgeType.early:
-        return '\u0110\u1ebfn s\u1edbm';
+        return 'Vào sớm';
       case StatusBadgeType.overtime:
-        return 'T\u0103ng ca';
+        return 'Tăng ca';
       case StatusBadgeType.outOfRange:
-        return 'Ngo\u00e0i v\u00f9ng';
+        return 'Ngoài vùng';
       case StatusBadgeType.exception:
-        return 'Ngo\u1ea1i l\u1ec7';
+        return 'Ngoại lệ';
     }
   }
 

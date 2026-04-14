@@ -2,13 +2,13 @@ import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 
+import 'core/layout/app_scaffold.dart';
 import 'core/theme/app_colors.dart';
 import 'features/admin/presentation/shell/admin_shell_page.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
 import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
 import 'features/attendance/presentation/employee_exceptions_screen.dart';
-import 'features/home/presentation/home_page.dart';
 
 void main() {
   runApp(const MainApp());
@@ -31,6 +31,8 @@ class MainApp extends StatelessWidget {
     '/admin/settings',
     '/home',
     '/home/exceptions',
+    '/history',
+    '/profile',
   };
 
   String _extractEmailArg(RouteSettings settings) {
@@ -106,10 +108,16 @@ class MainApp extends StatelessWidget {
         page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'settings');
         break;
       case '/home':
-        page = HomePage(email: _extractEmailArg(settings));
+        page = AppScaffold(initialIndex: 0, email: _extractEmailArg(settings));
         break;
       case '/home/exceptions':
         page = const EmployeeExceptionsScreen();
+        break;
+      case '/history':
+        page = const AppScaffold(initialIndex: 1);
+        break;
+      case '/profile':
+        page = const AppScaffold(initialIndex: 2);
         break;
       default:
         page = const LoginPage();

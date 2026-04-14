@@ -72,17 +72,24 @@ extension _EmployeeTableX on _EmployeesTabState {
                           .entries
                           .map((entry) {
                             final employee = entry.value;
-                            final active = _isEmployeeActive(employee);
                             final stt = startIndex + entry.key + 1;
-                            final statusText = active
-                                ? 'Hoạt động'
-                                : 'Không hoạt động';
-                            final statusBg = active
-                                ? AppColors.employeeActiveBg
-                                : AppColors.employeeInactiveBg;
-                            final statusFg = active
-                                ? AppColors.employeeActiveText
-                                : AppColors.employeeInactiveText;
+                            final resigned = employee.isResigned;
+                            final active = !resigned && _isEmployeeActive(employee);
+                            final statusText = resigned
+                                ? 'Đã nghỉ việc'
+                                : (active ? 'Hoạt động' : 'Không hoạt động');
+                            const resignedBg = Color(0xFFFFF7ED);
+                            const resignedFg = Color(0xFF92400E);
+                            final statusBg = resigned
+                                ? resignedBg
+                                : (active
+                                    ? AppColors.employeeActiveBg
+                                    : AppColors.employeeInactiveBg);
+                            final statusFg = resigned
+                                ? resignedFg
+                                : (active
+                                    ? AppColors.employeeActiveText
+                                    : AppColors.employeeInactiveText);
                             return DataRow(
                               cells: [
                                 DataCell(Text('$stt')),
@@ -152,15 +159,30 @@ extension _EmployeeTableX on _EmployeesTabState {
                                 DataCell(
                                   Row(
                                     children: [
-                                      IconButton(
-                                        onPressed: () =>
-                                            _showEmployeeEditPanel(employee),
-                                        icon: const Icon(
-                                          Icons.edit_outlined,
-                                          color: AppColors.primary,
-                                          size: 18,
+                                      if (!resigned)
+                                        IconButton(
+                                          onPressed: () =>
+                                              _showEmployeeEditPanel(employee),
+                                          icon: const Icon(
+                                            Icons.edit_outlined,
+                                            color: AppColors.primary,
+                                            size: 18,
+                                          ),
                                         ),
-                                      ),
+                                      if (resigned)
+                                        IconButton(
+                                          tooltip: 'Khôi phục',
+                                          onPressed: _assigningEmployeeIds
+                                                  .contains(employee.id)
+                                              ? null
+                                              : () =>
+                                                  _restoreEmployee(employee),
+                                          icon: const Icon(
+                                            Icons.restore_outlined,
+                                            color: AppColors.primary,
+                                            size: 18,
+                                          ),
+                                        ),
                                       IconButton(
                                         onPressed: () =>
                                             _showEmployeeDetail(employee),

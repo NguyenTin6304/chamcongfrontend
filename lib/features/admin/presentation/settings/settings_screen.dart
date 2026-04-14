@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import 'tabs/explanation_policy_settings_tab.dart';
 import 'tabs/general_settings_tab.dart';
 import 'tabs/rules_settings_tab.dart';
 
@@ -20,6 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     (icon: Icons.person_outline, label: 'Tài khoản'),
     (icon: Icons.notifications_none_outlined, label: 'Thông báo'),
     (icon: Icons.access_time_outlined, label: 'Quy tắc chấm công'),
+    (icon: Icons.timer_outlined, label: 'Chính sách giải trình'),
     (icon: Icons.lock_outline, label: 'Bảo mật'),
     (icon: Icons.email_outlined, label: 'Email & Tích hợp'),
     (icon: Icons.list_alt_outlined, label: 'Nhật ký hệ thống'),
@@ -49,7 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   final item = _items[index];
                   final active = index == selectedTabIndex;
                   final hover = index == _hoveredIndex;
-                  final showDivider = index == 7;
+                  final showDivider = index == 8;
 
                   return Column(
                     children: [
@@ -67,12 +69,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 Container(
                                   width: 3,
                                   height: 44,
-                                  color:
-                                      active ? AppColors.primary : Colors.transparent,
+                                  color: active
+                                      ? AppColors.primary
+                                      : Colors.transparent,
                                 ),
                                 Expanded(
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
                                     color: active
                                         ? const Color(0xFFEFF6FF)
                                         : (hover
@@ -131,6 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _PlaceholderTab(),
                 _PlaceholderTab(),
                 RulesSettingsTab(),
+                ExplanationPolicySettingsTab(),
                 _PlaceholderTab(),
                 _PlaceholderTab(),
                 _PlaceholderTab(),
@@ -153,11 +159,7 @@ class _PlaceholderTab extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.construction_outlined,
-            size: 48,
-            color: AppColors.border,
-          ),
+          Icon(Icons.construction_outlined, size: 48, color: AppColors.border),
           SizedBox(height: 8),
           Text(
             'Tính năng đang phát triển',
