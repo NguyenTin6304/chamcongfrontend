@@ -13,10 +13,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../attendance/data/attendance_api.dart';
 
 class HomePageBody extends StatefulWidget {
-  const HomePageBody({super.key, this.onNavigate});
+  const HomePageBody({super.key, this.onNavigate, this.onAttendanceChanged});
 
   /// Called when this body wants to switch tabs in AppScaffold.
   final ValueChanged<int>? onNavigate;
+
+  /// Called after a successful check-in or check-out so other tabs can refresh.
+  final VoidCallback? onAttendanceChanged;
 
   @override
   State<HomePageBody> createState() => _HomePageBodyState();
@@ -50,14 +53,11 @@ class _HomePageBodyState extends State<HomePageBody> {
   @override
   void initState() {
     super.initState();
-    _clockTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) {
-        if (mounted) {
-          setState(() => _now = DateTime.now());
-        }
-      },
-    );
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _now = DateTime.now());
+      }
+    });
     _loadPageData();
   }
 
@@ -83,11 +83,7 @@ class _HomePageBodyState extends State<HomePageBody> {
 
     setState(() => _token = token);
 
-    await Future.wait([
-      _loadStatus(token),
-      _loadLogs(token),
-      _fetchLocation(),
-    ]);
+    await Future.wait([_loadStatus(token), _loadLogs(token), _fetchLocation()]);
 
     if (mounted) setState(() => _isLoadingPage = false);
   }
@@ -121,7 +117,9 @@ class _HomePageBodyState extends State<HomePageBody> {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (mounted) setState(() => _currentPosition = position);
     } catch (_) {}
@@ -151,7 +149,9 @@ class _HomePageBodyState extends State<HomePageBody> {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (mounted) setState(() => _currentPosition = position);
 
@@ -172,6 +172,7 @@ class _HomePageBodyState extends State<HomePageBody> {
             );
 
       _showSnack(result.message);
+      widget.onAttendanceChanged?.call();
       if (mounted) await Future.wait([_loadStatus(token), _loadLogs(token)]);
     } on AttendanceActionException catch (e) {
       _showSnack(
@@ -191,24 +192,62 @@ class _HomePageBodyState extends State<HomePageBody> {
 
   // ── Computed Getters ──────────────────────────────────────────────────────
 
+  /// Canonical work date for a log — uses backend-assigned [workDate] when
+  /// available, falls back to local calendar date of [time] for legacy logs.
+  DateTime _logWorkDate(AttendanceLogItem log) {
+    if (log.workDate != null) return log.workDate!;
+    return DateTime.tryParse(log.time)?.toLocal() ?? DateTime(2000);
+  }
+
+  AttendanceLogItem? get _latestLog {
+    if (_recentLogs.isEmpty) return null;
+    final sorted = [..._recentLogs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(b.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(a.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
+    return sorted.first;
+  }
+
+  DateTime get _currentWorkDate {
+    final state = _status?.currentState.toUpperCase();
+    if (state == 'IN') {
+      final lastIn = _lastInLog;
+      if (lastIn != null) return _logWorkDate(lastIn);
+    }
+    if (state == 'OUT' && _status?.canCheckin == false) {
+      final latest = _latestLog;
+      if (latest != null) return _logWorkDate(latest);
+    }
+    return DateTime.now();
+  }
+
+  bool get _employeeNotAssigned => _status?.employeeAssigned == false;
+
+  bool get _isEmployeeInactive =>
+      _status?.currentState.toUpperCase() == 'INACTIVE';
+
   List<AttendanceLogItem> get _todayLogs {
-    final today = DateTime.now();
+    final today = _currentWorkDate;
     return _recentLogs.where((log) {
-      final dt = DateTime.tryParse(log.time)?.toLocal();
-      if (dt == null) return false;
-      return dt.year == today.year &&
-          dt.month == today.month &&
-          dt.day == today.day;
+      final wd = _logWorkDate(log);
+      return wd.year == today.year &&
+          wd.month == today.month &&
+          wd.day == today.day;
     }).toList();
   }
 
   List<AttendanceLogItem> get _weekLogs {
-    final now = DateTime.now();
-    final weekStart = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+    final workDate = _currentWorkDate;
+    final weekStart = DateTime(
+      workDate.year,
+      workDate.month,
+      workDate.day - (workDate.weekday - 1),
+    );
     return _recentLogs.where((log) {
-      final dt = DateTime.tryParse(log.time)?.toLocal();
-      if (dt == null) return false;
-      return !dt.isBefore(weekStart);
+      final wd = _logWorkDate(log);
+      return !wd.isBefore(weekStart);
     }).toList();
   }
 
@@ -216,11 +255,12 @@ class _HomePageBodyState extends State<HomePageBody> {
   Duration get _weekWorkDuration => _computeWorkDuration(_weekLogs);
 
   Duration _computeWorkDuration(List<AttendanceLogItem> logs) {
-    final sorted = [...logs]..sort((a, b) {
-      final ta = DateTime.tryParse(a.time) ?? DateTime(0);
-      final tb = DateTime.tryParse(b.time) ?? DateTime(0);
-      return ta.compareTo(tb);
-    });
+    final sorted = [...logs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(a.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(b.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
 
     var total = Duration.zero;
     DateTime? inTime;
@@ -246,35 +286,18 @@ class _HomePageBodyState extends State<HomePageBody> {
   }
 
   AttendanceLogItem? get _lastInLog {
-    final inLogs = _recentLogs
-        .where((l) => l.type.toUpperCase() == 'IN')
-        .toList()
-      ..sort((a, b) {
-        final ta = DateTime.tryParse(b.time) ?? DateTime(0);
-        final tb = DateTime.tryParse(a.time) ?? DateTime(0);
-        return ta.compareTo(tb);
-      });
+    final inLogs =
+        _recentLogs.where((l) => l.type.toUpperCase() == 'IN').toList()
+          ..sort((a, b) {
+            final ta = DateTime.tryParse(b.time) ?? DateTime(0);
+            final tb = DateTime.tryParse(a.time) ?? DateTime(0);
+            return ta.compareTo(tb);
+          });
     return inLogs.isEmpty ? null : inLogs.first;
   }
 
-  bool get _isOutOfRange {
-    if (_recentLogs.isEmpty) return false;
-    final sorted = [..._recentLogs]..sort((a, b) {
-      final ta = DateTime.tryParse(b.time) ?? DateTime(0);
-      final tb = DateTime.tryParse(a.time) ?? DateTime(0);
-      return ta.compareTo(tb);
-    });
-    return sorted.first.isOutOfRange;
-  }
-
   String? get _geofenceName {
-    if (_recentLogs.isEmpty) return null;
-    final sorted = [..._recentLogs]..sort((a, b) {
-      final ta = DateTime.tryParse(b.time) ?? DateTime(0);
-      final tb = DateTime.tryParse(a.time) ?? DateTime(0);
-      return ta.compareTo(tb);
-    });
-    return sorted.first.matchedGeofence;
+    return _latestLog?.matchedGeofence;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -298,6 +321,13 @@ class _HomePageBodyState extends State<HomePageBody> {
                       children: [
                         const SizedBox(height: 20),
                         _buildGpsChip(),
+                        if (_isEmployeeInactive) ...[
+                          const SizedBox(height: 12),
+                          _buildEmployeeInactiveNotice(),
+                        ] else if (_employeeNotAssigned) ...[
+                          const SizedBox(height: 12),
+                          _buildEmployeePendingNotice(),
+                        ],
                         const SizedBox(height: 16),
                         _buildClock(context),
                         const SizedBox(height: 4),
@@ -391,6 +421,88 @@ class _HomePageBodyState extends State<HomePageBody> {
     );
   }
 
+  Widget _buildEmployeeInactiveNotice() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.errorLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.error, width: 0.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          Icon(Icons.block, color: AppColors.error, size: 22),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Tài khoản bị vô hiệu hoá',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.error,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Admin đã vô hiệu hoá tài khoản nhân viên của bạn. Vui lòng liên hệ quản trị viên để được hỗ trợ.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployeePendingNotice() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.warningLight,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.warning, width: 0.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.hourglass_empty, color: AppColors.warning, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Chưa được gán nhân viên',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Tài khoản của bạn chưa được admin gán nhân viên. Bạn chưa thể chấm công cho đến khi được duyệt.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Clock ─────────────────────────────────────────────────────────────────
 
   Widget _buildClock(BuildContext context) {
@@ -420,52 +532,19 @@ class _HomePageBodyState extends State<HomePageBody> {
   // ── Status Chips ──────────────────────────────────────────────────────────
 
   Widget _buildStatusChips() {
-    final inRange = !_isOutOfRange;
     final punctuality = _lastInLog?.punctualityStatus;
 
-    return Center(
-      child: Wrap(
-        spacing: 8,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: inRange ? AppColors.border : AppColors.error,
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.location_on,
-                  size: 14,
-                  color: inRange ? AppColors.success : AppColors.error,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  inRange ? 'Trong phạm vi' : 'Ngoài phạm vi',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: inRange ? AppColors.success : AppColors.error,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_status?.currentState == 'IN' && punctuality != null)
-            _buildPunctualityChip(punctuality),
-        ],
-      ),
-    );
+    if (_status?.currentState != 'IN' || punctuality == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Center(child: _buildPunctualityChip(punctuality));
   }
 
   Widget _buildPunctualityChip(String punctuality) {
-    final (Color bg, Color fg, String label) = switch (
-      punctuality.toUpperCase()
-    ) {
-      'EARLY' => (AppColors.overtimeLight, AppColors.overtime, 'Về sớm'),
+    final (Color bg, Color fg, String label) = switch (punctuality
+        .toUpperCase()) {
+      'EARLY' => (AppColors.successLight, AppColors.success, 'Vào sớm'),
       'LATE' => (AppColors.warningLight, AppColors.warning, 'Vào muộn'),
       _ => (AppColors.successLight, AppColors.success, 'Đúng giờ'),
     };
@@ -478,11 +557,7 @@ class _HomePageBodyState extends State<HomePageBody> {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 13,
-          color: fg,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(fontSize: 13, color: fg, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -539,7 +614,7 @@ class _HomePageBodyState extends State<HomePageBody> {
                       point: center,
                       radius: 8,
                       color: AppColors.primary,
-                      borderColor: Colors.white,
+                      borderColor: AppColors.surface,
                       borderStrokeWidth: 2,
                     ),
                   ],
@@ -560,7 +635,7 @@ class _HomePageBodyState extends State<HomePageBody> {
                     borderRadius: BorderRadius.circular(6),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
+                        color: AppColors.textPrimary.withValues(alpha: 0.12),
                         blurRadius: 4,
                       ),
                     ],
@@ -569,13 +644,13 @@ class _HomePageBodyState extends State<HomePageBody> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
-                        Icons.map_outlined,
+                        Icons.pin_drop_outlined,
                         size: 12,
                         color: AppColors.textSecondary,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        geofenceName,
+                        'Lần gần nhất: $geofenceName',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textPrimary,
@@ -605,6 +680,14 @@ class _HomePageBodyState extends State<HomePageBody> {
       bgColor = canCheckout ? AppColors.error : AppColors.primary;
       label = '';
       onTap = null;
+    } else if (_isEmployeeInactive) {
+      bgColor = AppColors.errorLight;
+      label = 'Tài khoản bị vô hiệu hoá';
+      onTap = null;
+    } else if (_employeeNotAssigned) {
+      bgColor = AppColors.border;
+      label = 'Chưa được gán nhân viên';
+      onTap = null;
     } else if (canCheckin) {
       bgColor = AppColors.primary;
       label = 'Điểm danh vào →';
@@ -633,16 +716,18 @@ class _HomePageBodyState extends State<HomePageBody> {
                     width: 24,
                     height: 24,
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       strokeWidth: 2.5,
                     ),
                   )
                 : Text(
                     label,
                     style: TextStyle(
-                      color: onTap != null
-                          ? Colors.white
-                          : AppColors.textSecondary,
+                      color: _isEmployeeInactive
+                          ? AppColors.error
+                          : (onTap != null
+                              ? AppColors.surface
+                              : AppColors.textSecondary),
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -653,9 +738,7 @@ class _HomePageBodyState extends State<HomePageBody> {
     );
 
     if (context.isDesktop) {
-      return Center(
-        child: SizedBox(width: 480, child: button),
-      );
+      return Center(child: SizedBox(width: 480, child: button));
     }
     return SizedBox(width: double.infinity, child: button);
   }
@@ -663,10 +746,12 @@ class _HomePageBodyState extends State<HomePageBody> {
   // ── Summary Section ───────────────────────────────────────────────────────
 
   Widget _buildSummarySection() {
-    final work = _todayWorkDuration;
-    final hours = work.inHours;
-    final minutes = work.inMinutes % 60;
-    final weekHours = _weekWorkDuration.inMinutes / 60;
+    final todayWork = _todayWorkDuration;
+    final todayH = todayWork.inHours;
+    final todayM = todayWork.inMinutes % 60;
+    final weekWork = _weekWorkDuration;
+    final weekH = weekWork.inHours;
+    final weekM = weekWork.inMinutes % 60;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,90 +781,18 @@ class _HomePageBodyState extends State<HomePageBody> {
         Row(
           children: [
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: const Border(
-                    left: BorderSide(color: AppColors.primary, width: 3),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'GIỜ CÔNG',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${hours}h ${minutes.toString().padLeft(2, '0')}',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Tổng tuần: ${weekHours.toStringAsFixed(1)}h',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+              child: _buildSummaryCard(
+                label: 'GIỜ CÔNG HÔM NAY',
+                value: '${todayH}h ${todayM.toString().padLeft(2, '0')}',
+                accentColor: AppColors.primary,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: const Border(
-                    left: BorderSide(color: AppColors.overtime, width: 3),
-                  ),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'TĂNG CA',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.overtime,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      '0.0h',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.overtime,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Kỳ lương hiện tại',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+              child: _buildSummaryCard(
+                label: 'GIỜ CÔNG TUẦN',
+                value: '${weekH}h ${weekM.toString().padLeft(2, '0')}',
+                accentColor: AppColors.overtime,
               ),
             ),
           ],
@@ -788,14 +801,53 @@ class _HomePageBodyState extends State<HomePageBody> {
     );
   }
 
+  Widget _buildSummaryCard({
+    required String label,
+    required String value,
+    required Color accentColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: accentColor, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: accentColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Activity Section ──────────────────────────────────────────────────────
 
   Widget _buildActivitySection() {
-    final sorted = [..._recentLogs]..sort((a, b) {
-      final ta = DateTime.tryParse(b.time) ?? DateTime(0);
-      final tb = DateTime.tryParse(a.time) ?? DateTime(0);
-      return ta.compareTo(tb);
-    });
+    final sorted = [..._recentLogs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(b.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(a.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
     final recent = sorted.take(3).toList();
     if (recent.isEmpty) return const SizedBox.shrink();
 
@@ -916,4 +968,3 @@ class _HomePageBodyState extends State<HomePageBody> {
     );
   }
 }
-

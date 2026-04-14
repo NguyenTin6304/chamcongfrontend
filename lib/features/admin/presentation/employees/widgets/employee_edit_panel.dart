@@ -24,7 +24,9 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                 ),
                 const SizedBox(height: 8),
                 Text('Mã nhân viên: ${employee.code}'),
-                Text('Email: ${employee.email ?? _userEmailById(employee.userId)}'),
+                Text(
+                  'Email: ${employee.email ?? _userEmailById(employee.userId)}',
+                ),
                 Text('Số điện thoại: ${employee.phone ?? '--'}'),
                 Text('Nhóm: ${_employeeGroupName(employee)}'),
                 Text('Vai trò: ${employee.role ?? '--'}'),
@@ -104,7 +106,11 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                     employeeId: employee.id,
                     fullName: fullNameController.text.trim(),
                     groupId: selectedGroupId,
+                    setGroupId: true,
                     userId: selectedUserId,
+                    setUserId: true,
+                    phone: phoneController.text.trim(),
+                    active: active,
                   );
                   if (!mounted) {
                     return;
@@ -118,11 +124,16 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                   });
                   nav.pop();
                   _showSnack('Đã lưu thay đổi nhân viên.');
-                } catch (_) {
+                } catch (error) {
                   if (!mounted) {
                     return;
                   }
-                  _showSnack('Không thể lưu thay đổi nhân viên.');
+                  _showSnack(
+                    _friendlyError(
+                      error,
+                      fallback: 'Không thể lưu thay đổi nhân viên.',
+                    ),
+                  );
                   if (context.mounted) {
                     setPanelState(() {
                       saving = false;
@@ -206,8 +217,10 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                               const SizedBox(height: 6),
                               TextField(
                                 controller: fullNameController,
-                                decoration:
-                                    _decoration('Họ và tên', Icons.person_outline),
+                                decoration: _decoration(
+                                  'Họ và tên',
+                                  Icons.person_outline,
+                                ),
                               ),
                               const SizedBox(height: 10),
                               TextField(
@@ -221,8 +234,11 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                               const SizedBox(height: 10),
                               TextField(
                                 controller: emailController,
-                                decoration:
-                                    _decoration('Email', Icons.email_outlined),
+                                readOnly: true,
+                                decoration: _decoration(
+                                  'Email',
+                                  Icons.email_outlined,
+                                ),
                               ),
                               const SizedBox(height: 10),
                               TextField(

@@ -21,11 +21,18 @@ class AppScaffold extends StatefulWidget {
 
 class _AppScaffoldState extends State<AppScaffold> {
   late int _selectedIndex;
+  final _historyRefreshToken = ValueNotifier<int>(0);
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex;
+  }
+
+  @override
+  void dispose() {
+    _historyRefreshToken.dispose();
+    super.dispose();
   }
 
   void _onTabSelected(int index) {
@@ -62,8 +69,14 @@ class _AppScaffoldState extends State<AppScaffold> {
   @override
   Widget build(BuildContext context) {
     final bodies = [
-      HomePageBody(onNavigate: _onTabSelected),
-      HistoryPageBody(onNavigate: _onTabSelected),
+      HomePageBody(
+        onNavigate: _onTabSelected,
+        onAttendanceChanged: () => _historyRefreshToken.value++,
+      ),
+      HistoryPageBody(
+        onNavigate: _onTabSelected,
+        refreshToken: _historyRefreshToken,
+      ),
       const ProfilePageBody(),
     ];
 

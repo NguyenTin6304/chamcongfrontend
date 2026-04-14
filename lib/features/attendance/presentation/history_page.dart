@@ -7,9 +7,13 @@ import '../../../core/theme/app_colors.dart';
 import '../data/attendance_api.dart';
 
 class HistoryPageBody extends StatefulWidget {
-  const HistoryPageBody({super.key, this.onNavigate});
+  const HistoryPageBody({super.key, this.onNavigate, this.refreshToken});
 
   final ValueChanged<int>? onNavigate;
+
+  /// Increment this notifier from outside (e.g. after check-in/out) to trigger
+  /// a data reload for the currently displayed month.
+  final ValueNotifier<int>? refreshToken;
 
   @override
   State<HistoryPageBody> createState() => _HistoryPageBodyState();
@@ -34,7 +38,28 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     final now = DateTime.now();
     _selectedMonth = DateTime(now.year, now.month, 1);
     _selectedDate = DateTime(now.year, now.month, now.day);
+    widget.refreshToken?.addListener(_onExternalRefresh);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    widget.refreshToken?.removeListener(_onExternalRefresh);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant HistoryPageBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken == widget.refreshToken) return;
+    oldWidget.refreshToken?.removeListener(_onExternalRefresh);
+    widget.refreshToken?.addListener(_onExternalRefresh);
+  }
+
+  void _onExternalRefresh() {
+    final token = _token;
+    if (token == null || !mounted) return;
+    _loadMonthData(_selectedMonth, token);
   }
 
   // ── Data Loading ──────────────────────────────────────────────────────────
@@ -54,10 +79,13 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
 
   Future<void> _loadMonthData(DateTime month, String token) async {
     final from = DateTime(month.year, month.month, 1);
-    final to = DateTime(month.year, month.month + 1, 0);
+    final to = DateTime(month.year, month.month + 1, 1);
     try {
       final logs = await _attendanceApi.getMyLogs(token, from: from, to: to);
-      if (mounted) setState(() => _monthLogs = logs);
+      final monthLogs = logs
+          .where((log) => _isWorkDateInMonth(log, month))
+          .toList(growable: false);
+      if (mounted) setState(() => _monthLogs = monthLogs);
     } catch (_) {
       if (mounted) setState(() => _monthLogs = []);
     } finally {
@@ -80,6 +108,11 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   }
 
   void _goToNextMonth() {
+    final now = DateTime.now();
+    final currentMonth = DateTime(now.year, now.month, 1);
+    if (!_selectedMonth.isBefore(currentMonth)) {
+      return; // already at current month
+    }
     final next = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
     setState(() {
       _selectedMonth = next;
@@ -113,19 +146,30 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
 
   // ── Computed ──────────────────────────────────────────────────────────────
 
+  /// Returns the canonical work date for a log. Uses backend-supplied
+  /// [workDate] when available; falls back to the local calendar date of
+  /// [time] for legacy logs that pre-date the work_date column.
+  DateTime _logWorkDate(AttendanceLogItem log) {
+    if (log.workDate != null) return log.workDate!;
+    return DateTime.tryParse(log.time)?.toLocal() ?? DateTime(2000);
+  }
+
+  bool _isWorkDateInMonth(AttendanceLogItem log, DateTime month) {
+    final wd = _logWorkDate(log);
+    return wd.year == month.year && wd.month == month.month;
+  }
+
   List<AttendanceLogItem> _getLogsForDate(DateTime date) {
     return _monthLogs.where((log) {
-      final dt = DateTime.tryParse(log.time)?.toLocal();
-      if (dt == null) return false;
-      return dt.year == date.year &&
-          dt.month == date.month &&
-          dt.day == date.day;
-    }).toList()
-      ..sort((a, b) {
-        final ta = DateTime.tryParse(a.time) ?? DateTime(0);
-        final tb = DateTime.tryParse(b.time) ?? DateTime(0);
-        return ta.compareTo(tb);
-      });
+      final wd = _logWorkDate(log);
+      return wd.year == date.year &&
+          wd.month == date.month &&
+          wd.day == date.day;
+    }).toList()..sort((a, b) {
+      final ta = DateTime.tryParse(a.time) ?? DateTime(0);
+      final tb = DateTime.tryParse(b.time) ?? DateTime(0);
+      return ta.compareTo(tb);
+    });
   }
 
   Color? _getDotColorForDate(DateTime date) {
@@ -158,9 +202,8 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   double _getPunctualityRate() {
     final dateGroups = <String, List<AttendanceLogItem>>{};
     for (final log in _monthLogs) {
-      final dt = DateTime.tryParse(log.time)?.toLocal();
-      if (dt == null) continue;
-      final key = '${dt.year}-${dt.month}-${dt.day}';
+      final wd = _logWorkDate(log);
+      final key = '${wd.year}-${wd.month}-${wd.day}';
       dateGroups.putIfAbsent(key, () => []).add(log);
     }
     if (dateGroups.isEmpty) return 0;
@@ -186,9 +229,8 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   Duration _getTotalWorkDuration() {
     final dateGroups = <String, List<AttendanceLogItem>>{};
     for (final log in _monthLogs) {
-      final dt = DateTime.tryParse(log.time)?.toLocal();
-      if (dt == null) continue;
-      final key = '${dt.year}-${dt.month}-${dt.day}';
+      final wd = _logWorkDate(log);
+      final key = '${wd.year}-${wd.month}-${wd.day}';
       dateGroups.putIfAbsent(key, () => []).add(log);
     }
     var total = Duration.zero;
@@ -199,11 +241,12 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   }
 
   Duration _computePairDuration(List<AttendanceLogItem> logs) {
-    final sorted = [...logs]..sort((a, b) {
-      final ta = DateTime.tryParse(a.time) ?? DateTime(0);
-      final tb = DateTime.tryParse(b.time) ?? DateTime(0);
-      return ta.compareTo(tb);
-    });
+    final sorted = [...logs]
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(a.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(b.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
     var total = Duration.zero;
     DateTime? inTime;
     for (final log in sorted) {
@@ -464,8 +507,11 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
 
   Widget _buildDateGrid() {
     final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
-    final daysInMonth =
-        DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0).day;
+    final daysInMonth = DateTime(
+      _selectedMonth.year,
+      _selectedMonth.month + 1,
+      0,
+    ).day;
     final offset = firstDay.weekday - 1; // Mon=0 … Sun=6
     final today = DateTime.now();
 
@@ -514,10 +560,12 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     required bool isCurrentMonth,
     required DateTime today,
   }) {
-    final isToday = date.year == today.year &&
+    final isToday =
+        date.year == today.year &&
         date.month == today.month &&
         date.day == today.day;
-    final isSelected = date.year == _selectedDate.year &&
+    final isSelected =
+        date.year == _selectedDate.year &&
         date.month == _selectedDate.month &&
         date.day == _selectedDate.day;
     final dot = isCurrentMonth ? _getDotColorForDate(date) : null;
@@ -542,9 +590,9 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     return GestureDetector(
       onTap: isCurrentMonth
           ? () => setState(() {
-                _selectedDate = date;
-                _isMonthlyView = false;
-              })
+              _selectedDate = date;
+              _isMonthlyView = false;
+            })
           : null,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -560,8 +608,9 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
                 '${date.day}',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight:
-                      isSelected || isToday ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: isSelected || isToday
+                      ? FontWeight.w600
+                      : FontWeight.w400,
                   color: textColor,
                 ),
               ),
@@ -593,11 +642,10 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       spacing: 14,
       runSpacing: 6,
       children: [
-        _LegendDot(color: AppColors.success, label: 'ĐÚNG GIỜ'),
+        _LegendDot(color: AppColors.success, label: 'ĐÚNG GIỜ / VÀO SỚM'),
         _LegendDot(color: AppColors.warning, label: 'VÀO MUỘN'),
-        _LegendDot(color: AppColors.overtime, label: 'VỀ SỚM'),
         _LegendDot(color: AppColors.overtime, label: 'TĂNG CA'),
-        _LegendDot(color: AppColors.error, label: 'NGOẠI LỆ'),
+        _LegendDot(color: AppColors.error, label: 'NGOẠI VI'),
       ],
     );
   }
@@ -662,7 +710,11 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Column(
         children: const [
-          Icon(Icons.calendar_today_outlined, size: 48, color: AppColors.border),
+          Icon(
+            Icons.calendar_today_outlined,
+            size: 48,
+            color: AppColors.border,
+          ),
           SizedBox(height: 12),
           Text(
             'Không có dữ liệu chấm công',
@@ -671,7 +723,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
           SizedBox(height: 4),
           Text(
             'Ngày nghỉ hoặc chưa điểm danh',
-            style: TextStyle(fontSize: 12, color: AppColors.border),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -681,13 +733,13 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   Widget _buildCheckinItem(AttendanceLogItem log) {
     final dt = DateTime.tryParse(log.time)?.toLocal();
     final timeStr = dt == null ? '--:--' : DateFormat('HH:mm').format(dt);
-    final (Color sc, String sl) = switch (
-      log.punctualityStatus?.toUpperCase()
-    ) {
-      'LATE' => (AppColors.warning, 'VÀO MUỘN'),
-      'EARLY' => (AppColors.overtime, 'VỀ SỚM'),
-      _ => (AppColors.success, 'ĐÚNG GIỜ'),
-    };
+    final (Color sc, String sl) = log.isOutOfRange
+        ? (AppColors.error, 'NGOẠI VI')
+        : switch (log.punctualityStatus?.toUpperCase()) {
+            'LATE' => (AppColors.warning, 'VÀO MUỘN'),
+            'EARLY' => (AppColors.success, 'VÀO SỚM'),
+            _ => (AppColors.success, 'ĐÚNG GIỜ'),
+          };
     return _buildActivityRow(
       iconBg: AppColors.primaryLight,
       icon: Icons.login,
@@ -703,14 +755,13 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   Widget _buildCheckoutItem(AttendanceLogItem log) {
     final dt = DateTime.tryParse(log.time)?.toLocal();
     final timeStr = dt == null ? '--:--' : DateFormat('HH:mm').format(dt);
-    final (Color sc, String sl) = switch (
-      log.checkoutStatus?.toUpperCase()
-    ) {
-      'LATE' => (AppColors.overtime, 'TĂNG CA'),
-      'EARLY' => (AppColors.warning, 'VỀ SỚM'),
-      _ when log.isOutOfRange => (AppColors.error, 'NGOẠI VI'),
-      _ => (AppColors.success, 'ĐÚNG GIỜ'),
-    };
+    final (Color sc, String sl) = log.isOutOfRange
+        ? (AppColors.error, 'NGOẠI VI')
+        : switch (log.checkoutStatus?.toUpperCase()) {
+            'LATE' => (AppColors.overtime, 'TĂNG CA'),
+            'EARLY' => (AppColors.warning, 'VỀ SỚM'),
+            _ => (AppColors.success, 'ĐÚNG GIỜ'),
+          };
     return _buildActivityRow(
       iconBg: AppColors.errorLight,
       icon: Icons.logout,
@@ -732,15 +783,27 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     final dur = _computePairDuration(logs);
     final durationText = 'Tổng ${dur.inHours} giờ ${dur.inMinutes % 60} phút';
 
+    final hasOutOfRange = logs.any((l) => l.isOutOfRange);
     final punctuality = inLog?.punctualityStatus?.toUpperCase() ?? '';
     final checkoutSt = outLog?.checkoutStatus?.toUpperCase() ?? '';
-    final (Color sc, String sl) = switch (punctuality) {
-      'LATE' => (AppColors.warning, 'VÀO MUỘN'),
-      'EARLY' when checkoutSt == 'LATE' => (AppColors.overtime, 'TĂNG CA'),
-      'EARLY' => (AppColors.overtime, 'VỀ SỚM'),
-      _ when checkoutSt == 'LATE' => (AppColors.overtime, 'TĂNG CA'),
-      _ => (AppColors.success, 'ĐÚNG GIỜ'),
-    };
+    late final Color sc;
+    late final String sl;
+    if (hasOutOfRange) {
+      sc = AppColors.error;
+      sl = 'NGOẠI VI';
+    } else if (punctuality == 'LATE') {
+      sc = AppColors.warning;
+      sl = 'VÀO MUỘN';
+    } else if (checkoutSt == 'LATE') {
+      sc = AppColors.overtime;
+      sl = 'TĂNG CA';
+    } else if (punctuality == 'EARLY') {
+      sc = AppColors.success;
+      sl = 'VÀO SỚM';
+    } else {
+      sc = AppColors.success;
+      sl = 'ĐÚNG GIỜ';
+    }
 
     return _buildActivityRow(
       iconBg: AppColors.background,
@@ -869,10 +932,9 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   List<Widget> _buildMonthlyItems() {
     final dateGroups = <String, List<AttendanceLogItem>>{};
     for (final log in _monthLogs) {
-      final dt = DateTime.tryParse(log.time)?.toLocal();
-      if (dt == null) continue;
+      final wd = _logWorkDate(log);
       final key =
-          '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+          '${wd.year}-${wd.month.toString().padLeft(2, '0')}-${wd.day.toString().padLeft(2, '0')}';
       dateGroups.putIfAbsent(key, () => []).add(log);
     }
     if (dateGroups.isEmpty) return [_buildEmptyState()];
@@ -964,8 +1026,9 @@ class _LogDetailSheet extends StatelessWidget {
         : _checkoutLabel(log.checkoutStatus);
 
     return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1060,16 +1123,16 @@ class _LogDetailSheet extends StatelessWidget {
   }
 
   String _punctualityLabel(String? s) => switch (s?.toUpperCase()) {
-        'ON_TIME' => 'Đúng giờ',
-        'LATE' => 'Vào muộn',
-        'EARLY' => 'Vào sớm',
-        _ => '—',
-      };
+    'ON_TIME' => 'Đúng giờ',
+    'LATE' => 'Vào muộn',
+    'EARLY' => 'Vào sớm',
+    _ => '—',
+  };
 
   String _checkoutLabel(String? s) => switch (s?.toUpperCase()) {
-        'ON_TIME' => 'Đúng giờ',
-        'LATE' => 'Tăng ca',
-        'EARLY' => 'Về sớm',
-        _ => '—',
-      };
+    'ON_TIME' => 'Đúng giờ',
+    'LATE' => 'Tăng ca',
+    'EARLY' => 'Về sớm',
+    _ => '—',
+  };
 }

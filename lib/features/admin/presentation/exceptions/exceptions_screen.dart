@@ -46,6 +46,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   int _pendingCount = 0;
   int _approvedCount = 0;
   int _rejectedCount = 0;
+  int _gracePeriodDays = 30;
 
   static const List<String> _allExceptionTypes = <String>[
     'SUSPECTED_LOCATION_SPOOF',
@@ -101,6 +102,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         _api.listGroups(token, activeOnly: false),
         _fetchPendingExceptions(token: token),
         _fetchStats(token: token),
+        _fetchGracePeriodDays(token: token),
       ]);
 
       if (!mounted) {
@@ -110,14 +112,18 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       final groups = results[0] as List<GroupLite>;
       final pending = results[1] as List<ExceptionModel>;
       final stats = results[2] as Map<String, int>;
+      final gracePeriodDays = results[3] as int;
 
       setState(() {
         _groups = groups;
         _pendingItems = pending;
         _pendingEmployeeCount = stats['pending_employee'] ?? 0;
-        _pendingCount = pending.isNotEmpty ? pending.length : stats['pending_admin'] ?? 0;
+        _pendingCount = pending.isNotEmpty
+            ? pending.length
+            : stats['pending_admin'] ?? 0;
         _approvedCount = stats['approved'] ?? 0;
         _rejectedCount = stats['rejected'] ?? 0;
+        _gracePeriodDays = gracePeriodDays;
         _reloadToken += 1;
       });
     } on UnauthorizedException {
@@ -172,6 +178,15 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
             ),
           )
           .toList(growable: false);
+    }
+  }
+
+  Future<int> _fetchGracePeriodDays({required String token}) async {
+    try {
+      final policy = await _api.getExceptionPolicy(token);
+      return policy.gracePeriodDays;
+    } catch (_) {
+      return _gracePeriodDays;
     }
   }
 
@@ -394,7 +409,9 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       final note = noteController.text.trim();
       if (!approve && note.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vui long nhap admin_note khi tu choi.')),
+          const SnackBar(
+            content: Text('Vui long nhap admin_note khi tu choi.'),
+          ),
         );
         return;
       }
@@ -431,7 +448,9 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         Navigator.of(dialogContext).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(approve ? 'Đã duyệt exception.' : 'Đã từ chối exception.'),
+            content: Text(
+              approve ? 'Đã duyệt exception.' : 'Đã từ chối exception.',
+            ),
             backgroundColor: approve ? AppColors.success : AppColors.danger,
           ),
         );
@@ -473,13 +492,22 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                       ),
                       const SizedBox(height: 12),
                       const _DialogSectionTitle('Nội dung exception'),
-                      _DialogInfoRow('Loại', exceptionTypeLabel(detail.exceptionType)),
+                      _DialogInfoRow(
+                        'Loại',
+                        exceptionTypeLabel(detail.exceptionType),
+                      ),
                       _DialogInfoRow(
                         'Trạng thái',
                         exceptionStatusLabel(detail.status),
                       ),
-                      _DialogInfoRow('Ngày công', _formatDateOnly(detail.workDate)),
-                      _DialogInfoRow('Lý do hệ thống', _displayText(detail.note)),
+                      _DialogInfoRow(
+                        'Ngày công',
+                        _formatDateOnly(detail.workDate),
+                      ),
+                      _DialogInfoRow(
+                        'Lý do hệ thống',
+                        _displayText(detail.note),
+                      ),
                       _DialogInfoRow(
                         'Phát hiện lúc',
                         _formatDateTime(detail.detectedAt),
@@ -488,6 +516,11 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                         'Hết hạn lúc',
                         _formatDateTime(detail.expiresAt),
                       ),
+                      if (detail.extendedDeadlineAt != null)
+                        _DialogInfoRow(
+                          'Gia hạn đến',
+                          _formatDateTime(detail.extendedDeadlineAt),
+                        ),
                       const SizedBox(height: 12),
                       const _DialogSectionTitle('Giải trình nhân viên'),
                       _DialogInfoRow(
@@ -531,25 +564,31 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                                 child: Text(
                                   selectedCheckoutTime == null
                                       ? 'Chưa chọn (tuỳ chọn)'
-                                      : DateFormat('HH:mm  dd/MM/yyyy')
-                                          .format(selectedCheckoutTime!.toLocal()),
+                                      : DateFormat('HH:mm  dd/MM/yyyy').format(
+                                          selectedCheckoutTime!.toLocal(),
+                                        ),
                                   style: const TextStyle(fontSize: 13),
                                 ),
                               ),
                               TextButton.icon(
                                 icon: const Icon(Icons.access_time, size: 16),
                                 label: Text(
-                                  selectedCheckoutTime == null ? 'Chọn giờ' : 'Đổi giờ',
+                                  selectedCheckoutTime == null
+                                      ? 'Chọn giờ'
+                                      : 'Đổi giờ',
                                 ),
                                 onPressed: submitting
                                     ? null
                                     : () async {
                                         final workDate = detail.workDate;
-                                        final initial = selectedCheckoutTime?.toLocal() ??
+                                        final initial =
+                                            selectedCheckoutTime?.toLocal() ??
                                             DateTime.now();
                                         final picked = await showTimePicker(
                                           context: context,
-                                          initialTime: TimeOfDay.fromDateTime(initial),
+                                          initialTime: TimeOfDay.fromDateTime(
+                                            initial,
+                                          ),
                                         );
                                         if (picked != null) {
                                           final candidate = DateTime(
@@ -560,7 +599,8 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                                             picked.minute,
                                           );
                                           setDialogState(() {
-                                            selectedCheckoutTime = candidate.toUtc();
+                                            selectedCheckoutTime = candidate
+                                                .toUtc();
                                           });
                                         }
                                       },
@@ -572,8 +612,8 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                                   onPressed: submitting
                                       ? null
                                       : () => setDialogState(() {
-                                            selectedCheckoutTime = null;
-                                          }),
+                                          selectedCheckoutTime = null;
+                                        }),
                                 ),
                             ],
                           ),
@@ -606,8 +646,9 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed:
-                      submitting ? null : () => Navigator.of(dialogContext).pop(),
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Đóng'),
                 ),
                 if (canDecide) ...[
@@ -615,10 +656,10 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                     onPressed: submitting
                         ? null
                         : () => submit(
-                              approve: false,
-                              setDialogState: setDialogState,
-                              dialogContext: dialogContext,
-                            ),
+                            approve: false,
+                            setDialogState: setDialogState,
+                            dialogContext: dialogContext,
+                          ),
                     child: submitting
                         ? const SizedBox(
                             width: 14,
@@ -631,11 +672,11 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                     onPressed: submitting
                         ? null
                         : () => submit(
-                              approve: true,
-                              setDialogState: setDialogState,
-                              dialogContext: dialogContext,
-                              checkoutTime: selectedCheckoutTime,
-                            ),
+                            approve: true,
+                            setDialogState: setDialogState,
+                            dialogContext: dialogContext,
+                            checkoutTime: selectedCheckoutTime,
+                          ),
                     child: submitting
                         ? const SizedBox(
                             width: 14,
@@ -670,6 +711,129 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text('$at - $action - $actor - $note'),
     );
+  }
+
+  Future<void> _showExtendDeadlineDialog(AttendanceExceptionItem item) async {
+    final token = _token;
+    if (token == null || token.isEmpty || _actioningIds.contains(item.id)) {
+      return;
+    }
+
+    final hoursController = TextEditingController(text: '24');
+    var submitting = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final extendHours = int.tryParse(hoursController.text.trim()) ?? 24;
+            final currentDeadline = item.effectiveDeadline?.toLocal();
+            final previewDeadline = currentDeadline?.add(
+              Duration(hours: extendHours),
+            );
+
+            Future<void> submit() async {
+              final hours = int.tryParse(hoursController.text.trim());
+              if (hours == null || hours < 1 || hours > 168) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Số giờ gia hạn phải từ 1 đến 168.'),
+                  ),
+                );
+                return;
+              }
+              setDialogState(() {
+                submitting = true;
+              });
+              try {
+                await _api.extendExceptionDeadline(
+                  token: token,
+                  exceptionId: item.id,
+                  extendHours: hours,
+                );
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã gia hạn giải trình.')),
+                );
+                await _refreshData();
+              } catch (error) {
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                setDialogState(() {
+                  submitting = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Không thể gia hạn: $error')),
+                );
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Gia hạn giải trình'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _DialogInfoRow(
+                      'Hạn hiện tại',
+                      _formatDateTime(item.effectiveDeadline),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: hoursController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Gia hạn thêm',
+                        suffixText: 'giờ',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    _DialogInfoRow('Hạn mới', _formatDateTime(previewDeadline)),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Hủy'),
+                ),
+                ElevatedButton(
+                  onPressed: submitting ? null : submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.bgCard,
+                  ),
+                  child: submitting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.bgCard,
+                          ),
+                        )
+                      : const Text('Xác nhận gia hạn'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    hoursController.dispose();
   }
 
   Future<void> _pickRange() async {
@@ -844,27 +1008,31 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
     return '"$escaped"';
   }
 
+  // ignore: unused_element
   List<ExceptionModel> get _filteredPendingItems {
     if (_searchQuery.trim().isEmpty) {
       return _pendingItems;
     }
     final keyword = _searchQuery.trim().toLowerCase();
-    return _pendingItems.where((item) {
-      final haystack = [
-        item.employeeName,
-        item.employeeCode,
-        item.departmentName,
-        item.reason,
-        item.exceptionType,
-      ].join(' ').toLowerCase();
-      return haystack.contains(keyword);
-    }).toList(growable: false);
+    return _pendingItems
+        .where((item) {
+          final haystack = [
+            item.employeeName,
+            item.employeeCode,
+            item.departmentName,
+            item.reason,
+            item.exceptionType,
+          ].join(' ').toLowerCase();
+          return haystack.contains(keyword);
+        })
+        .toList(growable: false);
   }
 
   ({Color bg, Color text, Color border}) _tabPalette(String id, bool active) {
     return exceptionStatusPalette(id, active: active);
   }
 
+  // ignore: unused_element
   Widget _buildPendingCards(List<ExceptionModel> pending) {
     if (pending.isEmpty) {
       return const Padding(
@@ -928,8 +1096,6 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingVisible =
-        _selectedStatus == 'PENDING_ADMIN' && _pendingCount > 0;
     final tabs = <({String id, String label})>[
       (
         id: 'PENDING_EMPLOYEE',
@@ -1014,40 +1180,42 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                     child: Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: tabs.map((tab) {
-                        final isActive = _selectedStatus == tab.id;
-                        final palette = _tabPalette(tab.id, isActive);
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(999),
-                          onTap: () async {
-                            if (_selectedStatus == tab.id) {
-                              return;
-                            }
-                            setState(() {
-                              _selectedStatus = tab.id;
-                            });
-                            await _refreshData();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: palette.bg,
+                      children: tabs
+                          .map((tab) {
+                            final isActive = _selectedStatus == tab.id;
+                            final palette = _tabPalette(tab.id, isActive);
+                            return InkWell(
                               borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: palette.border),
-                            ),
-                            child: Text(
-                              tab.label,
-                              style: TextStyle(
-                                color: palette.text,
-                                fontWeight: FontWeight.w600,
+                              onTap: () async {
+                                if (_selectedStatus == tab.id) {
+                                  return;
+                                }
+                                setState(() {
+                                  _selectedStatus = tab.id;
+                                });
+                                await _refreshData();
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: palette.bg,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: palette.border),
+                                ),
+                                child: Text(
+                                  tab.label,
+                                  style: TextStyle(
+                                    color: palette.text,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        );
-                      }).toList(growable: false),
+                            );
+                          })
+                          .toList(growable: false),
                     ),
                   ),
                 ],
@@ -1195,6 +1363,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
           exceptionTypeFilter: _selectedExceptionType,
           searchQuery: _searchQuery,
           reloadToken: _reloadToken,
+          gracePeriodDays: _gracePeriodDays,
           onViewDetail: (item) {
             final model = _mapExceptionItem(item);
             _showExceptionReviewDialog(
@@ -1202,6 +1371,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
               readOnly: !_canAdminDecide(model),
             );
           },
+          onExtendDeadline: _showExtendDeadlineDialog,
         ),
       ],
     );

@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../../core/storage/token_storage.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../widgets/common/deadline_chip.dart';
 import '../data/attendance_api.dart';
 
 class EmployeeExceptionsScreen extends StatefulWidget {
   const EmployeeExceptionsScreen({super.key});
 
   @override
-  State<EmployeeExceptionsScreen> createState() => _EmployeeExceptionsScreenState();
+  State<EmployeeExceptionsScreen> createState() =>
+      _EmployeeExceptionsScreenState();
 }
 
 class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
@@ -35,7 +37,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     super.dispose();
   }
 
-  // ── Logic (unchanged) ────────────────────────────────────────────────────
+  // Logic
 
   Future<void> _bootstrap() async {
     final token = await _tokenStorage.getToken();
@@ -97,8 +99,9 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
       if (!mounted) return;
       setState(() {
         _selected = detail;
-        _exceptions =
-            _exceptions.map((e) => e.id == detail.id ? detail : e).toList();
+        _exceptions = _exceptions
+            .map((e) => e.id == detail.id ? detail : e)
+            .toList();
       });
       _syncExplanationController();
     } catch (_) {
@@ -110,7 +113,10 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     final token = _token;
     final selected = _selected;
     final explanation = _explanationController.text.trim();
-    if (token == null || selected == null || !_canSubmit(selected) || explanation.isEmpty) {
+    if (token == null ||
+        selected == null ||
+        !_canSubmit(selected) ||
+        explanation.isEmpty) {
       return;
     }
     setState(() {
@@ -126,8 +132,9 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
       if (!mounted) return;
       setState(() {
         _selected = updated;
-        _exceptions =
-            _exceptions.map((e) => e.id == updated.id ? updated : e).toList();
+        _exceptions = _exceptions
+            .map((e) => e.id == updated.id ? updated : e)
+            .toList();
         _submitting = false;
       });
       _syncExplanationController();
@@ -146,26 +153,32 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
   }
 
   bool _canSubmit(EmployeeExceptionItem item) {
-    return item.status == 'PENDING_EMPLOYEE' &&
-        item.canSubmitExplanation &&
-        item.employeeSubmittedAt == null &&
-        !_submitting;
+    return item.canEditExplanation && !_submitting;
   }
 
-  EmployeeExceptionItem? _firstWhereOrNull(List<EmployeeExceptionItem> items, int id) {
+  void _handleDeadlineTick() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  EmployeeExceptionItem? _firstWhereOrNull(
+    List<EmployeeExceptionItem> items,
+    int id,
+  ) {
     for (final item in items) {
       if (item.id == id) return item;
     }
     return null;
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // Helpers
 
-  // FIX 1 — translate raw system note to friendly Vietnamese
+  // Translate raw system note to friendly Vietnamese.
   String _translateSystemNote(String? note) {
     if (note == null || note.trim().isEmpty) return 'Không có thông tin';
     if (note.contains('auto closed session at cross-day cutoff')) {
-      return 'Hệ thống tự động đóng ca vì bạn không checkout trước 04:00';
+      return 'Hệ thống tự động đóng ca vì bạn không checkout trước giờ giới hạn';
     }
     if (note.contains('GPS risk detected')) {
       return 'Phát hiện bất thường về vị trí GPS khi chấm công';
@@ -180,7 +193,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     return note.split('|').first.split('score=').first.trim();
   }
 
-  // FIX 2 — friendly exception type labels
+  // Friendly exception type labels.
   String _translateExceptionType(String type) {
     return switch (type) {
       'AUTO_CLOSED' => 'Tự động đóng ca',
@@ -192,7 +205,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     };
   }
 
-  // FIX 3 — unified date/time formatters
+  // Unified date/time formatters.
   String _formatDateTime(DateTime? value) {
     if (value == null) return '—';
     final local = value.toLocal();
@@ -207,7 +220,16 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     if (dateStr == null || dateStr.isEmpty) return '—';
     final dt = DateTime.tryParse(dateStr);
     if (dt == null) return dateStr;
-    const weekdays = ['', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
+    const weekdays = [
+      '',
+      'Thứ Hai',
+      'Thứ Ba',
+      'Thứ Tư',
+      'Thứ Năm',
+      'Thứ Sáu',
+      'Thứ Bảy',
+      'Chủ Nhật',
+    ];
     return '${weekdays[dt.weekday]}, '
         '${dt.day.toString().padLeft(2, '0')}/'
         '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
@@ -223,7 +245,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     };
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  // Build
 
   @override
   Widget build(BuildContext context) {
@@ -286,7 +308,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     );
   }
 
-  // FIX 2 — clean list cards
+  // Exception list cards.
   Widget _buildExceptionList() {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
@@ -335,6 +357,10 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
                     color: AppColors.textSecondary,
                   ),
                 ),
+                if (item.status == 'PENDING_EMPLOYEE') ...[
+                  const SizedBox(height: 8),
+                  DeadlineChip(deadline: item.effectiveDeadline, compact: true),
+                ],
               ],
             ),
           ),
@@ -343,11 +369,11 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     );
   }
 
-  // FIX 4, 5, 6 — detail panel
+  // Detail panel.
   Widget _buildDetailPanel() {
     final item = _selected;
 
-    // FIX 6 — empty state when nothing selected
+    // Empty state when nothing selected.
     if (item == null) {
       return Center(
         child: Column(
@@ -392,15 +418,23 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
         ),
         const SizedBox(height: 20),
 
-        // FIX 4 — detail fields with visual hierarchy
-        _buildDetailField('LOẠI NGOẠI LỆ', _translateExceptionType(item.exceptionType)),
+        // Detail fields with visual hierarchy.
+        _buildDetailField(
+          'LOẠI NGOẠI LỆ',
+          _translateExceptionType(item.exceptionType),
+        ),
         _buildDetailField('NGÀY CÔNG', _formatWorkDate(item.workDate)),
         _buildDetailField('LÝ DO HỆ THỐNG', _translateSystemNote(item.note)),
-        _buildDetailField('THỜI ĐIỂM PHÁT HIỆN', _formatDateTime(item.detectedAt)),
-        if (status == 'PENDING_EMPLOYEE')
-          _buildDetailField('HẠN GIẢI TRÌNH', _formatDateTime(item.expiresAt)),
+        _buildDetailField(
+          'THỜI ĐIỂM PHÁT HIỆN',
+          _formatDateTime(item.detectedAt),
+        ),
+        if (status == 'PENDING_EMPLOYEE') _buildDeadlineField(item),
         if (item.adminDecidedAt != null)
-          _buildDetailField('NGÀY ADMIN QUYẾT ĐỊNH', _formatDateTime(item.adminDecidedAt)),
+          _buildDetailField(
+            'NGÀY ADMIN QUYẾT ĐỊNH',
+            _formatDateTime(item.adminDecidedAt),
+          ),
         if (item.decidedByEmail != null && item.decidedByEmail!.isNotEmpty)
           _buildDetailField('NGƯỜI DUYỆT', item.decidedByEmail!),
 
@@ -408,7 +442,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
         const Divider(color: AppColors.border),
         const SizedBox(height: 16),
 
-        // FIX 5 — explanation section
+        // Explanation section.
         _buildExplanationSection(item, canSubmit),
 
         // Error message
@@ -478,7 +512,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
     );
   }
 
-  // FIX 4 — info field with uppercase label above value
+  // Info field with uppercase label above value.
   Widget _buildDetailField(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -497,17 +531,53 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppColors.textPrimary,
-            ),
+            style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
           ),
         ],
       ),
     );
   }
 
-  // FIX 5 — explanation section: editable vs read-only
+  // Explanation section: editable vs read-only.
+  Widget _buildDeadlineField(EmployeeExceptionItem item) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'HẠN GIẢI TRÌNH',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              DeadlineChip(
+                deadline: item.effectiveDeadline,
+                onTick: _handleDeadlineTick,
+              ),
+              Text(
+                _formatDateTime(item.effectiveDeadline),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildExplanationSection(EmployeeExceptionItem item, bool canSubmit) {
     final status = item.status;
 
@@ -543,7 +613,10 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
                 borderSide: const BorderSide(color: AppColors.border),
               ),
               hintText: 'Nhập giải trình của bạn...',
-              hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              hintStyle: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
               contentPadding: const EdgeInsets.all(14),
             ),
           ),
@@ -558,11 +631,16 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              onPressed: _explanationController.text.trim().isNotEmpty ? _submitExplanation : null,
+              onPressed: _explanationController.text.trim().isNotEmpty
+                  ? _submitExplanation
+                  : null,
               icon: _submitting
                   ? const SizedBox.square(
                       dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.surface,
+                      ),
                     )
                   : const Icon(Icons.send, size: 18),
               label: Text(_submitting ? 'Đang gửi...' : 'Gửi giải trình'),
@@ -572,11 +650,35 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
       );
     }
 
+    final deadlineExpired = item.status == 'EXPIRED' || item.isDeadlineExpired;
+
     // Read-only: show submitted explanation if any
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (status == 'PENDING_ADMIN' || status == 'APPROVED' || status == 'REJECTED') ...[
+        if (deadlineExpired) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Text(
+              'Đã hết hạn giải trình',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (status == 'PENDING_ADMIN' ||
+            status == 'APPROVED' ||
+            status == 'REJECTED') ...[
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -602,51 +704,58 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
                   item.employeeExplanation?.isNotEmpty == true
                       ? item.employeeExplanation!
                       : '—',
-                  style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ],
             ),
           ),
-          if (status == 'REJECTED' &&
-              item.adminNote != null &&
-              item.adminNote!.isNotEmpty) ...[
+          if (item.adminNote != null && item.adminNote!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.errorLight,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.error, width: 0.5),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'LÝ DO TỪ CHỐI',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.error,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.adminNote!,
-                    style: const TextStyle(fontSize: 14, color: AppColors.error),
-                  ),
-                ],
-              ),
-            ),
+            _buildAdminNoteBlock(status, item.adminNote!),
           ],
         ],
       ],
     );
   }
+
+  Widget _buildAdminNoteBlock(String status, String note) {
+    final isRejected = status == 'REJECTED';
+    final color = isRejected ? AppColors.error : AppColors.success;
+    final bgColor = isRejected ? AppColors.errorLight : AppColors.successLight;
+    final label = isRejected ? 'LÝ DO TỪ CHỐI' : 'GHI CHÚ ADMIN';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(note, style: TextStyle(fontSize: 14, color: color)),
+        ],
+      ),
+    );
+  }
 }
 
-// ── Sub-widgets ───────────────────────────────────────────────────────────────
+// Sub-widgets
 
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status});
@@ -676,12 +785,12 @@ class _StatusBadge extends StatelessWidget {
 
   Color _statusColor(String value) {
     return switch (value) {
-      'PENDING_EMPLOYEE' => Colors.orange,
-      'PENDING_ADMIN' => Colors.blue,
-      'APPROVED' => Colors.green,
-      'REJECTED' => Colors.red,
-      'EXPIRED' => Colors.grey,
-      _ => Colors.blueGrey,
+      'PENDING_EMPLOYEE' => AppColors.warning,
+      'PENDING_ADMIN' => AppColors.primary,
+      'APPROVED' => AppColors.success,
+      'REJECTED' => AppColors.error,
+      'EXPIRED' => AppColors.textSecondary,
+      _ => AppColors.textSecondary,
     };
   }
 
@@ -741,7 +850,10 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 16),
             FilledButton(

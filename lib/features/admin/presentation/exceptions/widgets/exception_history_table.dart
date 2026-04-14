@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../../core/storage/token_storage.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../data/admin_api.dart';
+import 'deadline_badge.dart';
 import 'exception_ui_helpers.dart';
 
 class DateRange {
@@ -23,7 +24,9 @@ class ExceptionHistoryTable extends StatefulWidget {
     required this.searchQuery,
     required this.reloadToken,
     super.key,
+    this.gracePeriodDays = 30,
     this.onViewDetail,
+    this.onExtendDeadline,
   });
 
   final String? statusFilter;
@@ -33,7 +36,9 @@ class ExceptionHistoryTable extends StatefulWidget {
   final String? exceptionTypeFilter;
   final String searchQuery;
   final int reloadToken;
+  final int gracePeriodDays;
   final ValueChanged<AttendanceExceptionItem>? onViewDetail;
+  final ValueChanged<AttendanceExceptionItem>? onExtendDeadline;
 
   @override
   State<ExceptionHistoryTable> createState() => _ExceptionHistoryTableState();
@@ -77,8 +82,8 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         oldWidget.reloadToken != widget.reloadToken ||
         oldWidget.dateRange?.from != widget.dateRange?.from ||
         oldWidget.dateRange?.to != widget.dateRange?.to;
-    final needsPageReset = needsRefetch ||
-        oldWidget.searchQuery != widget.searchQuery;
+    final needsPageReset =
+        needsRefetch || oldWidget.searchQuery != widget.searchQuery;
     if (needsRefetch) {
       _page = 1;
       _loadRows();
@@ -127,7 +132,9 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
           )
           .toList(growable: false);
 
-      final results = await Future.wait<List<AttendanceExceptionItem>>(requests);
+      final results = await Future.wait<List<AttendanceExceptionItem>>(
+        requests,
+      );
       final merged = <int, AttendanceExceptionItem>{};
       for (final list in results) {
         for (final row in list) {
@@ -191,24 +198,26 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
   List<AttendanceExceptionItem> get _filteredRows {
     final status = widget.statusFilter?.toUpperCase();
     final keyword = widget.searchQuery.trim().toLowerCase();
-    return _allRows.where((row) {
-      if (status != null &&
-          status.isNotEmpty &&
-          row.status.toUpperCase() != status) {
-        return false;
-      }
-      if (keyword.isEmpty) {
-        return true;
-      }
-      final haystack = [
-        row.fullName,
-        row.employeeCode,
-        row.groupName ?? '',
-        row.note ?? '',
-        row.exceptionType,
-      ].join(' ').toLowerCase();
-      return haystack.contains(keyword);
-    }).toList(growable: false);
+    return _allRows
+        .where((row) {
+          if (status != null &&
+              status.isNotEmpty &&
+              row.status.toUpperCase() != status) {
+            return false;
+          }
+          if (keyword.isEmpty) {
+            return true;
+          }
+          final haystack = [
+            row.fullName,
+            row.employeeCode,
+            row.groupName ?? '',
+            row.note ?? '',
+            row.exceptionType,
+          ].join(' ').toLowerCase();
+          return haystack.contains(keyword);
+        })
+        .toList(growable: false);
   }
 
   int get _totalPages {
@@ -282,6 +291,9 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     final start = total == 0 ? 0 : ((_page - 1) * _pageSize) + 1;
     final end = total == 0 ? 0 : (_page * _pageSize).clamp(0, total);
     final rows = _pageRows;
+    final showDeadline =
+        widget.statusFilter?.toUpperCase() == 'PENDING_EMPLOYEE';
+    final showRetention = widget.statusFilter?.toUpperCase() == 'EXPIRED';
 
     return Card(
       elevation: 0,
@@ -329,8 +341,12 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                   dataRowMinHeight: 56,
                   dataRowMaxHeight: 56,
                   dividerThickness: 0.5,
-                  columns: const [
+                  columns: [
                     DataColumn(label: Text('STT')),
+                    if (showRetention)
+                      const DataColumn(label: Text('Lưu hồ sơ')),
+                    if (showDeadline)
+                      const DataColumn(label: Text('HẠN GIẢI TRÌNH')),
                     DataColumn(label: Text('NHÂN VIÊN')),
                     DataColumn(label: Text('LOẠI NGOẠI LỆ')),
                     DataColumn(label: Text('NGÀY')),
@@ -341,130 +357,192 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                     DataColumn(label: Text('NGƯỜI DUYỆT')),
                     DataColumn(label: Text('CHI TIẾT')),
                   ],
-                  rows: rows.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    final stt = (start + index).toString().padLeft(2, '0');
-                    final initials = _initials(item.fullName);
-                    final typeText = exceptionTypeLabel(item.exceptionType);
-                    final typeColor = exceptionTypeColor(item.exceptionType);
-                    final dateText = DateFormat('dd/MM/yyyy').format(item.workDate);
-                    final checkInText = item.sourceCheckinTime == null
-                        ? '—'
-                        : DateFormat('HH:mm').format(item.sourceCheckinTime!.toLocal());
-                    final checkOutText = item.actualCheckoutTime == null
-                        ? '—'
-                        : DateFormat('HH:mm').format(item.actualCheckoutTime!.toLocal());
-                    final reason = (item.note ?? '').trim().isEmpty
-                        ? typeText
-                        : item.note!.trim();
+                  rows: rows
+                      .asMap()
+                      .entries
+                      .map((entry) {
+                        final index = entry.key;
+                        final item = entry.value;
+                        final stt = (start + index).toString().padLeft(2, '0');
+                        final initials = _initials(item.fullName);
+                        final typeText = exceptionTypeLabel(item.exceptionType);
+                        final typeColor = exceptionTypeColor(
+                          item.exceptionType,
+                        );
+                        final dateText = DateFormat(
+                          'dd/MM/yyyy',
+                        ).format(item.workDate);
+                        final checkInText = item.sourceCheckinTime == null
+                            ? '—'
+                            : DateFormat(
+                                'HH:mm',
+                              ).format(item.sourceCheckinTime!.toLocal());
+                        final checkOutText = item.actualCheckoutTime == null
+                            ? '—'
+                            : DateFormat(
+                                'HH:mm',
+                              ).format(item.actualCheckoutTime!.toLocal());
+                        final reason = (item.note ?? '').trim().isEmpty
+                            ? typeText
+                            : item.note!.trim();
 
-                    return DataRow(
-                      cells: [
-                        DataCell(Text(stt)),
-                        DataCell(
-                          SizedBox(
-                            width: 220,
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.bgPage,
-                                  child: Text(
-                                    initials,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(stt)),
+                            if (showRetention)
+                              DataCell(
+                                _RetentionBadge(
+                                  effectiveDeadline: item.effectiveDeadline,
+                                  gracePeriodDays: widget.gracePeriodDays,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.fullName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${item.employeeCode} - ${item.groupName ?? item.groupCode ?? '--'}',
+                              ),
+                            if (showDeadline)
+                              DataCell(
+                                DeadlineBadge(deadline: item.effectiveDeadline),
+                              ),
+                            DataCell(
+                              SizedBox(
+                                width: 220,
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: AppColors.bgPage,
+                                      child: Text(
+                                        initials,
                                         style: const TextStyle(
                                           fontSize: 11,
-                                          color: AppColors.textMuted,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.fullName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          Text(
+                                            '${item.employeeCode} - ${item.groupName ?? item.groupCode ?? '--'}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: typeColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(99),
-                            ),
-                            child: Text(
-                              typeText,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: typeColor,
-                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ),
-                        ),
-                        DataCell(Text(dateText)),
-                        DataCell(Text(checkInText)),
-                        DataCell(
-                          Text(
-                            checkOutText,
-                            style: TextStyle(
-                              color: checkOutText == '—'
-                                  ? AppColors.textMuted
-                                  : AppColors.textPrimary,
+                            DataCell(
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: typeColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(99),
+                                ),
+                                child: Text(
+                                  typeText,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: typeColor,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        DataCell(
-                          SizedBox(
-                            width: 220,
-                            child: Text(
-                              reason,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            DataCell(Text(dateText)),
+                            DataCell(Text(checkInText)),
+                            DataCell(
+                              Text(
+                                checkOutText,
+                                style: TextStyle(
+                                  color: checkOutText == '—'
+                                      ? AppColors.textMuted
+                                      : AppColors.textPrimary,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                        DataCell(_ReviewStatusBadge(status: item.status)),
-                        DataCell(
-                          Text(item.decidedByEmail ?? item.resolvedByEmail ?? '—'),
-                        ),
-                        DataCell(
-                          TextButton(
-                            onPressed: widget.onViewDetail == null
-                                ? null
-                                : () => widget.onViewDetail!(item),
-                            child: const Text('Xem'),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(growable: false),
+                            DataCell(
+                              SizedBox(
+                                width: 220,
+                                child: Text(
+                                  reason,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            DataCell(_ReviewStatusBadge(status: item.status)),
+                            DataCell(
+                              Text(
+                                item.decidedByEmail ??
+                                    item.resolvedByEmail ??
+                                    '—',
+                              ),
+                            ),
+                            DataCell(
+                              PopupMenuButton<String>(
+                                tooltip: 'Thao tác',
+                                onSelected: (value) {
+                                  switch (value) {
+                                    case 'view':
+                                      widget.onViewDetail?.call(item);
+                                      break;
+                                    case 'extend':
+                                      widget.onExtendDeadline?.call(item);
+                                      break;
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  if (widget.onViewDetail != null)
+                                    const PopupMenuItem<String>(
+                                      value: 'view',
+                                      child: Text('Xem chi tiết'),
+                                    ),
+                                  if (showDeadline &&
+                                      item.status.toUpperCase() ==
+                                          'PENDING_EMPLOYEE' &&
+                                      widget.onExtendDeadline != null)
+                                    const PopupMenuItem<String>(
+                                      value: 'extend',
+                                      child: Text('Gia hạn'),
+                                    ),
+                                ],
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  child: Icon(
+                                    Icons.more_horiz,
+                                    size: 18,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      })
+                      .toList(growable: false),
                 ),
               ),
             Container(
@@ -478,7 +556,10 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                 children: [
                   Text(
                     'Hiển thị $start–$end trong $total ngoại lệ',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                   const Spacer(),
                   OutlinedButton(
@@ -532,6 +613,9 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
   }
 
   Widget _buildSkeletonTable() {
+    final showDeadline =
+        widget.statusFilter?.toUpperCase() == 'PENDING_EMPLOYEE';
+    final showRetention = widget.statusFilter?.toUpperCase() == 'EXPIRED';
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
@@ -542,8 +626,10 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
           letterSpacing: 0.06,
           color: AppColors.textMuted,
         ),
-        columns: const [
+        columns: [
           DataColumn(label: Text('STT')),
+          if (showRetention) const DataColumn(label: Text('Lưu hồ sơ')),
+          if (showDeadline) const DataColumn(label: Text('HẠN GIẢI TRÌNH')),
           DataColumn(label: Text('NHÂN VIÊN')),
           DataColumn(label: Text('LOẠI NGOẠI LỆ')),
           DataColumn(label: Text('NGÀY')),
@@ -556,9 +642,11 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         ],
         rows: List.generate(
           3,
-          (_) => const DataRow(
+          (_) => DataRow(
             cells: [
               DataCell(_ShimmerCell(width: 24)),
+              if (showRetention) const DataCell(_ShimmerCell(width: 120)),
+              if (showDeadline) const DataCell(_ShimmerCell(width: 120)),
               DataCell(_ShimmerCell(width: 180)),
               DataCell(_ShimmerCell(width: 120)),
               DataCell(_ShimmerCell(width: 80)),
@@ -618,6 +706,65 @@ class _ReviewStatusBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _RetentionBadge extends StatelessWidget {
+  const _RetentionBadge({
+    required this.effectiveDeadline,
+    required this.gracePeriodDays,
+  });
+
+  final DateTime? effectiveDeadline;
+  final int gracePeriodDays;
+
+  @override
+  Widget build(BuildContext context) {
+    final deadline = effectiveDeadline;
+    if (deadline == null) {
+      return const Text('--', style: TextStyle(color: AppColors.textMuted));
+    }
+
+    final purgeAt = deadline.toLocal().add(Duration(days: gracePeriodDays));
+    final remaining = purgeAt.difference(DateTime.now());
+    final due = remaining.isNegative || remaining.inSeconds == 0;
+    final label = due ? 'Đủ điều kiện xoá' : _remainingLabel(remaining);
+    final bg = due ? AppColors.badgeBgOutOfRange : AppColors.bgPage;
+    final text = due ? AppColors.badgeTextOutOfRange : AppColors.textMuted;
+    final border = due
+        ? AppColors.exceptionTabRejectedBorder
+        : AppColors.border;
+
+    return Tooltip(
+      message:
+          'Ngày xoá dự kiến: ${DateFormat('dd/MM/yyyy HH:mm').format(purgeAt)}',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: border, width: 0.5),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: text,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _remainingLabel(Duration remaining) {
+    if (remaining.inDays > 0) {
+      return 'Còn ${remaining.inDays} ngày';
+    }
+    if (remaining.inHours > 0) {
+      return 'Còn ${remaining.inHours} giờ';
+    }
+    return 'Còn ${remaining.inMinutes.clamp(1, 59)} phút';
   }
 }
 

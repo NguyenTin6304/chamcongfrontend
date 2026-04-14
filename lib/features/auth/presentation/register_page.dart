@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../data/auth_api.dart';
 
@@ -10,6 +10,10 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _nameFocusNode = FocusNode();
+  final _phoneFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -29,9 +33,13 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _nameFocusNode.dispose();
+    _phoneFocusNode.dispose();
     _emailFocusNode.dispose();
     _passwordFocusNode.dispose();
     _confirmPasswordFocusNode.dispose();
@@ -49,16 +57,17 @@ class _RegisterPageState extends State<RegisterPage> {
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: Colors.grey.shade50,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.6),
+        borderSide: BorderSide(
+          color: Theme.of(context).colorScheme.primary,
+          width: 1.6,
+        ),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -88,7 +97,10 @@ class _RegisterPageState extends State<RegisterPage> {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -108,10 +120,17 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
+      final fullName = _nameController.text.trim();
+      final phone = _normalizePhone(_phoneController.text);
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final registerResult = await _authApi.register(email: email, password: password);
+      final registerResult = await _authApi.register(
+        email: email,
+        password: password,
+        fullName: fullName,
+        phone: phone,
+      );
 
       if (!mounted) {
         return;
@@ -141,6 +160,10 @@ class _RegisterPageState extends State<RegisterPage> {
     _submit();
   }
 
+  String _normalizePhone(String value) {
+    return value.trim().replaceAll(RegExp(r'[\s.-]'), '');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -154,7 +177,9 @@ class _RegisterPageState extends State<RegisterPage> {
                 padding: const EdgeInsets.all(16),
                 child: Card(
                   elevation: 1,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Form(
@@ -170,12 +195,48 @@ class _RegisterPageState extends State<RegisterPage> {
                           const SizedBox(height: 6),
                           Text(
                             'Tài khoản sẽ được tạo với quyền USER.',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey.shade700,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: Colors.grey.shade700),
                           ),
                           const SizedBox(height: 14),
-                          if (_errorMessage != null) _buildErrorBanner(_errorMessage!),
+                          if (_errorMessage != null)
+                            _buildErrorBanner(_errorMessage!),
+                          TextFormField(
+                            controller: _nameController,
+                            focusNode: _nameFocusNode,
+                            keyboardType: TextInputType.text,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [AutofillHints.name],
+                            decoration: _inputDecoration(
+                              label: 'Họ và tên',
+                              icon: Icons.person,
+                            ),
+                            validator: (value) {
+                              final input = value?.trim() ?? '';
+                              if (input.isEmpty) {
+                                return 'Nhập họ và tên';
+                              }
+                              if (input.length < 2) {
+                                return 'Họ và tên tối thiểu 2 ký tự';
+                              }
+                              if (RegExp(r'\d').hasMatch(input)) {
+                                return 'Họ và tên không được chứa số';
+                              }
+                              return null;
+                            },
+                            onFieldSubmitted: (_) {
+                              _emailFocusNode.requestFocus();
+                            },
+                            onChanged: (_) {
+                              if (_errorMessage != null) {
+                                setState(() {
+                                  _errorMessage = null;
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 14),
                           TextFormField(
                             controller: _emailController,
                             focusNode: _emailFocusNode,
@@ -193,6 +254,43 @@ class _RegisterPageState extends State<RegisterPage> {
                               }
                               if (!input.contains('@')) {
                                 return 'Email không hợp lệ';
+                              }
+                              return null;
+                            },
+                            onFieldSubmitted: (_) {
+                              _phoneFocusNode.requestFocus();
+                            },
+                            onChanged: (_) {
+                              if (_errorMessage != null) {
+                                setState(() {
+                                  _errorMessage = null;
+                                });
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _phoneController,
+                            focusNode: _phoneFocusNode,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                            autofillHints: const [
+                              AutofillHints.telephoneNumber,
+                            ],
+                            decoration: _inputDecoration(
+                              label: 'Số điện thoại',
+                              icon: Icons.phone,
+                            ),
+                            validator: (value) {
+                              final input = value?.trim() ?? '';
+                              final normalized = _normalizePhone(input);
+                              if (input.isEmpty) {
+                                return 'Nhập số điện thoại';
+                              }
+                              if (!RegExp(
+                                r'^\d{10,11}$',
+                              ).hasMatch(normalized)) {
+                                return 'Số điện thoại không hợp lệ';
                               }
                               return null;
                             },
@@ -224,7 +322,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                   });
                                 },
                                 icon: Icon(
-                                  _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                  _obscurePassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
                                 ),
                               ),
                             ),
@@ -261,7 +361,8 @@ class _RegisterPageState extends State<RegisterPage> {
                               suffixIcon: IconButton(
                                 onPressed: () {
                                   setState(() {
-                                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                                    _obscureConfirmPassword =
+                                        !_obscureConfirmPassword;
                                   });
                                 },
                                 icon: Icon(
@@ -304,7 +405,9 @@ class _RegisterPageState extends State<RegisterPage> {
                                       ),
                                     )
                                   : const Icon(Icons.person_add_alt_1),
-                              label: Text(_isLoading ? 'Đang tạo...' : 'Tạo tài khoản'),
+                              label: Text(
+                                _isLoading ? 'Đang tạo...' : 'Tạo tài khoản',
+                              ),
                             ),
                           ),
                         ],
