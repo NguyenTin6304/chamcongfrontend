@@ -216,8 +216,27 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
   // ── Detail modal ──────────────────────────────────────────────────────────
 
   Future<void> _showDetailModal(DashboardAttendanceLogItem item) async {
-    final lat = item.latitude ?? AppConfig.defaultMapCenterLat;
-    final lng = item.longitude ?? AppConfig.defaultMapCenterLng;
+    final hasCheckIn = item.checkInLat != null && item.checkInLng != null;
+    final hasCheckOut = item.checkOutLat != null && item.checkOutLng != null;
+
+    // Determine map center and zoom.
+    final double centerLat;
+    final double centerLng;
+    const double zoom = 15;
+    if (hasCheckIn && hasCheckOut) {
+      centerLat = (item.checkInLat! + item.checkOutLat!) / 2;
+      centerLng = (item.checkInLng! + item.checkOutLng!) / 2;
+    } else if (hasCheckIn) {
+      centerLat = item.checkInLat!;
+      centerLng = item.checkInLng!;
+    } else if (hasCheckOut) {
+      centerLat = item.checkOutLat!;
+      centerLng = item.checkOutLng!;
+    } else {
+      centerLat = AppConfig.defaultMapCenterLat;
+      centerLng = AppConfig.defaultMapCenterLng;
+    }
+
     final tileUrl =
         'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}';
 
@@ -241,32 +260,114 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                 Text(
                   'Ngày: ${item.workDate == null ? '--' : DateFormat('dd/MM/yyyy').format(item.workDate!)}',
                 ),
-                Text('Giờ vào: ${item.checkInTime}'),
-                Text('Giờ ra: ${item.checkOutTime}'),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
+                // Check-in / check-out row with location coords
+                Row(
+                  children: [
+                    const Icon(Icons.login, size: 14, color: AppColors.success),
+                    const SizedBox(width: 4),
+                    Text('Vào: ${item.checkInTime}'),
+                    if (hasCheckIn)
+                      Text(
+                        '  (${item.checkInLat!.toStringAsFixed(5)}, ${item.checkInLng!.toStringAsFixed(5)})',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.textMuted),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.logout, size: 14, color: AppColors.danger),
+                    const SizedBox(width: 4),
+                    Text('Ra: ${item.checkOutTime}'),
+                    if (hasCheckOut)
+                      Text(
+                        '  (${item.checkOutLat!.toStringAsFixed(5)}, ${item.checkOutLng!.toStringAsFixed(5)})',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.textMuted),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Map legend
+                if (hasCheckIn || hasCheckOut)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        if (hasCheckIn) ...[
+                          const Icon(Icons.location_on,
+                              size: 14, color: AppColors.success),
+                          const SizedBox(width: 2),
+                          const Text('Vào',
+                              style: TextStyle(
+                                  fontSize: 11, color: AppColors.success)),
+                          const SizedBox(width: 12),
+                        ],
+                        if (hasCheckOut) ...[
+                          const Icon(Icons.location_on,
+                              size: 14, color: AppColors.danger),
+                          const SizedBox(width: 2),
+                          const Text('Ra',
+                              style: TextStyle(
+                                  fontSize: 11, color: AppColors.danger)),
+                        ],
+                      ],
+                    ),
+                  ),
+                if (!hasCheckIn && !hasCheckOut)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Không có dữ liệu vị trí GPS',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: SizedBox(
                     height: 220,
                     child: FlutterMap(
                       options: MapOptions(
-                        initialCenter: LatLng(lat, lng),
-                        initialZoom: 15,
+                        initialCenter: LatLng(centerLat, centerLng),
+                        initialZoom: zoom,
                       ),
                       children: [
                         TileLayer(urlTemplate: tileUrl),
                         MarkerLayer(
                           markers: [
-                            Marker(
-                              point: LatLng(lat, lng),
-                              width: 34,
-                              height: 34,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: AppColors.earlyTeal,
-                                size: 30,
+                            if (hasCheckIn)
+                              Marker(
+                                point: LatLng(
+                                    item.checkInLat!, item.checkInLng!),
+                                width: 36,
+                                height: 48,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _MapLabel(label: 'Vào', color: AppColors.success),
+                                    const Icon(Icons.location_on,
+                                        color: AppColors.success, size: 28),
+                                  ],
+                                ),
                               ),
-                            ),
+                            if (hasCheckOut)
+                              Marker(
+                                point: LatLng(
+                                    item.checkOutLat!, item.checkOutLng!),
+                                width: 36,
+                                height: 48,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _MapLabel(label: 'Ra', color: AppColors.danger),
+                                    const Icon(Icons.location_on,
+                                        color: AppColors.danger, size: 28),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ],
@@ -1036,6 +1137,33 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
+
+class _MapLabel extends StatelessWidget {
+  const _MapLabel({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+}
 
 class _AttendanceHeaderText extends StatelessWidget {
   const _AttendanceHeaderText(this.text);

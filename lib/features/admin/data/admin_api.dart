@@ -265,8 +265,10 @@ class DashboardAttendanceLogItem {
     required this.totalHours,
     required this.locationStatus,
     required this.attendanceStatus,
-    required this.latitude,
-    required this.longitude,
+    this.checkInLat,
+    this.checkInLng,
+    this.checkOutLat,
+    this.checkOutLng,
     this.entryCount,
   });
 
@@ -280,8 +282,10 @@ class DashboardAttendanceLogItem {
   final String totalHours;
   final String locationStatus;
   final String attendanceStatus;
-  final double? latitude;
-  final double? longitude;
+  final double? checkInLat;
+  final double? checkInLng;
+  final double? checkOutLat;
+  final double? checkOutLng;
   final int? entryCount;
 }
 
@@ -1570,14 +1574,10 @@ class AdminApi {
                           e['attendance_status'] as String? ??
                           'on_time')
                       .toLowerCase(),
-              latitude:
-                  _toDouble(e['latitude']) ??
-                  _toDouble(e['lat']) ??
-                  _toDouble(e['checkin_latitude']),
-              longitude:
-                  _toDouble(e['longitude']) ??
-                  _toDouble(e['lng']) ??
-                  _toDouble(e['checkin_longitude']),
+              checkInLat: _toDouble(e['checkin_lat']),
+              checkInLng: _toDouble(e['checkin_lng']),
+              checkOutLat: _toDouble(e['checkout_lat']),
+              checkOutLng: _toDouble(e['checkout_lng']),
               entryCount: _toInt(e['count']) ?? _toInt(e['entry_count']),
             );
           })
