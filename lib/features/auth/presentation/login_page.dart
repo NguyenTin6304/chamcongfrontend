@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 
 import '../../../core/config/app_config.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/auth_api.dart';
 import 'widgets/recaptcha_v2.dart';
@@ -98,6 +99,11 @@ class _LoginPageState extends State<LoginPage> {
 
         me = await _authApi.me(token: activeAccessToken);
       }
+
+      // Register FCM token for auto-login sessions too.
+      PushNotificationService.requestTokenAndRegister(
+        accessToken: activeAccessToken,
+      );
 
       if (!mounted) {
         return;
@@ -276,6 +282,11 @@ class _LoginPageState extends State<LoginPage> {
       } catch (_) {
         // Fallback to USER flow if /auth/me temporarily fails.
       }
+
+      // Register FCM token in background — never blocks login flow.
+      PushNotificationService.requestTokenAndRegister(
+        accessToken: result.accessToken,
+      );
 
       if (!mounted) {
         return;

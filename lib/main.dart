@@ -3,6 +3,8 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
 import 'core/layout/app_scaffold.dart';
+import 'core/services/notification_store.dart';
+import 'core/services/push_notification_service.dart';
 import 'core/theme/app_colors.dart';
 import 'features/admin/presentation/shell/admin_shell_page.dart';
 import 'features/auth/presentation/forgot_password_page.dart';
@@ -10,12 +12,25 @@ import 'features/auth/presentation/login_page.dart';
 import 'features/auth/presentation/reset_password_page.dart';
 import 'features/attendance/presentation/employee_exceptions_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await PushNotificationService.initializeFirebase();
   runApp(const MainApp());
 }
 
-class MainApp extends StatelessWidget {
+class MainApp extends StatefulWidget {
   const MainApp({super.key});
+
+  @override
+  State<MainApp> createState() => _MainAppState();
+}
+
+class _MainAppState extends State<MainApp> {
+  @override
+  void initState() {
+    super.initState();
+    PushNotificationService.setupForegroundHandler(NotificationStore.add);
+  }
 
   static const Set<String> _supportedPaths = {
     '/login',

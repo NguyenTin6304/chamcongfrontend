@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import 'notification_bell.dart';
 
 class AdminTopbar extends StatelessWidget {
   const AdminTopbar({
@@ -59,11 +60,7 @@ class AdminTopbar extends StatelessWidget {
             onPressed: onReloadTap,
             icon: const Icon(Icons.refresh),
           ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_outlined),
-          ),
+          const NotificationBell(),
           const SizedBox(width: 4),
           InkWell(
             onTap: onAvatarTap,

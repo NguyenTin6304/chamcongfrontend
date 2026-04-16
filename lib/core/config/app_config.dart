@@ -40,6 +40,28 @@
     defaultValue: '10.776889,106.700806',
   );
 
+  // Firebase project config (public values — safe to hardcode).
+  // Override at build time if needed:
+  //   --dart-define=FIREBASE_API_KEY=...  --dart-define=FIREBASE_APP_ID=...
+  static const String firebaseApiKey = String.fromEnvironment(
+    'FIREBASE_API_KEY',
+    defaultValue: 'AIzaSyB14n5rnaDTqxdXb0_HZ3KRqObnphYt5nc',
+  );
+
+  static const String firebaseAppId = String.fromEnvironment(
+    'FIREBASE_APP_ID',
+    defaultValue: '1:926798360325:web:648064645cce7275c2116c',
+  );
+
+  static const String firebaseProjectId = 'chamcongfcm';
+  static const String firebaseMessagingSenderId = '926798360325';
+  static const String firebaseAuthDomain = 'chamcongfcm.firebaseapp.com';
+  static const String firebaseStorageBucket = 'chamcongfcm.firebasestorage.app';
+
+  // VAPID key for Web Push (Firebase Console → Project Settings → Cloud Messaging → Web Push certificates).
+  static const String fcmVapidKey =
+      'BGO9eCn8_xCCHw7aQrke0ydfxzZQoXezudIfB2irJB5t5bg3xfg4P2fvCKiY8nR60r53MnSisD8nASiI7PzCLRU';
+
   static double get defaultMapCenterLat {
     return _parseMapCenterPart(index: 0, fallback: 10.776889);
   }

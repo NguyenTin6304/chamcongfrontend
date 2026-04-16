@@ -10,6 +10,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/layout/responsive.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../widgets/common/notification_bell.dart';
 import '../../attendance/data/attendance_api.dart';
 
 class HomePageBody extends StatefulWidget {
@@ -371,6 +372,8 @@ class _HomePageBodyState extends State<HomePageBody> {
             ),
           ),
           const Spacer(),
+          const NotificationBell(iconColor: AppColors.primary),
+          const SizedBox(width: 4),
           GestureDetector(
             onTap: () => widget.onNavigate?.call(2),
             child: const CircleAvatar(

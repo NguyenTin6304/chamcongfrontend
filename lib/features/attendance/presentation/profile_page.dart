@@ -748,13 +748,6 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
             label: 'Đổi mật khẩu',
             onTap: _showChangePasswordDialog,
           ),
-          _buildDivider(),
-          _buildSettingItem(
-            icon: Icons.dark_mode_outlined,
-            iconColor: AppColors.textSecondary,
-            label: 'Chế độ tối',
-            valueText: 'Tắt',
-          ),
         ],
       ),
     );

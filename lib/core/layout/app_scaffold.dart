@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../features/attendance/presentation/history_page.dart';
 import '../../features/attendance/presentation/profile_page.dart';
 import '../../features/home/presentation/home_page.dart';
-import '../theme/app_colors.dart';
 
 class AppScaffold extends StatefulWidget {
   const AppScaffold({
@@ -81,7 +80,6 @@ class _AppScaffoldState extends State<AppScaffold> {
     ];
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       body: IndexedStack(
         index: _selectedIndex,
         children: bodies,
