@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/storage/token_storage.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/common/deadline_chip.dart';
+import '../../auth/data/auth_session_service.dart';
 import '../data/attendance_api.dart';
 
 class EmployeeExceptionsScreen extends StatefulWidget {
@@ -14,11 +14,10 @@ class EmployeeExceptionsScreen extends StatefulWidget {
 }
 
 class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
-  final _tokenStorage = TokenStorage();
+  final _authSession = AuthSessionService();
   final _api = const AttendanceApi();
   final _explanationController = TextEditingController();
 
-  String? _token;
   bool _loading = true;
   bool _submitting = false;
   String? _error;
@@ -40,22 +39,35 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
   // Logic
 
   Future<void> _bootstrap() async {
-    final token = await _tokenStorage.getToken();
+    final token = await _resolveToken();
     if (!mounted) return;
     if (token == null || token.isEmpty) {
-      setState(() {
-        _token = null;
-        _loading = false;
-        _error = 'Phiên đăng nhập không hợp lệ.';
-      });
+      setState(() => _loading = false);
       return;
     }
-    _token = token;
-    await _loadExceptions();
+    await _loadExceptions(tokenOverride: token);
   }
 
-  Future<void> _loadExceptions() async {
-    final token = _token;
+  Future<String?> _resolveToken() async {
+    try {
+      final token = await _authSession.resolveAccessToken();
+      if (!mounted) return null;
+      if (token == null || token.isEmpty) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        return null;
+      }
+      return token;
+    } catch (error) {
+      if (!mounted) return null;
+      setState(() {
+        _error = error.toString();
+      });
+      return null;
+    }
+  }
+
+  Future<void> _loadExceptions({String? tokenOverride}) async {
+    final token = tokenOverride ?? await _resolveToken();
     if (token == null || token.isEmpty) return;
     setState(() {
       _loading = true;
@@ -84,7 +96,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
   }
 
   Future<void> _selectException(EmployeeExceptionItem item) async {
-    final token = _token;
+    final token = await _resolveToken();
     if (token == null || token.isEmpty) return;
     setState(() {
       _selected = item;
@@ -110,7 +122,7 @@ class _EmployeeExceptionsScreenState extends State<EmployeeExceptionsScreen> {
   }
 
   Future<void> _submitExplanation() async {
-    final token = _token;
+    final token = await _resolveToken();
     final selected = _selected;
     final explanation = _explanationController.text.trim();
     if (token == null ||

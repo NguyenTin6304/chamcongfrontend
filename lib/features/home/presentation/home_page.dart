@@ -8,10 +8,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/layout/responsive.dart';
-import '../../../core/storage/token_storage.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/common/notification_bell.dart';
 import '../../attendance/data/attendance_api.dart';
+import '../../auth/data/auth_session_service.dart';
 
 class HomePageBody extends StatefulWidget {
   const HomePageBody({super.key, this.onNavigate, this.onAttendanceChanged});
@@ -37,16 +37,19 @@ class _HomePageBodyState extends State<HomePageBody> {
     'Chủ Nhật',
   ];
 
-  final _tokenStorage = TokenStorage();
+  final _authSession = AuthSessionService();
   final _attendanceApi = const AttendanceApi();
+  final MapController _mapController = MapController();
 
-  String? _token;
   AttendanceStatusResult? _status;
   Position? _currentPosition;
+  List<GeofencePoint> _geofences = [];
   bool _isLoadingAction = false;
   bool _isLoadingPage = true;
+  bool _isLocating = false;
   List<AttendanceLogItem> _recentLogs = [];
   Timer? _clockTimer;
+  StreamSubscription<Position>? _positionStream;
   DateTime _now = DateTime.now();
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -65,6 +68,7 @@ class _HomePageBodyState extends State<HomePageBody> {
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _positionStream?.cancel();
     super.dispose();
   }
 
@@ -74,19 +78,38 @@ class _HomePageBodyState extends State<HomePageBody> {
     if (!mounted) return;
     setState(() => _isLoadingPage = true);
 
-    final token = await _tokenStorage.getToken();
+    final token = await _resolveToken();
     if (!mounted) return;
 
-    if (token == null || token.isEmpty) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+    if (token == null) {
+      setState(() => _isLoadingPage = false);
       return;
     }
 
-    setState(() => _token = token);
-
-    await Future.wait([_loadStatus(token), _loadLogs(token), _fetchLocation()]);
+    await Future.wait([
+      _loadStatus(token),
+      _loadLogs(token),
+      _fetchLocation(),
+      _loadGeofences(token),
+    ]);
 
     if (mounted) setState(() => _isLoadingPage = false);
+  }
+
+  Future<String?> _resolveToken() async {
+    try {
+      final token = await _authSession.resolveAccessToken();
+      if (!mounted) return null;
+      if (token == null || token.isEmpty) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        return null;
+      }
+      return token;
+    } catch (error) {
+      if (!mounted) return null;
+      _showSnack('Không thể khôi phục phiên đăng nhập: $error');
+      return null;
+    }
   }
 
   Future<void> _loadStatus(String token) async {
@@ -100,6 +123,13 @@ class _HomePageBodyState extends State<HomePageBody> {
     try {
       final logs = await _attendanceApi.getMyLogs(token);
       if (mounted) setState(() => _recentLogs = logs);
+    } catch (_) {}
+  }
+
+  Future<void> _loadGeofences(String token) async {
+    try {
+      final geofences = await _attendanceApi.getMyGeofences(token);
+      if (mounted) setState(() => _geofences = geofences);
     } catch (_) {}
   }
 
@@ -117,13 +147,101 @@ class _HomePageBodyState extends State<HomePageBody> {
         return;
       }
 
+      // First fix: always accept regardless of accuracy so the map is visible.
+      // On desktop, this may be a WiFi/IP fix (500–5000 m accuracy) — that's
+      // fine as a starting point; the stream will replace it when a better
+      // fix arrives.
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.best,
         ),
       );
       if (mounted) setState(() => _currentPosition = position);
+
+      // Stream updates: only replace the current position when the new fix is
+      // genuinely better — i.e. its accuracy is strictly smaller than what we
+      // already have. This prevents WiFi-noise jumps on desktop where
+      // successive fixes can differ by 1–2 km with no real movement.
+      _positionStream?.cancel();
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 5,
+        ),
+      ).listen((pos) {
+        if (!mounted) return;
+        final current = _currentPosition;
+        // Reject fix that is worse than or equal to what we already have
+        if (current != null && pos.accuracy >= current.accuracy) return;
+        setState(() => _currentPosition = pos);
+        try {
+          _mapController.move(
+            LatLng(pos.latitude, pos.longitude),
+            _mapController.camera.zoom,
+          );
+        } catch (_) {}
+      });
     } catch (_) {}
+  }
+
+  // ── Locate / Refresh GPS ─────────────────────────────────────────────────
+
+  Future<void> _refreshLocation() async {
+    if (_isLocating) return;
+    setState(() => _isLocating = true);
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showSnack('Dịch vụ GPS đang tắt.');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showSnack('Chưa cấp quyền vị trí.');
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _currentPosition = pos);
+      try {
+        _mapController.move(
+          LatLng(pos.latitude, pos.longitude),
+          _mapController.camera.zoom,
+        );
+      } catch (_) {}
+
+      // Restart stream in case it was never started (e.g. GPS was disabled on
+      // initial load and the user just enabled it before pressing refresh).
+      _positionStream ??= Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 5,
+          ),
+        ).listen((streamPos) {
+          if (!mounted) return;
+          final current = _currentPosition;
+          if (current != null && streamPos.accuracy >= current.accuracy) return;
+          setState(() => _currentPosition = streamPos);
+          try {
+            _mapController.move(
+              LatLng(streamPos.latitude, streamPos.longitude),
+              _mapController.camera.zoom,
+            );
+          } catch (_) {}
+        });
+    } catch (e) {
+      if (mounted) _showSnack('Không thể lấy vị trí: $e');
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
   }
 
   // ── Action Handlers ───────────────────────────────────────────────────────
@@ -132,29 +250,40 @@ class _HomePageBodyState extends State<HomePageBody> {
   Future<void> _handleCheckout() => _doAction(isCheckin: false);
 
   Future<void> _doAction({required bool isCheckin}) async {
-    final token = _token;
-    if (token == null) return;
-
+    // Show spinner immediately before any async work
     setState(() => _isLoadingAction = true);
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw Exception('Dịch vụ GPS đang tắt.');
+      final token = await _resolveToken();
+      if (token == null) return;
 
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        throw Exception('Chưa cấp quyền vị trí.');
-      }
+      // Reuse stream-maintained position if available — avoids 1–10s GPS
+      // re-acquisition on every checkin. Stream (distanceFilter: 5m) keeps
+      // _currentPosition fresh whenever the user moves, so this is safe.
+      // Only fall back to a fresh fix when no position has been acquired yet.
+      Position position;
+      if (_currentPosition != null) {
+        position = _currentPosition!;
+      } else {
+        // First-time: no stream position yet — request one now
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) throw Exception('Dịch vụ GPS đang tắt.');
 
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      if (mounted) setState(() => _currentPosition = position);
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          throw Exception('Chưa cấp quyền vị trí.');
+        }
+
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.best,
+          ),
+        );
+        if (mounted) setState(() => _currentPosition = position);
+      }
 
       final result = isCheckin
           ? await _attendanceApi.checkin(
@@ -295,10 +424,6 @@ class _HomePageBodyState extends State<HomePageBody> {
             return ta.compareTo(tb);
           });
     return inLogs.isEmpty ? null : inLogs.first;
-  }
-
-  String? get _geofenceName {
-    return _latestLog?.matchedGeofence;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -567,6 +692,21 @@ class _HomePageBodyState extends State<HomePageBody> {
 
   // ── Map ───────────────────────────────────────────────────────────────────
 
+  /// Whether the user's current GPS position is inside ANY active geofence.
+  bool get _isInsideGeofence {
+    final pos = _currentPosition;
+    if (pos == null || _geofences.isEmpty) return false;
+    for (final g in _geofences) {
+      final dist = const Distance().as(
+        LengthUnit.Meter,
+        LatLng(pos.latitude, pos.longitude),
+        LatLng(g.latitude, g.longitude),
+      );
+      if (dist <= g.radiusM) return true;
+    }
+    return false;
+  }
+
   Widget _buildMap(BuildContext context) {
     final mapHeight = context.isDesktop ? 260.0 : 200.0;
     final position = _currentPosition;
@@ -588,8 +728,26 @@ class _HomePageBodyState extends State<HomePageBody> {
       );
     }
 
-    final center = LatLng(position.latitude, position.longitude);
-    final geofenceName = _geofenceName;
+    // Map always centers on user's current GPS position
+    final userPos = LatLng(position.latitude, position.longitude);
+    final inside = _isInsideGeofence;
+
+    // GPS accuracy circle — translucent, shows fix quality
+    final accuracy = position.accuracy;
+    final accuracyCircles = <CircleMarker>[
+      if (accuracy > 0 && accuracy < 500)
+        CircleMarker(
+          point: userPos,
+          radius: accuracy,
+          useRadiusInMeter: true,
+          color: AppColors.primary.withValues(alpha: 0.12),
+          borderColor: AppColors.primary.withValues(alpha: 0.35),
+          borderStrokeWidth: 1.0,
+        ),
+    ];
+
+    final latStr = position.latitude.toStringAsFixed(6);
+    final lngStr = position.longitude.toStringAsFixed(6);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -598,8 +756,11 @@ class _HomePageBodyState extends State<HomePageBody> {
         child: Stack(
           children: [
             FlutterMap(
+              // Stable key — MapController handles all position movements
+              key: const ValueKey('user-map'),
+              mapController: _mapController,
               options: MapOptions(
-                initialCenter: center,
+                initialCenter: userPos,
                 initialZoom: 15,
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.none,
@@ -611,28 +772,144 @@ class _HomePageBodyState extends State<HomePageBody> {
                       'https://maps.geoapify.com/v1/tile/${AppConfig.geoapifyMapStyle}/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}',
                   userAgentPackageName: 'com.example.birdle',
                 ),
-                CircleLayer(
-                  circles: [
-                    CircleMarker(
-                      point: center,
-                      radius: 8,
-                      color: AppColors.primary,
-                      borderColor: AppColors.surface,
-                      borderStrokeWidth: 2,
+                // Accuracy halo (drawn first so it's behind everything)
+                if (accuracyCircles.isNotEmpty)
+                  CircleLayer(circles: accuracyCircles),
+                // Blue dot marker — Google Maps style
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: userPos,
+                      width: 15,
+                      height: 15,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.40),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-            if (geofenceName != null)
+            // Top-left: inside/outside status
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.textPrimary.withValues(alpha: 0.12),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _geofences.isEmpty
+                            ? AppColors.primary
+                            : (inside ? AppColors.success : AppColors.error),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _geofences.isEmpty
+                          ? 'GPS hiện tại'
+                          : (inside ? 'Trong phạm vi' : 'Ngoài phạm vi'),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _geofences.isEmpty
+                            ? AppColors.textPrimary
+                            : (inside ? AppColors.success : AppColors.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Top-right: lat / lng + accuracy quality
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.textPrimary.withValues(alpha: 0.10),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Lat: $latStr',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      'Lng: $lngStr',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppColors.textSecondary,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    if (accuracy > 0) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '±${accuracy < 10 ? accuracy.toStringAsFixed(1) : accuracy.toStringAsFixed(0)}m',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: accuracy <= 20
+                              ? AppColors.success
+                              : accuracy <= 100
+                                  ? AppColors.warning
+                                  : AppColors.error,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            // Bottom-left: geofence name
+            if (_geofences.isNotEmpty)
               Positioned(
                 bottom: 8,
                 left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(6),
@@ -653,9 +930,11 @@ class _HomePageBodyState extends State<HomePageBody> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Lần gần nhất: $geofenceName',
+                        _geofences.length == 1
+                            ? _geofences.first.name
+                            : '${_geofences.length} khu vực',
                         style: const TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: AppColors.textPrimary,
                         ),
                       ),
@@ -663,6 +942,48 @@ class _HomePageBodyState extends State<HomePageBody> {
                   ),
                 ),
               ),
+            // Bottom-right: locate / refresh GPS button (Google Maps style)
+            Positioned(
+              bottom: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: _isLocating ? null : _refreshLocation,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.textPrimary.withValues(alpha: 0.18),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: _isLocating
+                      ? const Padding(
+                          padding: EdgeInsets.all(9),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : Icon(
+                          accuracy > 0 && accuracy <= 100
+                              ? Icons.my_location
+                              : Icons.location_searching,
+                          size: 18,
+                          color: accuracy <= 0
+                              ? AppColors.textSecondary
+                              : accuracy <= 100
+                                  ? AppColors.primary
+                                  : AppColors.warning,
+                        ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -729,8 +1050,8 @@ class _HomePageBodyState extends State<HomePageBody> {
                       color: _isEmployeeInactive
                           ? AppColors.error
                           : (onTap != null
-                              ? AppColors.surface
-                              : AppColors.textSecondary),
+                                ? AppColors.surface
+                                : AppColors.textSecondary),
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),

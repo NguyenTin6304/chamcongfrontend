@@ -99,28 +99,52 @@ class _MainAppState extends State<MainApp> {
         page = const ResetPasswordPage();
         break;
       case '/admin':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'dashboard');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'dashboard',
+        );
         break;
       case '/admin/attendance':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'logs');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'logs',
+        );
         break;
       case '/admin/employees':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'employees');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'employees',
+        );
         break;
       case '/admin/groups':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'groups');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'groups',
+        );
         break;
       case '/admin/geofences':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'geofences');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'geofences',
+        );
         break;
       case '/admin/reports':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'reports');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'reports',
+        );
         break;
       case '/admin/exceptions':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'exceptions');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'exceptions',
+        );
         break;
       case '/admin/settings':
-        page = AdminShellPage(email: _extractEmailArg(settings), initialSection: 'settings');
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'settings',
+        );
         break;
       case '/home':
         page = AppScaffold(initialIndex: 0, email: _extractEmailArg(settings));
@@ -140,6 +164,10 @@ class _MainAppState extends State<MainApp> {
     }
 
     return MaterialPageRoute(builder: (_) => page, settings: settings);
+  }
+
+  List<Route<dynamic>> _buildInitialRoutes(String initialRouteName) {
+    return <Route<dynamic>>[_buildRoute(RouteSettings(name: initialRouteName))];
   }
 
   @override
@@ -163,6 +191,7 @@ class _MainAppState extends State<MainApp> {
         useMaterial3: true,
       ),
       initialRoute: _resolveInitialRouteFromUrl(),
+      onGenerateInitialRoutes: _buildInitialRoutes,
       onGenerateRoute: _buildRoute,
       onUnknownRoute: (settings) => MaterialPageRoute(
         builder: (_) => const LoginPage(),
