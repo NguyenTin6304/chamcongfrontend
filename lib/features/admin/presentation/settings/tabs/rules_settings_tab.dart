@@ -113,8 +113,13 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
           return rule.copyWith(isActive: checkoutGrace > 0, fields: fields);
         case 'gps':
           final radius = _toInt(data['radius_m']);
-          if (radius == null) return rule;
-          return rule.copyWith(fields: {...rule.fields, 'min_accuracy_meters': radius});
+          final lat = _toDouble(data['latitude']);
+          final lng = _toDouble(data['longitude']);
+          final fields = Map<String, dynamic>.from(rule.fields);
+          if (radius != null) fields['min_accuracy_meters'] = radius;
+          if (lat != null) fields['latitude'] = lat;
+          if (lng != null) fields['longitude'] = lng;
+          return rule.copyWith(fields: fields);
         default:
           return rule;
       }
@@ -183,6 +188,10 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         case 'gps':
           final radius = _toInt(item.fields['min_accuracy_meters']);
           if (radius != null) extra['radius_m'] = radius;
+          final lat = _toDouble(item.fields['latitude']);
+          if (lat != null) extra['latitude'] = lat;
+          final lng = _toDouble(item.fields['longitude']);
+          if (lng != null) extra['longitude'] = lng;
         default:
           break;
       }
@@ -213,6 +222,10 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
           case 'gps':
             final radius = _toInt(rule.fields['min_accuracy_meters']);
             if (radius != null) extra['radius_m'] = radius;
+            final lat = _toDouble(rule.fields['latitude']); 
+            if (lat != null) extra['latitude'] = lat;
+            final lng = _toDouble(rule.fields['longitude']);
+            if (lng != null) extra['longitude'] = lng;
           default:
             break;
         }
@@ -360,7 +373,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         iconBg: Color(0xFFEFF6FF),
         iconFg: AppColors.primary,
         isActive: true,
-        fields: {'min_accuracy_meters': 50},
+        fields: {'latitude': 0.0, 'longitude': 0.0, 'min_accuracy_meters': 200},
       ),
       _RuleItem(
         id: null,
@@ -534,10 +547,32 @@ class _RuleCard extends StatelessWidget {
           onChanged: (v) => onChangedField('auto_checkout_time', v),
         );
       case 'gps':
-        return _NumberFieldRow(
-          label: 'min_accuracy_meters',
-          value: item.fields['min_accuracy_meters'],
-          onChanged: (v) => onChangedField('min_accuracy_meters', v),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tọa độ SYSTEM RULE',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 6),
+            _DoubleFieldRow(
+              label: 'Vĩ độ (latitude)',
+              value: item.fields['latitude'] ?? 0.0,
+              onChanged: (v) => onChangedField('latitude', v),
+            ),
+            const SizedBox(height: 8),
+            _DoubleFieldRow(
+              label: 'Kinh độ (longitude)',
+              value: item.fields['longitude'] ?? 0.0,
+              onChanged: (v) => onChangedField('longitude', v),
+            ),
+            const SizedBox(height: 8),
+            _NumberFieldRow(
+              label: 'Bán kính (m)',
+              value: item.fields['min_accuracy_meters'],
+              onChanged: (v) => onChangedField('min_accuracy_meters', v),
+            ),
+          ],
         );
       case 'overtime':
         return Column(
