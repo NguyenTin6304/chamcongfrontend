@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../../../core/config/app_config.dart';
-import '../../../../../core/storage/token_storage.dart';
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/config/app_config.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 
 class RulesSettingsTab extends StatefulWidget {
   const RulesSettingsTab({super.key});
@@ -592,7 +592,10 @@ class _RuleCard extends StatelessWidget {
         );
       case 'auto_exception':
         final map =
-            Map<String, dynamic>.from(item.fields['trigger_conditions'] ?? {});
+            Map<String, dynamic>.from(
+              (item.fields['trigger_conditions'] as Map<dynamic, dynamic>?) ??
+                  const {},
+            );
         return Wrap(
           spacing: 8,
           runSpacing: 8,
