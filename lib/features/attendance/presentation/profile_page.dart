@@ -1,9 +1,18 @@
+import 'dart:async';
+import 'dart:developer' as dev;
+
 import 'package:flutter/material.dart';
 
-import '../../../core/storage/token_storage.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../auth/data/auth_api.dart';
-import '../data/attendance_api.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/auth/data/auth_api.dart';
+import 'package:birdle/features/attendance/data/attendance_api.dart';
+
+enum _AuthState { ok, failed, requiresLogin }
+
+enum _EmpState { ok, failed, notAssigned, inactive }
 
 class ProfilePageBody extends StatefulWidget {
   const ProfilePageBody({super.key});
@@ -27,11 +36,8 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   bool _isLoading = true;
   bool _isLoggingOut = false;
-  bool _authFailed = false;
-  bool _authRequiresLogin = false;
-  bool _empFailed = false;
-  bool _employeeNotAssigned = false;
-  bool _employeeInactive = false;
+  _AuthState _authState = _AuthState.ok;
+  _EmpState _empState = _EmpState.ok;
   String? _authErrorMessage;
 
   @override
@@ -45,26 +51,21 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     if (!mounted) return;
 
     if (token == null || token.isEmpty) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+      unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false));
       return;
     }
 
     setState(() {
       _isLoading = true;
-      _authFailed = false;
-      _authRequiresLogin = false;
-      _empFailed = false;
-      _employeeNotAssigned = false;
-      _employeeInactive = false;
+      _authState = _AuthState.ok;
+      _empState = _EmpState.ok;
       _authErrorMessage = null;
     });
 
     UserMeResult? me;
     EmployeeProfile? emp;
-    bool authErr = false;
-    bool authRequiresLogin = false;
-    bool empErr = false;
-    bool empNotAssigned = false;
+    var authState = _AuthState.ok;
+    var empState = _EmpState.ok;
     String? authErrorMessage;
 
     await Future.wait<void>([
@@ -72,23 +73,26 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
         try {
           me = await _authApi.me(token: token);
         } on AuthApiException catch (error) {
-          authErr = true;
-          authRequiresLogin = error.isAuthFailure;
-          authErrorMessage = authRequiresLogin
+          authState = error.isAuthFailure
+              ? _AuthState.requiresLogin
+              : _AuthState.failed;
+          authErrorMessage = error.isAuthFailure
               ? 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.'
               : error.message;
-        } catch (_) {
-          authErr = true;
+        } on Exception catch (e) {
+          authState = _AuthState.failed;
           authErrorMessage = 'Không thể tải hồ sơ đăng nhập. Vui lòng thử lại.';
+          dev.log('_loadProfile auth: $e', name: 'ProfilePageBody');
         }
       }(),
       () async {
         try {
           emp = await _attendanceApi.getMyEmployeeProfile(token);
         } on EmployeeNotAssignedException {
-          empNotAssigned = true;
-        } catch (_) {
-          empErr = true;
+          empState = _EmpState.notAssigned;
+        } on Exception catch (e) {
+          empState = _EmpState.failed;
+          dev.log('_loadProfile emp: $e', name: 'ProfilePageBody');
         }
       }(),
     ]);
@@ -96,12 +100,12 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     if (!mounted) return;
 
     setState(() {
-      _authFailed = authErr;
-      _authRequiresLogin = authRequiresLogin;
+      _authState = authState;
       _authErrorMessage = authErrorMessage;
-      _empFailed = empErr;
-      _employeeNotAssigned = empNotAssigned;
-      _employeeInactive = emp != null && !emp!.active;
+      if (authState == _AuthState.ok && emp != null && !emp!.active) {
+        empState = _EmpState.inactive;
+      }
+      _empState = empState;
       if (me != null) {
         _email = me!.email;
         _role = me!.role;
@@ -114,11 +118,7 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
         _employeeCode = emp!.code;
         _groupName = emp!.groupName;
         _joinedAt = emp!.joinedAt;
-      } else if (empErr) {
-        _employeeCode = '';
-        _groupName = null;
-        _joinedAt = null;
-      } else if (empNotAssigned) {
+      } else if (empState == _EmpState.failed || empState == _EmpState.notAssigned) {
         _employeeCode = '';
         _groupName = null;
         _joinedAt = null;
@@ -135,15 +135,16 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
       if (refreshToken != null && refreshToken.isNotEmpty) {
         try {
           await _authApi.logout(refreshToken: refreshToken);
-        } catch (_) {
-          // best-effort
+        } on Exception catch (e) {
+          dev.log('logout best-effort: $e', name: 'ProfilePageBody');
         }
       }
       await _tokenStorage.clearSession();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false));
       }
-    } catch (_) {
+    } on Exception catch (e) {
+      dev.log('_handleLogout: $e', name: 'ProfilePageBody');
       if (mounted) {
         setState(() => _isLoggingOut = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -165,6 +166,7 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     var saving = false;
     String? errorText;
 
+    try {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -211,9 +213,10 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                 const SnackBar(content: Text('Đổi mật khẩu thành công.')),
               );
             } on AuthApiException catch (e) {
-              if (mounted) setDialogState(() { saving = false; errorText = e.message; });
-            } catch (_) {
-              if (mounted) setDialogState(() { saving = false; errorText = 'Đổi mật khẩu thất bại. Vui lòng thử lại.'; });
+              setDialogState(() { saving = false; errorText = e.message; });
+            } on Exception catch (e) {
+              dev.log('changePassword: $e', name: 'ProfilePageBody');
+              setDialogState(() { saving = false; errorText = 'Đổi mật khẩu thất bại. Vui lòng thử lại.'; });
             }
           }
 
@@ -310,7 +313,7 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                               ? const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.surface),
                                 )
                               : const Text('Xác nhận', style: TextStyle(fontSize: 15)),
                         ),
@@ -324,10 +327,11 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
         },
       ),
     );
-
-    currentCtrl.dispose();
-    newCtrl.dispose();
-    confirmCtrl.dispose();
+    } finally {
+      currentCtrl.dispose();
+      newCtrl.dispose();
+      confirmCtrl.dispose();
+    }
   }
 
   String get _avatarInitials {
@@ -350,14 +354,10 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
   }
 
-  String get _roleLabel {
-    switch (_role.toUpperCase()) {
-      case 'ADMIN':
-        return 'Quản trị viên';
-      default:
-        return 'Nhân viên';
-    }
-  }
+  String get _roleLabel => switch (_role.toUpperCase()) {
+    'ADMIN' => 'Quản trị viên',
+    _ => 'Nhân viên',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -368,7 +368,7 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _authFailed
+                : _authState != _AuthState.ok
                 ? _buildAuthError()
                 : _buildScrollBody(),
           ),
@@ -380,15 +380,16 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
   Widget _buildHeader() {
     return Container(
       color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: const Row(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      child: Row(
         children: [
           Text(
             'Cá nhân',
-            style: TextStyle(
+            style: AppTextStyles.headerTitle.copyWith(
               color: AppColors.textPrimary,
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -403,21 +404,18 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.lock_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -425,8 +423,8 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                   onPressed: _loadProfile,
                   child: const Text('Thử lại'),
                 ),
-                if (_authRequiresLogin) ...[
-                  const SizedBox(width: 12),
+                if (_authState == _AuthState.requiresLogin) ...[
+                  const SizedBox(width: AppSpacing.md),
                   FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -434,9 +432,9 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                     onPressed: () async {
                       await _tokenStorage.clearSession();
                       if (mounted) {
-                        Navigator.of(
+                        unawaited(Navigator.of(
                           context,
-                        ).pushNamedAndRemoveUntil('/login', (_) => false);
+                        ).pushNamedAndRemoveUntil('/login', (_) => false));
                       }
                     },
                     child: const Text('Đăng nhập lại'),
@@ -452,21 +450,23 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   Widget _buildEmployeeInactiveBanner() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      margin: AppSpacing.paddingHLg,
+      padding: AppSpacing.paddingAllMd,
       decoration: BoxDecoration(
         color: AppColors.errorLight,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.error, width: 0.5),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.block, size: 20, color: AppColors.error),
-          SizedBox(width: 10),
+          const Icon(Icons.block, size: 20, color: AppColors.error),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               'Tài khoản nhân viên của bạn đang bị vô hiệu hoá. Vui lòng liên hệ quản trị viên.',
-              style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -476,11 +476,11 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   Widget _buildEmpErrorBanner() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      margin: AppSpacing.paddingHLg,
+      padding: AppSpacing.paddingAllMd,
       decoration: BoxDecoration(
         color: AppColors.warningLight,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.warning, width: 0.5),
       ),
       child: Row(
@@ -490,19 +490,20 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
             size: 20,
             color: AppColors.warning,
           ),
-          const SizedBox(width: 10),
-          const Expanded(
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
             child: Text(
               'Không tải được thông tin nhân viên.',
-              style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
           GestureDetector(
             onTap: _loadProfile,
-            child: const Text(
+            child: Text(
               'Thử lại',
-              style: TextStyle(
-                fontSize: 13,
+              style: AppTextStyles.bodySmall.copyWith(
                 fontWeight: FontWeight.w600,
                 color: AppColors.primary,
               ),
@@ -515,21 +516,23 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   Widget _buildEmployeePendingBanner() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(12),
+      margin: AppSpacing.paddingHLg,
+      padding: AppSpacing.paddingAllMd,
       decoration: BoxDecoration(
         color: AppColors.warningLight,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.warning, width: 0.5),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.hourglass_empty, size: 20, color: AppColors.warning),
-          SizedBox(width: 10),
+          const Icon(Icons.hourglass_empty, size: 20, color: AppColors.warning),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               'Tài khoản chưa được admin gán nhân viên. Bạn chưa thể chấm công cho đến khi được duyệt.',
-              style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -545,21 +548,21 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 28),
+              const SizedBox(height: AppSpacing.xxxl),
               _buildAvatarSection(),
-              if (_employeeInactive && !_authFailed) ...[
-                const SizedBox(height: 12),
+              if (_empState == _EmpState.inactive) ...[
+                const SizedBox(height: AppSpacing.md),
                 _buildEmployeeInactiveBanner(),
               ],
-              if (_empFailed && !_authFailed) ...[
-                const SizedBox(height: 12),
+              if (_empState == _EmpState.failed) ...[
+                const SizedBox(height: AppSpacing.md),
                 _buildEmpErrorBanner(),
               ],
-              if (_employeeNotAssigned && !_authFailed) ...[
-                const SizedBox(height: 12),
+              if (_empState == _EmpState.notAssigned) ...[
+                const SizedBox(height: AppSpacing.md),
                 _buildEmployeePendingBanner(),
               ],
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               _buildInfoSection(
                 title: 'Thông tin cá nhân',
                 rows: [
@@ -571,11 +574,11 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                     label: 'Số điện thoại',
                     value: _phone.isNotEmpty ? _phone : '—',
                   ),
-                  _InfoRow(label: 'Ngày sinh', value: '—'),
-                  _InfoRow(label: 'Giới tính', value: '—'),
+                  const _InfoRow(label: 'Ngày sinh', value: '—'),
+                  const _InfoRow(label: 'Giới tính', value: '—'),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               _buildInfoSection(
                 title: 'Công việc',
                 rows: [
@@ -590,11 +593,11 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               _buildSettingsSection(),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.xxl),
               _buildLogoutButton(),
-              const SizedBox(height: 40),
+              const SizedBox(height: AppSpacing.xxxl + AppSpacing.sm),
             ],
           ),
         ),
@@ -610,8 +613,8 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     return Column(
       children: [
         Container(
-          width: 80,
-          height: 80,
+          width: AppSizes.avatarSize,
+          height: AppSizes.avatarSize,
           decoration: const BoxDecoration(
             color: AppColors.primaryLight,
             shape: BoxShape.circle,
@@ -619,48 +622,43 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
           child: Center(
             child: Text(
               _avatarInitials,
-              style: const TextStyle(
+              style: AppTextStyles.kpiNumber.copyWith(
                 fontSize: 28,
-                fontWeight: FontWeight.w700,
                 color: AppColors.primary,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         Text(
           _displayName,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
+          style: AppTextStyles.headerTitle.copyWith(
             color: AppColors.textPrimary,
           ),
         ),
         if (_employeeCode.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             _employeeCode,
-            style: const TextStyle(
-              fontSize: 13,
+            style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
         ],
         if (_role.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.xs,
+            ),
             decoration: BoxDecoration(
               color: chipBg,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: AppRadius.chipAll,
             ),
             child: Text(
               _roleLabel,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: chipColor,
-              ),
+              style: AppTextStyles.captionBold.copyWith(color: chipColor),
             ),
           ),
         ],
@@ -673,21 +671,25 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     required List<_InfoRow> rows,
   }) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
+      margin: AppSpacing.paddingHLg,
+      decoration: const BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.sm,
+            ),
             child: Text(
               title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
+              style: AppTextStyles.sectionTitle.copyWith(
                 color: AppColors.textPrimary,
               ),
             ),
@@ -705,20 +707,20 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   Widget _buildInfoRow(_InfoRow row) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         children: [
           Text(
             row.label,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-            ),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
           const Spacer(),
           Text(
             row.value,
-            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
             textAlign: TextAlign.right,
           ),
         ],
@@ -728,10 +730,11 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   Widget _buildSettingsSection() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
+      margin: AppSpacing.paddingHLg,
+      decoration: const BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         children: [
@@ -762,18 +765,20 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: AppRadius.cardAll,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.lg,
+        ),
         child: Row(
           children: [
             Icon(icon, size: 22, color: iconColor),
-            const SizedBox(width: 14),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 15,
+                style: AppTextStyles.sectionTitle.copyWith(
                   color: AppColors.textPrimary,
                 ),
               ),
@@ -781,13 +786,12 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
             if (valueText != null)
               Text(
                 valueText,
-                style: const TextStyle(
-                  fontSize: 14,
+                style: AppTextStyles.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
             if (onTap != null) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: AppSpacing.xs),
               const Icon(
                 Icons.chevron_right,
                 size: 20,
@@ -806,32 +810,30 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
 
   Widget _buildLogoutButton() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: AppSpacing.paddingHLg,
       child: SizedBox(
         width: double.infinity,
-        height: 56,
+        height: AppSizes.buttonHeight,
         child: Material(
           color: _isLoggingOut ? AppColors.border : AppColors.error,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: AppRadius.buttonAll,
           child: InkWell(
             onTap: _isLoggingOut ? null : _handleLogout,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: AppRadius.buttonAll,
             child: Center(
               child: _isLoggingOut
                   ? const SizedBox(
-                      width: 22,
-                      height: 22,
+                      width: AppSpacing.xxl,
+                      height: AppSpacing.xxl,
                       child: CircularProgressIndicator(
                         color: AppColors.surface,
                         strokeWidth: 2.5,
                       ),
                     )
-                  : const Text(
+                  : Text(
                       'Đăng xuất',
-                      style: TextStyle(
+                      style: AppTextStyles.buttonLabel.copyWith(
                         color: AppColors.surface,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
             ),

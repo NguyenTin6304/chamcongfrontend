@@ -66,4 +66,5 @@ class AppColors {
   static const Color warningLight = badgeBgLate;
   static const Color overtimeLight = badgeBgOvertime;
   static const Color errorLight = badgeBgException;
+  static const Color borderLight = Color(0xFFCBD5E1);
 }

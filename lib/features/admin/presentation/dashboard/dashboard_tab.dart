@@ -381,18 +381,18 @@ class _DashboardTabState extends State<DashboardTab> {
   static Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'late':
-        return const Color(0xFFD97706);
+        return AppColors.warning;
       case 'out_of_range':
       case 'outofrange':
       case 'oor':
       case 'absent':
       case 'missing_checkin_anomaly':
-        return const Color(0xFFDC2626);
+        return AppColors.error;
       case 'missed_checkout':
       case 'pending_timesheet':
-        return const Color(0xFFD97706);
+        return AppColors.warning;
       default:
-        return const Color(0xFF16A34A);
+        return AppColors.success;
     }
   }
 
@@ -576,7 +576,7 @@ class _DashboardTabState extends State<DashboardTab> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+        side: const BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -595,7 +595,7 @@ class _DashboardTabState extends State<DashboardTab> {
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
-                    const Color(0xFFF8FAFC),
+                    AppColors.surface,
                   ),
                   columns: const [
                     DataColumn(label: Text('Nhân viên')),
@@ -630,7 +630,7 @@ class _DashboardTabState extends State<DashboardTab> {
                                   Text(
                                     row.employeeCode,
                                     style: const TextStyle(
-                                      color: Color(0xFF64748B),
+                                      color: AppColors.textSecondary,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -664,16 +664,16 @@ class _DashboardTabState extends State<DashboardTab> {
                                         : Icons.location_off_outlined,
                                     size: 16,
                                     color: inRange
-                                        ? const Color(0xFF16A34A)
-                                        : const Color(0xFFDC2626),
+                                        ? AppColors.success
+                                        : AppColors.error,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     inRange ? 'Trong vùng' : 'Ngoài vùng',
                                     style: TextStyle(
                                       color: inRange
-                                          ? const Color(0xFF16A34A)
-                                          : const Color(0xFFDC2626),
+                                          ? AppColors.success
+                                          : AppColors.error,
                                     ),
                                   ),
                                 ],
@@ -701,7 +701,7 @@ class _DashboardTabState extends State<DashboardTab> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+        headingRowColor: WidgetStateProperty.all(AppColors.surface),
         columns: const [
           DataColumn(label: Text('Nhân viên')),
           DataColumn(label: Text('Phòng ban')),
@@ -735,7 +735,7 @@ class _DashboardTabState extends State<DashboardTab> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+        side: const BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -799,11 +799,11 @@ class _DashboardTabState extends State<DashboardTab> {
             const SizedBox(height: 8),
             const Row(
               children: [
-                _LegendDot(color: Color(0xFF16A34A), label: 'Đúng giờ'),
+                _LegendDot(color: AppColors.success, label: 'Đúng giờ'),
                 SizedBox(width: 14),
-                _LegendDot(color: Color(0xFFD97706), label: 'Đi muộn'),
+                _LegendDot(color: AppColors.warning, label: 'Đi muộn'),
                 SizedBox(width: 14),
-                _LegendDot(color: Color(0xFFDC2626), label: 'Ngoài vùng'),
+                _LegendDot(color: AppColors.error, label: 'Ngoài vùng'),
               ],
             ),
             const SizedBox(height: 14),
@@ -823,7 +823,7 @@ class _DashboardTabState extends State<DashboardTab> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+        side: const BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -866,7 +866,7 @@ class _DashboardTabState extends State<DashboardTab> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppColors.border),
                   ),
                   child: Row(
                     children: [
@@ -874,7 +874,7 @@ class _DashboardTabState extends State<DashboardTab> {
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: AppColors.surface,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(Icons.location_on_outlined, size: 18),
@@ -893,7 +893,7 @@ class _DashboardTabState extends State<DashboardTab> {
                             Text(
                               '${item.memberCount} thành viên',
                               style: const TextStyle(
-                                color: Color(0xFF64748B),
+                                color: AppColors.textSecondary,
                                 fontSize: 12,
                               ),
                             ),
@@ -905,8 +905,8 @@ class _DashboardTabState extends State<DashboardTab> {
                         height: 8,
                         decoration: BoxDecoration(
                           color: item.active
-                              ? const Color(0xFF16A34A)
-                              : const Color(0xFF94A3B8),
+                              ? AppColors.success
+                              : AppColors.textSecondary,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -920,12 +920,12 @@ class _DashboardTabState extends State<DashboardTab> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add, size: 18, color: Color(0xFF334155)),
+                  Icon(Icons.add, size: 18, color: AppColors.textPrimary),
                   SizedBox(width: 8),
                   Text(
                     'Thêm khu vực mới',
                     style: TextStyle(
-                      color: Color(0xFF334155),
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -943,7 +943,7 @@ class _DashboardTabState extends State<DashboardTab> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+        side: const BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -972,14 +972,14 @@ class _DashboardTabState extends State<DashboardTab> {
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppColors.border),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: const Color(0xFFE2E8F0),
+                        backgroundColor: AppColors.surface,
                         child: Text(
                           item.initials,
                           style: const TextStyle(
@@ -1002,7 +1002,7 @@ class _DashboardTabState extends State<DashboardTab> {
                             Text(
                               item.reason,
                               style: const TextStyle(
-                                color: Color(0xFF64748B),
+                                color: AppColors.textSecondary,
                                 fontSize: 12,
                               ),
                             ),
@@ -1013,7 +1013,7 @@ class _DashboardTabState extends State<DashboardTab> {
                         item.timeLabel,
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF64748B),
+                          color: AppColors.textSecondary,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1121,7 +1121,7 @@ class _MockWeeklyChart extends StatelessWidget {
         child: Center(
           child: Text(
             'Không thể tải dữ liệu xu hướng',
-            style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
         ),
       );
@@ -1133,7 +1133,7 @@ class _MockWeeklyChart extends StatelessWidget {
         child: Center(
           child: Text(
             'Chưa có dữ liệu xu hướng',
-            style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
         ),
       );
@@ -1219,7 +1219,7 @@ class _MockWeeklyChart extends StatelessWidget {
                             '$v',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Color(0xFF64748B),
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -1277,7 +1277,7 @@ class _MockWeeklyChart extends StatelessWidget {
                                                     5,
                                                     (_) => Container(
                                                       height: 1,
-                                                      color: const Color(0xFFF1F5F9),
+                                                      color: AppColors.border,
                                                     ),
                                                   ),
                                                 ),
@@ -1293,21 +1293,21 @@ class _MockWeeklyChart extends StatelessWidget {
                                                     _MiniBar(
                                                       width: barWidth,
                                                       height: h * (item.onTime / maxY),
-                                                      color: const Color(0xFF16A34A),
+                                                      color: AppColors.success,
                                                       loading: loading,
                                                     ),
                                                     SizedBox(width: barGap),
                                                     _MiniBar(
                                                       width: barWidth,
                                                       height: h * (item.late / maxY),
-                                                      color: const Color(0xFFD97706),
+                                                      color: AppColors.warning,
                                                       loading: loading,
                                                     ),
                                                     SizedBox(width: barGap),
                                                     _MiniBar(
                                                       width: barWidth,
                                                       height: h * (item.outOfRange / maxY),
-                                                      color: const Color(0xFFDC2626),
+                                                      color: AppColors.error,
                                                       loading: loading,
                                                     ),
                                                   ],
@@ -1326,7 +1326,7 @@ class _MockWeeklyChart extends StatelessWidget {
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: labelFontSize,
-                                        color: const Color(0xFF64748B),
+                                        color: AppColors.textSecondary,
                                       ),
                                     ),
                                   ],
@@ -1418,7 +1418,7 @@ class _DashedBorderButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _DashedRRectPainter(color: const Color(0xFFCBD5E1), radius: 10),
+      painter: _DashedRRectPainter(color: AppColors.borderLight, radius: 10),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
@@ -1497,7 +1497,7 @@ class _SkeletonCellState extends State<_SkeletonCell>
         width: widget.width,
         height: 12,
         decoration: BoxDecoration(
-          color: const Color(0xFFE2E8F0),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(8),
         ),
       ),
@@ -1515,7 +1515,7 @@ class _SkeletonRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppColors.border),
       ),
       child: const Row(
         children: [

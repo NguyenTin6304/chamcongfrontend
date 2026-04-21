@@ -1,6 +1,13 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:developer' as dev;
 
-import '../data/password_reset_api.dart';
+import 'package:flutter/material.dart';
+
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/auth/data/password_reset_api.dart';
+import 'package:birdle/features/auth/presentation/widgets/auth_widgets.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
@@ -21,7 +28,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _missingTokenFromLink = false;
-
   String? _errorMessage;
   String? _infoMessage;
 
@@ -34,7 +40,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       _infoMessage = 'Đã tự điền token từ link.';
     } else {
       _missingTokenFromLink = true;
-      _errorMessage = 'Link đặt lại mật khẩu thiếu token. Vui lòng yêu cầu gửi lại email.';
+      _errorMessage =
+          'Link đặt lại mật khẩu thiếu token. Vui lòng yêu cầu gửi lại email.';
     }
     _tokenController.addListener(_syncTokenMissingState);
   }
@@ -51,9 +58,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   void _syncTokenMissingState() {
     final isMissing = _tokenController.text.trim().isEmpty;
     if (_missingTokenFromLink != isMissing) {
-      setState(() {
-        _missingTokenFromLink = isMissing;
-      });
+      setState(() => _missingTokenFromLink = isMissing);
     }
   }
 
@@ -68,9 +73,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   String _extractTokenFromCurrentUrl() {
     final uri = Uri.base;
     final direct = uri.queryParameters['token'];
-    if (direct != null && direct.trim().isNotEmpty) {
-      return direct.trim();
-    }
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
 
     final fragment = uri.fragment;
     final questionIndex = fragment.indexOf('?');
@@ -84,69 +87,18 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     return '';
   }
 
-  InputDecoration _inputDecoration({
-    required String label,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: Colors.grey.shade50,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.6),
-      ),
-    );
-  }
-
-  Widget _buildBanner({required String text, required bool isError}) {
-    final color = isError ? Colors.red : Colors.blue;
-    final icon = isError ? Icons.error_outline : Icons.info_outline;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _submit() async {
     final token = _tokenController.text.trim();
     if (token.isEmpty) {
       setState(() {
-        _errorMessage = 'Thiếu token đặt lại mật khẩu. Vui lòng yêu cầu gửi lại email.';
+        _errorMessage =
+            'Thiếu token đặt lại mật khẩu. Vui lòng yêu cầu gửi lại email.';
       });
       return;
     }
 
     final form = _formKey.currentState;
-    if (form == null || !form.validate()) {
-      return;
-    }
+    if (form == null || !form.validate()) return;
 
     setState(() {
       _isLoading = true;
@@ -160,197 +112,201 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         newPassword: _passwordController.text,
       );
 
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _infoMessage = message;
-      });
+      if (!mounted) return;
+      setState(() => _infoMessage = message);
 
       await Future<void>.delayed(const Duration(milliseconds: 600));
-      if (!mounted) {
-        return;
-      }
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      if (!mounted) return;
+      unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đặt lại mật khẩu thành công. Hãy đăng nhập lại.')),
+        const SnackBar(
+          content: Text('Đặt lại mật khẩu thành công. Hãy đăng nhập lại.'),
+        ),
       );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
+    } on Exception catch (e) {
+      dev.log('resetPassword: $e', name: 'ResetPasswordPage');
+      if (!mounted) return;
       setState(() {
-        _errorMessage = _friendlyError(error, fallback: 'Không thể đặt lại mật khẩu lúc này.');
+        _errorMessage = _friendlyError(e, fallback: 'Không thể đặt lại mật khẩu lúc này.');
       });
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Đặt lại mật khẩu')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        title: Text(
+          'Đặt lại mật khẩu',
+          style: AppTextStyles.sectionTitle.copyWith(color: AppColors.textPrimary),
+        ),
+      ),
       body: Stack(
         children: [
           Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
+              constraints: const BoxConstraints(maxWidth: AppSizes.loginFormMaxWidth),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Đổi mật khẩu mới',
-                            style: Theme.of(context).textTheme.titleLarge,
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.xxxl,
+                ),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: AppRadius.cardAll,
+                    boxShadow: AppShadows.elevated,
+                  ),
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Đổi mật khẩu mới',
+                          style: AppTextStyles.headerTitle.copyWith(
+                            color: AppColors.textPrimary,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Nhập token và mật khẩu mới để hoàn tất.',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey.shade700,
-                                ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Nhập token và mật khẩu mới để hoàn tất.',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textSecondary,
                           ),
-                          const SizedBox(height: 14),
-                          if (_missingTokenFromLink)
-                            _buildBanner(
-                              text: 'Link không có token. Vui lòng yêu cầu gửi lại email hoặc dán token thủ công.',
-                              isError: true,
-                            ),
-                          if (_errorMessage != null) _buildBanner(text: _errorMessage!, isError: true),
-                          if (_infoMessage != null) _buildBanner(text: _infoMessage!, isError: false),
-                          TextFormField(
-                            controller: _tokenController,
-                            obscureText: _obscureToken,
-                            enableSuggestions: false,
-                            autocorrect: false,
-                            textInputAction: TextInputAction.next,
-                            onChanged: (_) {
-                              if (_errorMessage != null) {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                              }
-                            },
-                            decoration: _inputDecoration(
-                              label: 'Token reset',
-                              icon: Icons.vpn_key_outlined,
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _obscureToken = !_obscureToken;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscureToken ? Icons.visibility : Icons.visibility_off,
-                                ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        if (_missingTokenFromLink)
+                          const AuthBanner(
+                            text:
+                                'Link không có token. Vui lòng yêu cầu gửi lại email hoặc dán token thủ công.',
+                            isError: true,
+                          ),
+                        if (_errorMessage != null)
+                          AuthBanner(text: _errorMessage!, isError: true),
+                        if (_infoMessage != null)
+                          AuthBanner(text: _infoMessage!, isError: false),
+                        TextFormField(
+                          controller: _tokenController,
+                          obscureText: _obscureToken,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          textInputAction: TextInputAction.next,
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
+                          decoration: authInputDecoration(
+                            label: 'Token reset',
+                            icon: Icons.vpn_key_outlined,
+                            suffixIcon: IconButton(
+                              onPressed: () =>
+                                  setState(() => _obscureToken = !_obscureToken),
+                              icon: Icon(
+                                _obscureToken
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                               ),
                             ),
-                            validator: (value) {
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Nhập token reset';
-                              }
-                              return null;
-                            },
                           ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.next,
-                            decoration: _inputDecoration(
-                              label: 'Mật khẩu mới',
-                              icon: Icons.lock_outline,
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                                ),
+                          validator: (value) {
+                            if ((value ?? '').trim().isEmpty) return 'Nhập token reset';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.next,
+                          decoration: authInputDecoration(
+                            label: 'Mật khẩu mới',
+                            icon: Icons.lock_outline,
+                            suffixIcon: IconButton(
+                              onPressed: () =>
+                                  setState(() => _obscurePassword = !_obscurePassword),
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                               ),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Nhập mật khẩu mới';
-                              }
-                              if (value.length < 6) {
-                                return 'Mật khẩu tối thiểu 6 ký tự';
-                              }
-                              return null;
-                            },
                           ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _confirmPasswordController,
-                            obscureText: _obscureConfirmPassword,
-                            textInputAction: TextInputAction.done,
-                            decoration: _inputDecoration(
-                              label: 'Nhập lại mật khẩu mới',
-                              icon: Icons.lock_reset,
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _obscureConfirmPassword = !_obscureConfirmPassword;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscureConfirmPassword
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Nhập mật khẩu mới';
+                            if (value.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _confirmPasswordController,
+                          obscureText: _obscureConfirmPassword,
+                          textInputAction: TextInputAction.done,
+                          decoration: authInputDecoration(
+                            label: 'Nhập lại mật khẩu mới',
+                            icon: Icons.lock_reset,
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(
+                                () =>
+                                    _obscureConfirmPassword = !_obscureConfirmPassword,
+                              ),
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                               ),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Nhập lại mật khẩu';
-                              }
-                              if (value != _passwordController.text) {
-                                return 'Mật khẩu nhập lại không khớp';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: (_) {
-                              if (!_isLoading && _tokenController.text.trim().isNotEmpty) {
-                                _submit();
-                              }
-                            },
                           ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            height: 48,
-                            child: FilledButton.icon(
-                              onPressed: (_isLoading || _tokenController.text.trim().isEmpty) ? null : _submit,
-                              icon: _isLoading
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.save_outlined),
-                              label: Text(_isLoading ? 'Đang xử lý...' : 'Đặt lại mật khẩu'),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Nhập lại mật khẩu';
+                            if (value != _passwordController.text) {
+                              return 'Mật khẩu nhập lại không khớp';
+                            }
+                            return null;
+                          },
+                          onFieldSubmitted: (_) {
+                            if (!_isLoading && _tokenController.text.trim().isNotEmpty) {
+                              _submit();
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SizedBox(
+                          height: AppSizes.touchTargetMin,
+                          child: FilledButton.icon(
+                            onPressed:
+                                (_isLoading || _tokenController.text.trim().isEmpty)
+                                    ? null
+                                    : _submit,
+                            icon: _isLoading
+                                ? const SizedBox(
+                                    width: AppSpacing.lg,
+                                    height: AppSpacing.lg,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.surface,
+                                    ),
+                                  )
+                                : const Icon(Icons.save_outlined),
+                            label: Text(
+                              _isLoading ? 'Đang xử lý...' : 'Đặt lại mật khẩu',
+                              style: AppTextStyles.buttonLabel,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

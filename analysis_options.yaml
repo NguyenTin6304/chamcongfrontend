@@ -11,8 +11,16 @@ analyzer:
 
 linter:
   rules:
+    # ── Performance ──────────────────────────────────────────────────────────
     - prefer_const_constructors
+    - prefer_const_declarations
     - prefer_final_locals
+    # ── Safety ───────────────────────────────────────────────────────────────
     - avoid_print
     - unawaited_futures
+    - avoid_catches_without_on_clauses
+    - cancel_subscriptions
+    - close_sinks
+    # ── Style ─────────────────────────────────────────────────────────────────
     - always_use_package_imports
+    - always_declare_return_types

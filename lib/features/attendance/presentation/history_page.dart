@@ -642,7 +642,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       spacing: 14,
       runSpacing: 6,
       children: [
-        _LegendDot(color: AppColors.success, label: 'ĐÚNG GIỜ / VÀO SỚM'),
+        _LegendDot(color: AppColors.success, label: 'ĐÚNG GIỜ'),
         _LegendDot(color: AppColors.warning, label: 'VÀO MUỘN'),
         _LegendDot(color: AppColors.overtime, label: 'TĂNG CA'),
         _LegendDot(color: AppColors.error, label: 'NGOẠI VI'),
