@@ -103,6 +103,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                       children: [
                         Text(
                           'Khôi phục mật khẩu',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.headerTitle.copyWith(
                             color: AppColors.textPrimary,
                           ),
@@ -110,6 +111,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           'Nhập email để nhận link đặt lại mật khẩu.',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.body.copyWith(
                             color: AppColors.textSecondary,
                           ),

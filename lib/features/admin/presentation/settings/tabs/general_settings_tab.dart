@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../../../../core/config/app_config.dart';
 import '../../../../../core/storage/token_storage.dart';
 import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class GeneralSettingsTab extends StatefulWidget {
   const GeneralSettingsTab({super.key});
@@ -48,9 +49,9 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
 
   static const _primaryOptions = <Color>[
     Color(0xFF1A56DB),
-    Color(0xFF16A34A),
-    Color(0xFFD97706),
-    Color(0xFFDC2626),
+    AppColors.success,
+    AppColors.warning,
+    AppColors.error,
     Color(0xFF7C3AED),
     Color(0xFF0D9488),
   ];
@@ -131,7 +132,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
         }
       }
       // 404 (no active rule yet) or any other status → silently keep defaults
-    } catch (_) {
+    } on Exception catch (_) {
       // Network error: silently keep defaults, do not show snackbar
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -166,7 +167,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Đã lưu cài đặt')),
       );
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
@@ -205,18 +206,14 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Cài đặt chung',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: AppTextStyles.headerTitle.copyWith(color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Cấu hình thông tin cơ bản',
-                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  style: AppTextStyles.chipText.copyWith(color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: AppColors.border),
@@ -257,10 +254,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
                         _logoUrl == null || _logoUrl!.isEmpty
                             ? 'Chưa có logo'
                             : 'Đã có logo',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                        ),
+                        style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                       ),
                     ],
                   ),
@@ -469,7 +463,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
                   ),
                 ),
                 if (_loading)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 12),
                     child: LinearProgressIndicator(minHeight: 2),
                   ),
@@ -495,7 +489,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
                 onPressed: _saving ? null : _saveSettings,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.surface,
                 ),
                 child: _saving
                     ? const SizedBox(
@@ -503,7 +497,7 @@ class _GeneralSettingsTabState extends State<GeneralSettingsTab> {
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.surface,
                         ),
                       )
                     : const Text('Lưu thay đổi'),
@@ -536,12 +530,7 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.08,
-          ),
+          style: AppTextStyles.sectionLabel.copyWith(color: AppColors.primary, letterSpacing: 0.08),
         ),
         const SizedBox(width: 8),
         const Expanded(child: Divider(color: AppColors.border, height: 1)),
@@ -570,10 +559,7 @@ class _SettingRow extends StatelessWidget {
                 width: 200,
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textMuted,
-                  ),
+                  style: AppTextStyles.chipText.copyWith(color: AppColors.textMuted),
                 ),
               ),
               Expanded(child: input),

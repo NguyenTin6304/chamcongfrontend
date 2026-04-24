@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 
 import '../../../../../core/storage/token_storage.dart';
 import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 import '../../../data/admin_api.dart';
 
 class ExplanationPolicySettingsTab extends StatefulWidget {
@@ -84,7 +86,7 @@ class _ExplanationPolicySettingsTabState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Phiên đăng nhập đã hết hạn.')),
       );
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) {
         return;
       }
@@ -334,23 +336,19 @@ class _ExplanationPolicySettingsTabState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Chính sách giải trình',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: AppTextStyles.headerTitle.copyWith(color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Cấu hình hạn xử lý cho ngoại lệ chấm công',
-                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  style: AppTextStyles.chipText.copyWith(color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: AppColors.border),
                 if (_loading)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 12),
                     child: LinearProgressIndicator(minHeight: 2),
                   ),
@@ -405,21 +403,18 @@ class _ExplanationPolicySettingsTabState
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: AppColors.bgPage,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppRadius.iconBoxAll,
                     border: Border.all(color: AppColors.border, width: 0.5),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Hồ sơ hết hạn sẽ được giữ đến hết thời gian gia hạn rồi mới đủ điều kiện xoá.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   _updatedText,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textMuted,
-                  ),
+                  style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -522,10 +517,7 @@ class _PolicyFieldRow extends StatelessWidget {
               padding: const EdgeInsets.only(top: 12),
               child: Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textMuted,
-                ),
+                style: AppTextStyles.chipText.copyWith(color: AppColors.textMuted),
               ),
             ),
           ),
@@ -547,7 +539,7 @@ class _PolicyFieldRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: Text(
               suffix,
-              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+              style: AppTextStyles.chipText.copyWith(color: AppColors.textMuted),
             ),
           ),
           if (helperText != null && helperText.isNotEmpty) ...[
@@ -556,10 +548,7 @@ class _PolicyFieldRow extends StatelessWidget {
               padding: const EdgeInsets.only(top: 12),
               child: Text(
                 helperText,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textMuted,
-                ),
+                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
               ),
             ),
           ],
@@ -589,12 +578,7 @@ class _SectionHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.08,
-          ),
+          style: AppTextStyles.sectionLabel.copyWith(color: AppColors.primary, letterSpacing: 0.08),
         ),
         const SizedBox(width: 8),
         const Expanded(child: Divider(color: AppColors.border, height: 1)),

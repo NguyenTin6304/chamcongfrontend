@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class AdminSidebarItem<T> {
   const AdminSidebarItem({
@@ -52,31 +54,35 @@ class _AdminSidebarState<T> extends State<AdminSidebar<T>> {
       color: AppColors.sidebar,
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 18, 16, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.xl,
+              AppSpacing.lg,
+              0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Ch\u1ea5m c\u00f4ng',
-                  style: TextStyle(
-                    fontSize: 18,
+                  'Chấm công',
+                  style: AppTextStyles.headerTitle.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: AppColors.surface,
                   ),
                 ),
-                SizedBox(height: 2),
-                Text(
-                  'Qu\u1ea3n tr\u1ecb h\u1ec7 th\u1ed1ng',
+                const SizedBox(height: 2),
+                const Text(
+                  'Quản trị hệ thống',
                   style: TextStyle(fontSize: 11, color: AppColors.sidebarMuted),
                 ),
-                SizedBox(height: 32),
+                const SizedBox(height: AppSpacing.xxxl),
               ],
             ),
           ),
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               itemBuilder: (_, index) {
                 final item = widget.items[index];
                 final tile = _SidebarTile<T>(
@@ -94,21 +100,21 @@ class _AdminSidebarState<T> extends State<AdminSidebar<T>> {
                 return Column(
                   children: [
                     const Divider(color: AppColors.sidebarDivider, height: 1),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.md),
                     tile,
                   ],
                 );
               },
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
               itemCount: widget.items.length,
             ),
           ),
           Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
+            margin: const EdgeInsets.all(AppSpacing.md),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: const BoxDecoration(
               color: AppColors.sidebarUserCard,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRadius.iconBoxAll,
             ),
             child: Row(
               children: [
@@ -117,10 +123,12 @@ class _AdminSidebarState<T> extends State<AdminSidebar<T>> {
                   backgroundColor: AppColors.sidebarAvatarBg,
                   child: Text(
                     widget.avatarText,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    style: AppTextStyles.captionBold.copyWith(
+                      color: AppColors.surface,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,17 +136,15 @@ class _AdminSidebarState<T> extends State<AdminSidebar<T>> {
                       Text(
                         widget.displayName,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                        style: AppTextStyles.chipText.copyWith(
+                          color: AppColors.surface,
                         ),
                       ),
                       Text(
                         widget.roleLabel,
                         style: const TextStyle(
-                          color: AppColors.sidebarMuted,
                           fontSize: 11,
+                          color: AppColors.sidebarMuted,
                         ),
                       ),
                     ],
@@ -174,9 +180,9 @@ class _SidebarTile<T> extends StatelessWidget {
         ? AppColors.primary
         : (isHover ? AppColors.sidebarHoverBg : Colors.transparent);
     final textColor = isActive
-        ? Colors.white
+        ? AppColors.surface
         : (isHover ? AppColors.sidebarHoverText : AppColors.sidebarMuted);
-    final iconColor = isActive ? Colors.white : AppColors.textMuted;
+    final iconColor = isActive ? AppColors.surface : AppColors.textMuted;
 
     return MouseRegion(
       onEnter: (_) => onHover(true),
@@ -184,38 +190,36 @@ class _SidebarTile<T> extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRadius.iconBoxAll,
           onTap: onTap,
           child: Container(
             height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRadius.iconBoxAll,
             ),
             child: Row(
               children: [
                 Icon(item.icon, size: 18, color: iconColor),
-                const SizedBox(width: 10),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Text(item.label, style: TextStyle(color: textColor)),
                 ),
                 if (item.badgeCount > 0)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xs,
                     ),
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: AppColors.danger,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: AppRadius.badgeAll,
                     ),
                     child: Text(
                       '${item.badgeCount}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                      style: AppTextStyles.captionBold.copyWith(
+                        color: AppColors.surface,
                       ),
                     ),
                   ),

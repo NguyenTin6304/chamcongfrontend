@@ -51,7 +51,9 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     if (!mounted) return;
 
     if (token == null || token.isEmpty) {
-      unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false));
+      unawaited(
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false),
+      );
       return;
     }
 
@@ -118,7 +120,8 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
         _employeeCode = emp!.code;
         _groupName = emp!.groupName;
         _joinedAt = emp!.joinedAt;
-      } else if (empState == _EmpState.failed || empState == _EmpState.notAssigned) {
+      } else if (empState == _EmpState.failed ||
+          empState == _EmpState.notAssigned) {
         _employeeCode = '';
         _groupName = null;
         _joinedAt = null;
@@ -141,7 +144,9 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
       }
       await _tokenStorage.clearSession();
       if (mounted) {
-        unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false));
+        unawaited(
+          Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false),
+        );
       }
     } on Exception catch (e) {
       dev.log('_handleLogout: $e', name: 'ProfilePageBody');
@@ -167,166 +172,231 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
     String? errorText;
 
     try {
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          Future<void> onSave() async {
-            final current = currentCtrl.text;
-            final newPass = newCtrl.text;
-            final confirm = confirmCtrl.text;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            Future<void> onSave() async {
+              final current = currentCtrl.text;
+              final newPass = newCtrl.text;
+              final confirm = confirmCtrl.text;
 
-            if (current.isEmpty) {
-              setDialogState(() => errorText = 'Vui lòng nhập mật khẩu hiện tại.');
-              return;
-            }
-            if (newPass.length < 6) {
-              setDialogState(() => errorText = 'Mật khẩu mới phải có ít nhất 6 ký tự.');
-              return;
-            }
-            if (newPass != confirm) {
-              setDialogState(() => errorText = 'Mật khẩu xác nhận không khớp.');
-              return;
-            }
+              if (current.isEmpty) {
+                setDialogState(
+                  () => errorText = 'Vui lòng nhập mật khẩu hiện tại.',
+                );
+                return;
+              }
+              if (newPass.length < 6) {
+                setDialogState(
+                  () => errorText = 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+                );
+                return;
+              }
+              if (newPass != confirm) {
+                setDialogState(
+                  () => errorText = 'Mật khẩu xác nhận không khớp.',
+                );
+                return;
+              }
 
-            setDialogState(() { saving = true; errorText = null; });
+              setDialogState(() {
+                saving = true;
+                errorText = null;
+              });
 
-            final nav = Navigator.of(ctx);
-            final messenger = ScaffoldMessenger.of(context);
+              final nav = Navigator.of(ctx);
+              final messenger = ScaffoldMessenger.of(context);
 
-            final token = await _tokenStorage.getToken();
-            if (!mounted) return;
-            if (token == null || token.isEmpty) {
-              setDialogState(() { saving = false; errorText = 'Phiên đăng nhập đã hết hạn.'; });
-              return;
-            }
-            try {
-              await _authApi.changePassword(
-                token: token,
-                currentPassword: current,
-                newPassword: newPass,
-              );
+              final token = await _tokenStorage.getToken();
               if (!mounted) return;
-              nav.pop();
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Đổi mật khẩu thành công.')),
-              );
-            } on AuthApiException catch (e) {
-              setDialogState(() { saving = false; errorText = e.message; });
-            } on Exception catch (e) {
-              dev.log('changePassword: $e', name: 'ProfilePageBody');
-              setDialogState(() { saving = false; errorText = 'Đổi mật khẩu thất bại. Vui lòng thử lại.'; });
+              if (token == null || token.isEmpty) {
+                setDialogState(() {
+                  saving = false;
+                  errorText = 'Phiên đăng nhập đã hết hạn.';
+                });
+                return;
+              }
+              try {
+                await _authApi.changePassword(
+                  token: token,
+                  currentPassword: current,
+                  newPassword: newPass,
+                );
+                if (!mounted) return;
+                nav.pop();
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Đổi mật khẩu thành công.')),
+                );
+              } on AuthApiException catch (e) {
+                setDialogState(() {
+                  saving = false;
+                  errorText = e.message;
+                });
+              } on Exception catch (e) {
+                dev.log('changePassword: $e', name: 'ProfilePageBody');
+                setDialogState(() {
+                  saving = false;
+                  errorText = 'Đổi mật khẩu thất bại. Vui lòng thử lại.';
+                });
+              }
             }
-          }
 
-          return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Đổi mật khẩu',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: currentCtrl,
-                      obscureText: obscureCurrent,
-                      style: const TextStyle(fontSize: 15),
-                      decoration: InputDecoration(
-                        labelText: 'Mật khẩu hiện tại',
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-                        suffixIcon: IconButton(
-                          icon: Icon(obscureCurrent ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                          onPressed: () => setDialogState(() => obscureCurrent = !obscureCurrent),
-                        ),
+            return Dialog(
+              shape: const RoundedRectangleBorder(
+                borderRadius: AppRadius.cardAll,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Đổi mật khẩu',
+                        style: AppTextStyles.headerTitle,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: newCtrl,
-                      obscureText: obscureNew,
-                      style: const TextStyle(fontSize: 15),
-                      decoration: InputDecoration(
-                        labelText: 'Mật khẩu mới',
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-                        suffixIcon: IconButton(
-                          icon: Icon(obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                          onPressed: () => setDialogState(() => obscureNew = !obscureNew),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: confirmCtrl,
-                      obscureText: obscureConfirm,
-                      style: const TextStyle(fontSize: 15),
-                      decoration: InputDecoration(
-                        labelText: 'Xác nhận mật khẩu mới',
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-                        suffixIcon: IconButton(
-                          icon: Icon(obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                          onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
-                        ),
-                      ),
-                    ),
-                    if (errorText != null) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(Icons.error_outline, size: 16, color: AppColors.error),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              errorText!,
-                              style: const TextStyle(fontSize: 13, color: AppColors.error),
+                      const SizedBox(height: 24),
+                      TextField(
+                        controller: currentCtrl,
+                        obscureText: obscureCurrent,
+                        style: AppTextStyles.body,
+                        decoration: InputDecoration(
+                          labelText: 'Mật khẩu hiện tại',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 16,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureCurrent
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
                             ),
+                            onPressed: () => setDialogState(
+                              () => obscureCurrent = !obscureCurrent,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: newCtrl,
+                        obscureText: obscureNew,
+                        style: AppTextStyles.body,
+                        decoration: InputDecoration(
+                          labelText: 'Mật khẩu mới',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 16,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureNew
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () =>
+                                setDialogState(() => obscureNew = !obscureNew),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: confirmCtrl,
+                        obscureText: obscureConfirm,
+                        style: AppTextStyles.body,
+                        decoration: InputDecoration(
+                          labelText: 'Xác nhận mật khẩu mới',
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 16,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureConfirm
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () => setDialogState(
+                              () => obscureConfirm = !obscureConfirm,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (errorText != null) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              size: 16,
+                              color: AppColors.error,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                errorText!,
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.error,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: saving
+                                ? null
+                                : () => Navigator.of(ctx).pop(),
+                            child: const Text('Huỷ'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: saving ? null : onSave,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 28,
+                                vertical: 14,
+                              ),
+                            ),
+                            child: saving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.surface,
+                                    ),
+                                  )
+                                : Text(
+                                    'Xác nhận',
+                                    style: AppTextStyles.buttonLabel.copyWith(
+                                      color: AppColors.surface,
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: saving ? null : () => Navigator.of(ctx).pop(),
-                          child: const Text('Huỷ'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: saving ? null : onSave,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                          ),
-                          child: saving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.surface),
-                                )
-                              : const Text('Xác nhận', style: TextStyle(fontSize: 15)),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
-      ),
-    );
+            );
+          },
+        ),
+      );
     } finally {
       currentCtrl.dispose();
       newCtrl.dispose();
@@ -432,9 +502,11 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
                     onPressed: () async {
                       await _tokenStorage.clearSession();
                       if (mounted) {
-                        unawaited(Navigator.of(
-                          context,
-                        ).pushNamedAndRemoveUntil('/login', (_) => false));
+                        unawaited(
+                          Navigator.of(
+                            context,
+                          ).pushNamedAndRemoveUntil('/login', (_) => false),
+                        );
                       }
                     },
                     child: const Text('Đăng nhập lại'),

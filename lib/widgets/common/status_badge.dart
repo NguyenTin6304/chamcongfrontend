@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 enum StatusBadgeType { onTime, late, early, overtime, outOfRange, exception }
 
@@ -9,72 +11,47 @@ class StatusBadge extends StatelessWidget {
 
   final StatusBadgeType type;
 
-  String get _label {
-    switch (type) {
-      case StatusBadgeType.onTime:
-        return 'Đúng giờ';
-      case StatusBadgeType.late:
-        return 'Vào muộn';
-      case StatusBadgeType.early:
-        return 'Vào sớm';
-      case StatusBadgeType.overtime:
-        return 'Tăng ca';
-      case StatusBadgeType.outOfRange:
-        return 'Ngoài vùng';
-      case StatusBadgeType.exception:
-        return 'Ngoại lệ';
-    }
-  }
+  String get _label => switch (type) {
+        StatusBadgeType.onTime => 'Đúng giờ',
+        StatusBadgeType.late => 'Vào muộn',
+        StatusBadgeType.early => 'Vào sớm',
+        StatusBadgeType.overtime => 'Tăng ca',
+        StatusBadgeType.outOfRange => 'Ngoài vùng',
+        StatusBadgeType.exception => 'Ngoại lệ',
+      };
 
-  Color get _background {
-    switch (type) {
-      case StatusBadgeType.onTime:
-        return AppColors.badgeBgOnTime;
-      case StatusBadgeType.late:
-        return AppColors.badgeBgLate;
-      case StatusBadgeType.early:
-        return AppColors.badgeBgEarly;
-      case StatusBadgeType.overtime:
-        return AppColors.badgeBgOvertime;
-      case StatusBadgeType.outOfRange:
-        return AppColors.badgeBgOutOfRange;
-      case StatusBadgeType.exception:
-        return AppColors.badgeBgException;
-    }
-  }
+  Color get _background => switch (type) {
+        StatusBadgeType.onTime => AppColors.badgeBgOnTime,
+        StatusBadgeType.late => AppColors.badgeBgLate,
+        StatusBadgeType.early => AppColors.badgeBgEarly,
+        StatusBadgeType.overtime => AppColors.badgeBgOvertime,
+        StatusBadgeType.outOfRange => AppColors.badgeBgOutOfRange,
+        StatusBadgeType.exception => AppColors.badgeBgException,
+      };
 
-  Color get _foreground {
-    switch (type) {
-      case StatusBadgeType.onTime:
-        return AppColors.badgeTextOnTime;
-      case StatusBadgeType.late:
-        return AppColors.badgeTextLate;
-      case StatusBadgeType.early:
-        return AppColors.badgeTextEarly;
-      case StatusBadgeType.overtime:
-        return AppColors.badgeTextOvertime;
-      case StatusBadgeType.outOfRange:
-        return AppColors.badgeTextOutOfRange;
-      case StatusBadgeType.exception:
-        return AppColors.badgeTextException;
-    }
-  }
+  Color get _foreground => switch (type) {
+        StatusBadgeType.onTime => AppColors.badgeTextOnTime,
+        StatusBadgeType.late => AppColors.badgeTextLate,
+        StatusBadgeType.early => AppColors.badgeTextEarly,
+        StatusBadgeType.overtime => AppColors.badgeTextOvertime,
+        StatusBadgeType.outOfRange => AppColors.badgeTextOutOfRange,
+        StatusBadgeType.exception => AppColors.badgeTextException,
+      };
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: _background,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: AppRadius.badgeAll,
       ),
       child: Text(
         _label,
-        style: TextStyle(
-          color: _foreground,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
+        style: AppTextStyles.captionBold.copyWith(color: _foreground),
       ),
     );
   }

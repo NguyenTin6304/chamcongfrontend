@@ -131,6 +131,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       children: [
                         Text(
                           'Tạo tài khoản mới',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.headerTitle.copyWith(
                             color: AppColors.textPrimary,
                           ),
@@ -138,6 +139,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           'Tài khoản sẽ được tạo với quyền USER.',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.body.copyWith(
                             color: AppColors.textSecondary,
                           ),

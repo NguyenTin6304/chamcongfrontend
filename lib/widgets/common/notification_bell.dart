@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/services/notification_store.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:birdle/core/services/notification_store.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class NotificationBell extends StatefulWidget {
   const NotificationBell({super.key, this.iconColor});
@@ -90,17 +92,18 @@ class _NotificationBellState extends State<NotificationBell> {
                     child: Container(
                       constraints: const BoxConstraints(minWidth: 17),
                       height: 17,
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xs,
+                      ),
                       decoration: const BoxDecoration(
                         color: AppColors.danger,
-                        borderRadius: BorderRadius.all(Radius.circular(9)),
+                        borderRadius: AppRadius.badgeAll,
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         unread > 9 ? '9+' : '$unread',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
+                        style: AppTextStyles.mapOverlay.copyWith(
+                          color: AppColors.surface,
                           fontWeight: FontWeight.w700,
                           height: 1,
                         ),
@@ -142,8 +145,8 @@ class _DropdownOverlay extends StatelessWidget {
           offset: const Offset(0, 4),
           child: Material(
             elevation: 8,
-            borderRadius: BorderRadius.circular(14),
-            shadowColor: Colors.black26,
+            borderRadius: AppRadius.cardAll,
+            shadowColor: const Color(0x42000000),
             child: _NotificationPanel(onClose: onClose),
           ),
         ),
@@ -180,7 +183,12 @@ class _NotificationPanel extends StatelessWidget {
             children: [
               // ── Header ─────────────────────────────────────────────────
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                ),
                 decoration: const BoxDecoration(
                   border: Border(
                     bottom: BorderSide(color: AppColors.border, width: 0.5),
@@ -188,11 +196,9 @@ class _NotificationPanel extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Text(
+                    Text(
                       'Thông báo',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                      style: AppTextStyles.bodyBold.copyWith(
                         color: AppColors.textPrimary,
                       ),
                     ),
@@ -201,15 +207,18 @@ class _NotificationPanel extends StatelessWidget {
                       TextButton(
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.xs,
+                          ),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         onPressed: NotificationStore.clearAll,
-                        child: const Text(
+                        child: Text(
                           'Xóa tất cả',
-                          style: TextStyle(
-                              fontSize: 12, color: AppColors.textMuted),
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textMuted,
+                          ),
                         ),
                       ),
                   ],
@@ -217,17 +226,23 @@ class _NotificationPanel extends StatelessWidget {
               ),
               // ── Body ───────────────────────────────────────────────────
               if (notifications.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.xxxl,
+                  ),
                   child: Column(
                     children: [
-                      Icon(Icons.notifications_none,
-                          size: 40, color: AppColors.textMuted),
-                      SizedBox(height: 8),
+                      const Icon(
+                        Icons.notifications_none,
+                        size: 40,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
                       Text(
                         'Chưa có thông báo',
-                        style:
-                            TextStyle(color: AppColors.textMuted, fontSize: 13),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ],
                   ),
@@ -270,7 +285,10 @@ class _NotificationItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: item.isRead ? Colors.transparent : AppColors.primaryLight,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -281,7 +299,7 @@ class _NotificationItem extends StatelessWidget {
               color: item.isRead
                   ? AppColors.bgPage
                   : AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRadius.iconBoxAll,
             ),
             child: Icon(
               Icons.notifications_active_outlined,
@@ -289,17 +307,16 @@ class _NotificationItem extends StatelessWidget {
               color: item.isRead ? AppColors.textMuted : AppColors.primary,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   item.title,
-                  style: TextStyle(
+                  style: AppTextStyles.bodySmall.copyWith(
                     fontWeight:
                         item.isRead ? FontWeight.w500 : FontWeight.w700,
-                    fontSize: 13,
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -308,18 +325,21 @@ class _NotificationItem extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       item.body,
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textMuted),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textMuted,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: AppSpacing.xs),
                   child: Text(
                     timeAgo,
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.textMuted),
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
               ],
@@ -327,7 +347,7 @@ class _NotificationItem extends StatelessWidget {
           ),
           if (!item.isRead)
             const Padding(
-              padding: EdgeInsets.only(top: 4, left: 4),
+              padding: EdgeInsets.only(top: AppSpacing.xs, left: AppSpacing.xs),
               child: CircleAvatar(
                 radius: 4,
                 backgroundColor: AppColors.primary,

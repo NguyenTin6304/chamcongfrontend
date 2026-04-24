@@ -1,6 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class KpiCard extends StatelessWidget {
   const KpiCard({
@@ -27,10 +29,10 @@ class KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Row(
@@ -42,14 +44,12 @@ class KpiCard extends StatelessWidget {
               children: [
                 Text(
                   label.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
+                  style: AppTextStyles.sectionLabel.copyWith(
                     color: AppColors.textMuted,
                     letterSpacing: 0.04,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 if (loading)
                   const SizedBox(
                     width: 20,
@@ -59,17 +59,16 @@ class KpiCard extends StatelessWidget {
                 else
                   Text(
                     value,
-                    style: TextStyle(
+                    style: AppTextStyles.kpiNumber.copyWith(
                       fontSize: 28,
-                      fontWeight: FontWeight.w600,
                       color: valueColor ?? AppColors.textPrimary,
                     ),
                   ),
                 if (subText != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     subText!,
-                    style: TextStyle(fontSize: 12, color: subColor),
+                    style: AppTextStyles.caption.copyWith(color: subColor),
                   ),
                 ],
               ],

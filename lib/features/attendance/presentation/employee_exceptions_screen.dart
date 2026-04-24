@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'package:birdle/core/layout/responsive.dart';
 import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 import 'package:birdle/features/attendance/data/attendance_api.dart';
 import 'package:birdle/features/auth/data/auth_session_service.dart';
 import 'package:birdle/widgets/common/deadline_chip.dart';
@@ -96,8 +98,8 @@ Widget? _urgencyBanner(EmployeeExceptionItem item) {
   final label = h > 0 ? 'Còn ${h}g ${m}p để giải trình!' : 'Còn ${m}p để giải trình!';
 
   return Container(
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(12),
+    margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+    padding: const EdgeInsets.all(AppSpacing.md),
     decoration: const BoxDecoration(
       color: AppColors.badgeBgOutOfRange,
       border: Border(
@@ -107,12 +109,11 @@ Widget? _urgencyBanner(EmployeeExceptionItem item) {
     child: Row(
       children: [
         const Icon(Icons.warning_amber, color: AppColors.error, size: 18),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
+            style: AppTextStyles.bodySmall.copyWith(
               fontWeight: FontWeight.w600,
               color: AppColors.error,
             ),
@@ -299,7 +300,7 @@ class _EmployeeExceptionsScreenState
         elevation: 0,
         title: const Text(
           'Ngoại lệ chấm công',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          style: AppTextStyles.sectionTitle,
         ),
         actions: [
           IconButton(
@@ -327,7 +328,6 @@ class _EmployeeExceptionsScreenState
       builder: (context, constraints) {
         final width = constraints.maxWidth;
 
-        // Mobile: full-screen list, tap pushes ExceptionDetailPage
         if (width < AppBreakpoints.mobile) {
           return _ExceptionListBody(
             exceptions: _exceptions,
@@ -344,7 +344,6 @@ class _EmployeeExceptionsScreenState
           onSubmit: _submitExplanation,
         );
 
-        // Desktop ≥ 900px: 380px list + AnimatedSwitcher detail
         if (width >= AppBreakpoints.tablet) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -370,7 +369,6 @@ class _EmployeeExceptionsScreenState
           );
         }
 
-        // Tablet 600–899px: 300px list + detail
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -410,16 +408,17 @@ class _ExceptionListBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
           decoration: const BoxDecoration(
             color: AppColors.surface,
             border: Border(bottom: BorderSide(color: AppColors.border)),
           ),
           child: Text(
             '${exceptions.length} ngoại lệ',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.captionBold.copyWith(
               color: AppColors.textSecondary,
               letterSpacing: 0.3,
             ),
@@ -427,9 +426,9 @@ class _ExceptionListBody extends StatelessWidget {
         ),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.md),
             itemCount: exceptions.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               final item = exceptions[index];
               return _ExceptionCard(
@@ -465,7 +464,7 @@ class _ExceptionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isSelected ? AppColors.primaryLight : AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(
           color: isSelected ? AppColors.primary : AppColors.border,
           width: isSelected ? 2 : 1,
@@ -481,7 +480,7 @@ class _ExceptionCard extends StatelessWidget {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: AppRadius.cardAll,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -496,12 +495,12 @@ class _ExceptionCard extends StatelessWidget {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _TypeIconBox(type: item.exceptionType),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,9 +510,7 @@ class _ExceptionCard extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   _exceptionTypeLabel(item.exceptionType),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
+                                  style: AppTextStyles.bodyBold.copyWith(
                                     color: AppColors.textPrimary,
                                   ),
                                 ),
@@ -521,16 +518,15 @@ class _ExceptionCard extends StatelessWidget {
                               _StatusBadge(status: item.status),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: AppSpacing.xs),
                           Text(
                             _formatWorkDate(item.workDate),
-                            style: const TextStyle(
-                              fontSize: 12,
+                            style: AppTextStyles.caption.copyWith(
                               color: AppColors.textSecondary,
                             ),
                           ),
                           if (item.status == 'PENDING_EMPLOYEE') ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppSpacing.sm),
                             DeadlineChip(
                               deadline: item.effectiveDeadline,
                               compact: true,
@@ -574,7 +570,7 @@ class _TypeIconBox extends StatelessWidget {
       height: 36,
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppRadius.iconBoxAll,
       ),
       child: Icon(icon, size: 18, color: fg),
     );
@@ -610,10 +606,12 @@ class _ExceptionDetailPanel extends StatelessWidget {
               size: 48,
               color: AppColors.textSecondary.withValues(alpha: 0.4),
             ),
-            const SizedBox(height: 12),
-            const Text(
+            const SizedBox(height: AppSpacing.md),
+            Text(
               'Chọn một ngoại lệ để xem chi tiết',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -621,13 +619,13 @@ class _ExceptionDetailPanel extends StatelessWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(AppSpacing.xxl),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             _TypeIconBox(type: current.exceptionType),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Text(
                 _exceptionTypeLabel(current.exceptionType),
@@ -641,10 +639,10 @@ class _ExceptionDetailPanel extends StatelessWidget {
             _StatusBadge(status: current.status),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: AppSpacing.xl),
         if (_urgencyBanner(current) case final Widget banner?) ...[
           banner,
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
         ],
         if (context.isDesktop) ...[
           Row(
@@ -656,7 +654,7 @@ class _ExceptionDetailPanel extends StatelessWidget {
                   value: _exceptionTypeLabel(current.exceptionType),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: _DetailField(
                   label: 'NGÀY CÔNG',
@@ -688,9 +686,9 @@ class _ExceptionDetailPanel extends StatelessWidget {
           ),
         if (current.decidedByEmail != null && current.decidedByEmail!.isNotEmpty)
           _DetailField(label: 'NGƯỜI DUYỆT', value: current.decidedByEmail!),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         const Divider(color: AppColors.border),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _ExplanationSection(
           key: ValueKey('explanation_${current.id}'),
           item: current,
@@ -698,33 +696,33 @@ class _ExceptionDetailPanel extends StatelessWidget {
           onSubmit: onSubmit,
         ),
         if (error != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Text(
             error!,
-            style: const TextStyle(color: AppColors.error, fontSize: 12),
+            style: AppTextStyles.caption.copyWith(color: AppColors.error),
           ),
         ],
         if (current.timeline.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          const Text(
+          const SizedBox(height: AppSpacing.xxl),
+          Text(
             'LỊCH SỬ XỬ LÝ',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+            style: AppTextStyles.sectionLabel.copyWith(
               color: AppColors.textSecondary,
-              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           for (final event in current.timeline)
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: Row(
                 children: [
                   Container(
                     width: 8,
                     height: 8,
-                    margin: const EdgeInsets.only(right: 8, top: 4),
+                    margin: const EdgeInsets.only(
+                      right: AppSpacing.sm,
+                      top: AppSpacing.xs,
+                    ),
                     decoration: const BoxDecoration(
                       color: AppColors.primary,
                       shape: BoxShape.circle,
@@ -736,16 +734,13 @@ class _ExceptionDetailPanel extends StatelessWidget {
                       children: [
                         Text(
                           '${event.previousStatus ?? '—'} → ${event.nextStatus}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                          style: AppTextStyles.chipText.copyWith(
                             color: AppColors.textPrimary,
                           ),
                         ),
                         Text(
                           _formatDateTime(event.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
+                          style: AppTextStyles.caption.copyWith(
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -756,7 +751,7 @@ class _ExceptionDetailPanel extends StatelessWidget {
               ),
             ),
         ],
-        const SizedBox(height: 32),
+        const SizedBox(height: AppSpacing.xxxl),
       ],
     );
   }
@@ -773,23 +768,20 @@ class _DetailField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.sectionLabel.copyWith(
               color: AppColors.textSecondary,
-              letterSpacing: 0.5,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
           ),
         ],
       ),
@@ -807,30 +799,26 @@ class _DeadlineField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'HẠN GIẢI TRÌNH',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.sectionLabel.copyWith(
               color: AppColors.textSecondary,
-              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.sm),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               DeadlineChip(deadline: item.effectiveDeadline),
               Text(
                 _formatDateTime(item.effectiveDeadline),
-                style: const TextStyle(
-                  fontSize: 12,
+                style: AppTextStyles.caption.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -858,10 +846,10 @@ class _AdminNoteBlock extends StatelessWidget {
     final label = isRejected ? 'LÝ DO TỪ CHỐI' : 'GHI CHÚ ADMIN';
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.iconBoxAll,
         border: Border.all(color: color, width: 0.5),
       ),
       child: Column(
@@ -869,15 +857,10 @@ class _AdminNoteBlock extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: color,
-              letterSpacing: 0.5,
-            ),
+            style: AppTextStyles.sectionLabel.copyWith(color: color),
           ),
-          const SizedBox(height: 6),
-          Text(note, style: TextStyle(fontSize: 14, color: color)),
+          const SizedBox(height: AppSpacing.sm),
+          Text(note, style: AppTextStyles.body.copyWith(color: color)),
         ],
       ),
     );
@@ -933,16 +916,13 @@ class _ExplanationSectionState extends State<_ExplanationSection> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'GIẢI TRÌNH CỦA BẠN',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.sectionLabel.copyWith(
               color: AppColors.textSecondary,
-              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: _controller,
             minLines: 4,
@@ -951,31 +931,30 @@ class _ExplanationSectionState extends State<_ExplanationSection> {
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
+              border: const OutlineInputBorder(
+                borderRadius: AppRadius.iconBoxAll,
+                borderSide: BorderSide(color: AppColors.border),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
+              enabledBorder: const OutlineInputBorder(
+                borderRadius: AppRadius.iconBoxAll,
+                borderSide: BorderSide(color: AppColors.border),
               ),
               hintText: 'Nhập giải trình của bạn...',
-              hintStyle: const TextStyle(
+              hintStyle: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
-                fontSize: 14,
               ),
-              contentPadding: const EdgeInsets.all(16),
+              contentPadding: const EdgeInsets.all(AppSpacing.lg),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: AppSizes.touchTargetMin,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: AppRadius.iconBoxAll,
                 ),
               ),
               onPressed: _canSubmit
@@ -1005,53 +984,47 @@ class _ExplanationSectionState extends State<_ExplanationSection> {
         if (deadlineExpired) ...[
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             decoration: BoxDecoration(
               color: AppColors.background,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: AppRadius.iconBoxAll,
               border: Border.all(color: AppColors.border),
             ),
-            child: const Text(
+            child: Text(
               'Đã hết hạn giải trình',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+              style: AppTextStyles.bodyBold.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
         ],
         if (status == 'PENDING_ADMIN' ||
             status == 'APPROVED' ||
             status == 'REJECTED') ...[
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             decoration: BoxDecoration(
               color: AppColors.background,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: AppRadius.iconBoxAll,
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'GIẢI TRÌNH ĐÃ GỬI',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                  style: AppTextStyles.sectionLabel.copyWith(
                     color: AppColors.textSecondary,
-                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   item.employeeExplanation?.isNotEmpty == true
                       ? item.employeeExplanation!
                       : '—',
-                  style: const TextStyle(
-                    fontSize: 14,
+                  style: AppTextStyles.body.copyWith(
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -1059,7 +1032,7 @@ class _ExplanationSectionState extends State<_ExplanationSection> {
             ),
           ),
           if (item.adminNote != null && item.adminNote!.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             _AdminNoteBlock(status: status, note: item.adminNote!),
           ],
         ],
@@ -1103,19 +1076,17 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: _bgColor,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: AppRadius.badgeAll,
       ),
       child: Text(
         _label,
-        style: TextStyle(
-          color: _color,
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
-          letterSpacing: 0.3,
-        ),
+        style: AppTextStyles.badgeLabel.copyWith(color: _color),
       ),
     );
   }
@@ -1137,10 +1108,10 @@ class _EmptyState extends StatelessWidget {
             size: 56,
             color: AppColors.textSecondary.withValues(alpha: 0.35),
           ),
-          const SizedBox(height: 16),
-          const Text(
+          const SizedBox(height: AppSpacing.lg),
+          Text(
             'Không có ngoại lệ nào cần xử lý',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -1160,21 +1131,18 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.error_outline, size: 40, color: AppColors.error),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
               onPressed: onRetry,
@@ -1264,14 +1232,11 @@ class _ExceptionDetailPageState extends State<ExceptionDetailPage> {
         title: Row(
           children: [
             _TypeIconBox(type: _item.exceptionType),
-            const SizedBox(width: 10),
+            const SizedBox(width: AppSpacing.sm),
             Flexible(
               child: Text(
                 _exceptionTypeLabel(_item.exceptionType),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: AppTextStyles.sectionTitle,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1279,15 +1244,15 @@ class _ExceptionDetailPageState extends State<ExceptionDetailPage> {
         ),
         actions: [
           _StatusBadge(status: _item.status),
-          const SizedBox(width: 16),
+          const SizedBox(width: AppSpacing.lg),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         children: [
           if (_urgencyBanner(_item) case final Widget banner?) ...[
             banner,
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
           ],
           _DetailField(
             label: 'LOẠI NGOẠI LỆ',
@@ -1314,9 +1279,9 @@ class _ExceptionDetailPageState extends State<ExceptionDetailPage> {
           if (_item.decidedByEmail != null &&
               _item.decidedByEmail!.isNotEmpty)
             _DetailField(label: 'NGƯỜI DUYỆT', value: _item.decidedByEmail!),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           const Divider(color: AppColors.border),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _ExplanationSection(
             key: ValueKey('detail_explanation_${_item.id}'),
             item: _item,
@@ -1324,13 +1289,13 @@ class _ExceptionDetailPageState extends State<ExceptionDetailPage> {
             onSubmit: _submit,
           ),
           if (_error != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Text(
               _error!,
-              style: const TextStyle(color: AppColors.error, fontSize: 12),
+              style: AppTextStyles.caption.copyWith(color: AppColors.error),
             ),
           ],
-          const SizedBox(height: 32),
+          const SizedBox(height: AppSpacing.xxxl),
         ],
       ),
     );

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class DeadlineBadge extends StatelessWidget {
   const DeadlineBadge({required this.deadline, super.key});
@@ -21,16 +23,12 @@ class DeadlineBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: state.bg,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRadius.iconBoxAll,
           border: Border.all(color: state.border, width: 0.5),
         ),
         child: Text(
           state.label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: state.text,
-          ),
+          style: AppTextStyles.captionBold,
         ),
       ),
     );

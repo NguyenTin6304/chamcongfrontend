@@ -174,6 +174,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       children: [
                         Text(
                           'Đổi mật khẩu mới',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.headerTitle.copyWith(
                             color: AppColors.textPrimary,
                           ),
@@ -181,6 +182,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           'Nhập token và mật khẩu mới để hoàn tất.',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.body.copyWith(
                             color: AppColors.textSecondary,
                           ),

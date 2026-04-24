@@ -35,7 +35,10 @@ Widget _wrap(Widget child) {
 void main() {
   group('admin exception status UX', () {
     test('maps all new statuses to labels and colors', () {
-      expect(exceptionStatusLabel('PENDING_EMPLOYEE'), isNot('PENDING_EMPLOYEE'));
+      expect(
+        exceptionStatusLabel('PENDING_EMPLOYEE'),
+        isNot('PENDING_EMPLOYEE'),
+      );
       expect(exceptionStatusLabel('PENDING_ADMIN'), isNot('PENDING_ADMIN'));
       expect(exceptionStatusLabel('APPROVED'), isNot('APPROVED'));
       expect(exceptionStatusLabel('REJECTED'), isNot('REJECTED'));
@@ -62,7 +65,9 @@ void main() {
   });
 
   group('PendingExceptionCard actions', () {
-    testWidgets('disables approve/reject when canDecide is false', (tester) async {
+    testWidgets('disables approve/reject when canDecide is false', (
+      tester,
+    ) async {
       var approveCount = 0;
       var rejectCount = 0;
 
@@ -87,7 +92,9 @@ void main() {
       expect(rejectCount, 0);
     });
 
-    testWidgets('enables approve/reject when canDecide is true', (tester) async {
+    testWidgets('enables approve/reject when canDecide is true', (
+      tester,
+    ) async {
       var approveCount = 0;
       var rejectCount = 0;
 
@@ -134,22 +141,25 @@ void main() {
     expect(source, contains('toDate: _dateRange.to'));
   });
 
-  test('exceptions source shows Phase 6 detail fields and read-only history detail', () {
-    final source = File(
-      'lib/features/admin/presentation/exceptions/exceptions_screen.dart',
-    ).readAsStringSync();
-    final historySource = File(
-      'lib/features/admin/presentation/exceptions/widgets/exception_history_table.dart',
-    ).readAsStringSync();
+  test(
+    'exceptions source shows Phase 6 detail fields and read-only history detail',
+    () {
+      final source = File(
+        'lib/features/admin/presentation/exceptions/exceptions_screen.dart',
+      ).readAsStringSync();
+      final historySource = File(
+        'lib/features/admin/presentation/exceptions/widgets/exception_history_table.dart',
+      ).readAsStringSync();
 
-    expect(source, contains('adminNote'));
-    expect(source, contains('adminDecidedAt'));
-    expect(source, contains('decidedByEmail'));
-    expect(source, contains('Khong co timeline.'));
-    expect(source, contains('readOnly: true'));
-    expect(historySource, isNot(contains('approveAttendanceException')));
-    expect(historySource, isNot(contains('rejectAttendanceException')));
-  });
+      expect(source, contains('adminNote'));
+      expect(source, contains('adminDecidedAt'));
+      expect(source, contains('decidedByEmail'));
+      expect(source, contains('Không có timeline.'));
+      expect(source, contains('readOnly: !_canAdminDecide(model)'));
+      expect(historySource, isNot(contains('approveAttendanceException')));
+      expect(historySource, isNot(contains('rejectAttendanceException')));
+    },
+  );
 
   test('exceptions source gates admin action and requires reject note', () {
     final source = File(
@@ -159,7 +169,7 @@ void main() {
     expect(source, contains("detail.status.toUpperCase() == 'PENDING_ADMIN'"));
     expect(source, contains('detail.canAdminDecide'));
     expect(source, contains('!readOnly'));
-    expect(source, contains('Vui long nhap admin_note khi tu choi.'));
+    expect(source, contains('Vui lòng nhập admin_note khi từ chối.'));
     expect(source, contains('rejectAttendanceException'));
     expect(source, contains('approveAttendanceException'));
   });

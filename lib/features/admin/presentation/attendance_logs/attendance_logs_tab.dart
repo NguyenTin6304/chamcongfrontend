@@ -3,14 +3,16 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
-import '../../../../core/config/app_config.dart';
-import '../../../../core/download/file_downloader.dart';
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import '../../../../widgets/common/status_badge.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
+import 'package:birdle/core/config/app_config.dart';
+import 'package:birdle/core/download/file_downloader.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
+import 'package:birdle/widgets/common/status_badge.dart';
 
 class AttendanceLogsTab extends StatefulWidget {
   const AttendanceLogsTab({super.key});
@@ -94,7 +96,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
         _logs = result.items;
         _serverTotal = result.total;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() {
         _logs = const [];
@@ -125,7 +127,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
       await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
       if (!mounted) return;
       _showSnack('Xuất Excel thành công.');
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       _showSnack('Không thể xuất Excel. Vui lòng thử lại.');
     } finally {
@@ -209,7 +211,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
     return InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      border: const OutlineInputBorder(borderRadius: AppRadius.cardAll),
     );
   }
 
@@ -317,16 +319,15 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                     ),
                   ),
                 if (!hasCheckIn && !hasCheckOut)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       'Không có dữ liệu vị trí GPS',
-                      style:
-                          TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                     ),
                   ),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.cardAll,
                   child: SizedBox(
                     height: 220,
                     child: FlutterMap(
@@ -477,7 +478,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.border, width: 0.5),
       ),
       child: Wrap(
@@ -573,13 +574,13 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                         },
                   icon: const Icon(Icons.search),
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.border),
+                border: const OutlineInputBorder(
+                  borderRadius: AppRadius.iconBoxAll,
+                  borderSide: BorderSide(color: AppColors.border),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: AppColors.border),
+                enabledBorder: const OutlineInputBorder(
+                  borderRadius: AppRadius.iconBoxAll,
+                  borderSide: BorderSide(color: AppColors.border),
                 ),
               ),
             ),
@@ -588,7 +589,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
             onPressed: _exportingCsv ? null : _exportCsv,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.surface,
             ),
             icon: _exportingCsv
                 ? const SizedBox(
@@ -596,7 +597,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: AppColors.surface,
                     ),
                   )
                 : const Icon(Icons.download_outlined),
@@ -614,9 +615,9 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border, width: 0.5),
+      shape: const RoundedRectangleBorder(
+        borderRadius: AppRadius.cardAll,
+        side: BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1062,7 +1063,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
       children: [
         Text(
           'Hiển thị $start-$end trong $total bản ghi',
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
         ),
         const Spacer(),
         OutlinedButton(
@@ -1087,10 +1088,10 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                   backgroundColor:
                       active ? AppColors.primary : Colors.transparent,
                   foregroundColor:
-                      active ? Colors.white : AppColors.textMuted,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: AppColors.border),
+                      active ? AppColors.surface : AppColors.textMuted,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: AppRadius.iconBoxAll,
+                    side: BorderSide(color: AppColors.border),
                   ),
                 ),
                 onPressed: active
@@ -1150,14 +1151,13 @@ class _MapLabel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: AppRadius.smallAll,
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: Colors.white,
+        style: AppTextStyles.captionBold.copyWith(
+          color: AppColors.surface,
           fontSize: 10,
-          fontWeight: FontWeight.w600,
           height: 1.2,
         ),
       ),
@@ -1174,12 +1174,7 @@ class _AttendanceHeaderText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textMuted,
-        letterSpacing: 0.04,
-      ),
+      style: AppTextStyles.sectionLabel.copyWith(color: AppColors.textMuted),
     );
   }
 }
@@ -1213,9 +1208,9 @@ class _SkeletonCellState extends State<_SkeletonCell>
       child: Container(
         width: widget.width,
         height: 12,
-        decoration: BoxDecoration(
-          color: const Color(0xFFE2E8F0),
-          borderRadius: BorderRadius.circular(8),
+        decoration: const BoxDecoration(
+          color: AppColors.border,
+          borderRadius: AppRadius.iconBoxAll,
         ),
       ),
     );

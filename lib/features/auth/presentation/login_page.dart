@@ -80,9 +80,29 @@ class _LoginPageState extends State<LoginPage> {
 
       try {
         me = await _authApi.me(token: activeAccessToken);
-      } on Object catch (error) {
+      } on AuthApiException catch (error) {
+        if (refreshToken == null ||
+            refreshToken.isEmpty ||
+            !error.isAuthFailure) {
+          if (_shouldClearSessionOnRestoreError(error)) {
+            shouldClearSession = true;
+          }
+          rethrow;
+        }
+        final refreshed = await _authApi.refresh(refreshToken: refreshToken);
+        activeAccessToken = refreshed.accessToken;
+        await _tokenStorage.saveSession(
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken ?? refreshToken,
+          rememberMe: remember,
+          email: savedEmail,
+        );
+        me = await _authApi.me(token: activeAccessToken);
+      } on Exception catch (error) {
         if (refreshToken == null || refreshToken.isEmpty) {
-          if (_shouldClearSessionOnRestoreError(error)) shouldClearSession = true;
+          if (_shouldClearSessionOnRestoreError(error)) {
+            shouldClearSession = true;
+          }
           rethrow;
         }
         final refreshed = await _authApi.refresh(refreshToken: refreshToken);
@@ -96,21 +116,25 @@ class _LoginPageState extends State<LoginPage> {
         me = await _authApi.me(token: activeAccessToken);
       }
 
-      unawaited(PushNotificationService.requestTokenAndRegister(
-        accessToken: activeAccessToken,
-      ));
+      unawaited(
+        PushNotificationService.requestTokenAndRegister(
+          accessToken: activeAccessToken,
+        ),
+      );
 
       if (!mounted) return;
       redirected = true;
       final profileEmail = me.email.isNotEmpty ? me.email : (savedEmail ?? '');
       _openByRole(role: me.role.toUpperCase(), email: profileEmail);
-    } on Object catch (error) {
-      if (_shouldClearSessionOnRestoreError(error) || shouldClearSession) {
+    } on Exception catch (error) {
+      final shouldClear =
+          shouldClearSession || _shouldClearSessionOnRestoreError(error);
+      if (shouldClear) {
         await _tokenStorage.clearSession(keepLastEmail: true);
       }
       if (!mounted) return;
       setState(() {
-        _infoMessage = (shouldClearSession || _shouldClearSessionOnRestoreError(error))
+        _infoMessage = shouldClear
             ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
             : 'Không thể khôi phục phiên lúc này. Vui lòng thử tải lại.';
       });
@@ -121,23 +145,20 @@ class _LoginPageState extends State<LoginPage> {
 
   void _openByRole({required String role, required String email}) {
     if (role == 'ADMIN') {
-      Navigator.of(context).pushReplacementNamed('/admin', arguments: {'email': email});
+      Navigator.of(
+        context,
+      ).pushReplacementNamed('/admin', arguments: {'email': email});
       return;
     }
-    Navigator.of(context).pushReplacementNamed('/home', arguments: {'email': email});
+    Navigator.of(
+      context,
+    ).pushReplacementNamed('/home', arguments: {'email': email});
   }
 
-  bool _shouldClearSessionOnRestoreError(Object error) {
-    final msg = _friendlyError(error, fallback: '').toLowerCase();
-    return msg.contains('401') ||
-        msg.contains('403') ||
-        msg.contains('unauthorized') ||
-        msg.contains('forbidden') ||
-        msg.contains('could not validate credentials') ||
-        msg.contains('credentials') ||
-        msg.contains('token không hợp lệ') ||
-        msg.contains('invalid token') ||
-        msg.contains('hết hạn');
+  bool _shouldClearSessionOnRestoreError(Exception error) {
+    if (error is! AuthApiException) return false;
+    final code = error.statusCode;
+    return code == 401 || code == 403;
   }
 
   bool get _recaptchaRequired => AppConfig.recaptchaSiteKey.trim().isNotEmpty;
@@ -154,7 +175,8 @@ class _LoginPageState extends State<LoginPage> {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) return;
 
-    if (_recaptchaRequired && (_recaptchaToken == null || _recaptchaToken!.trim().isEmpty)) {
+    if (_recaptchaRequired &&
+        (_recaptchaToken == null || _recaptchaToken!.trim().isEmpty)) {
       setState(() {
         _errorMessage = 'Vui lòng xác minh reCAPTCHA trước khi đăng nhập.';
         _infoMessage = null;
@@ -193,9 +215,11 @@ class _LoginPageState extends State<LoginPage> {
         // Fallback to USER flow if /auth/me temporarily fails.
       }
 
-      unawaited(PushNotificationService.requestTokenAndRegister(
-        accessToken: result.accessToken,
-      ));
+      unawaited(
+        PushNotificationService.requestTokenAndRegister(
+          accessToken: result.accessToken,
+        ),
+      );
 
       if (!mounted) return;
 
@@ -221,9 +245,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _goToRegister() async {
-    final registeredEmail = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const RegisterPage()),
-    );
+    final registeredEmail = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const RegisterPage()));
     if (!mounted || registeredEmail == null || registeredEmail.isEmpty) return;
     setState(() {
       _emailController.text = registeredEmail;
@@ -249,7 +273,9 @@ class _LoginPageState extends State<LoginPage> {
         children: [
           Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: AppSizes.loginFormMaxWidth),
+              constraints: const BoxConstraints(
+                maxWidth: AppSizes.loginFormMaxWidth,
+              ),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg,
@@ -272,13 +298,16 @@ class _LoginPageState extends State<LoginPage> {
                       children: [
                         Text(
                           'Chào mừng quay lại',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.headerTitle.copyWith(
                             color: AppColors.textPrimary,
+                            
                           ),
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
                           'Đăng nhập để tiếp tục chấm công.',
+                          textAlign: TextAlign.center,
                           style: AppTextStyles.body.copyWith(
                             color: AppColors.textSecondary,
                           ),
@@ -298,8 +327,12 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           validator: (value) {
                             final input = value?.trim() ?? '';
-                            if (input.isEmpty) return 'Nhập email';
-                            if (!input.contains('@')) return 'Email không hợp lệ';
+                            if (input.isEmpty) {
+                              return 'Nhập email';
+                            }
+                            if (!input.contains('@')) {
+                              return 'Email không hợp lệ';
+                            }
                             return null;
                           },
                           onChanged: (_) {
@@ -324,8 +357,9 @@ class _LoginPageState extends State<LoginPage> {
                             label: 'Mật khẩu',
                             icon: Icons.lock_outline,
                             suffixIcon: IconButton(
-                              onPressed: () =>
-                                  setState(() => _obscurePassword = !_obscurePassword),
+                              onPressed: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
                               icon: Icon(
                                 _obscurePassword
                                     ? Icons.visibility
@@ -334,8 +368,12 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) return 'Nhập mật khẩu';
-                            if (value.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
+                            if (value == null || value.isEmpty) {
+                              return 'Nhập mật khẩu';
+                            }
+                            if (value.length < 6) {
+                              return 'Mật khẩu tối thiểu 6 ký tự';
+                            }
                             return null;
                           },
                           onChanged: (_) {
@@ -374,21 +412,24 @@ class _LoginPageState extends State<LoginPage> {
                                 value: _rememberMe,
                                 onChanged: _isLoading
                                     ? null
-                                    : (value) =>
-                                        setState(() => _rememberMe = value ?? true),
+                                    : (value) => setState(
+                                        () => _rememberMe = value ?? true,
+                                      ),
                                 title: const Text(
                                   'Ghi nhớ đăng nhập',
                                   style: AppTextStyles.body,
                                 ),
-                                controlAffinity: ListTileControlAffinity.leading,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
                                 dense: true,
                               ),
                             ),
                             TextButton(
                               onPressed: _isLoading
                                   ? null
-                                  : () => Navigator.of(context)
-                                      .pushNamed('/forgot-password'),
+                                  : () => Navigator.of(
+                                      context,
+                                    ).pushNamed('/forgot-password'),
                               child: const Text('Quên mật khẩu?'),
                             ),
                           ],
