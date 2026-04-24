@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 
 import '../../../../../core/storage/token_storage.dart';
 import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 import '../../../data/admin_api.dart';
 import 'deadline_badge.dart';
 import 'exception_ui_helpers.dart';
@@ -153,7 +155,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
       setState(() {
         _allRows = sorted;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) {
         return;
       }
@@ -190,7 +192,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         exceptionType: exceptionType,
         statusFilter: widget.statusFilter,
       );
-    } catch (_) {
+    } on Exception catch (_) {
       return const [];
     }
   }
@@ -255,7 +257,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         Padding(
           padding: const EdgeInsets.only(left: 6),
           child: InkWell(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: AppRadius.iconBoxAll,
             onTap: () {
               setState(() {
                 _page = page;
@@ -265,16 +267,12 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: _page == page ? AppColors.primary : AppColors.bgCard,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppRadius.iconBoxAll,
                 border: Border.all(color: AppColors.border, width: 0.5),
               ),
               child: Text(
                 '$page',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _page == page ? Colors.white : AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: AppTextStyles.captionBold,
               ),
             ),
           ),
@@ -298,11 +296,11 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
         side: const BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
         child: Column(
           children: [
             if (_loading)
@@ -332,12 +330,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
-                  headingTextStyle: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.06,
-                    color: AppColors.textMuted,
-                  ),
+                  headingTextStyle: AppTextStyles.sectionLabel.copyWith(color: AppColors.textMuted, letterSpacing: 0.06),
                   dataRowMinHeight: 56,
                   dataRowMaxHeight: 56,
                   dividerThickness: 0.5,
@@ -410,11 +403,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                                       backgroundColor: AppColors.bgPage,
                                       child: Text(
                                         initials,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.textPrimary,
-                                        ),
+                                        style: AppTextStyles.sectionLabel.copyWith(color: AppColors.textPrimary),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -429,17 +418,11 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                                             item.fullName,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                            ),
+                                            style: AppTextStyles.chipText,
                                           ),
                                           Text(
                                             '${item.employeeCode} - ${item.groupName ?? item.groupCode ?? '--'}',
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: AppColors.textMuted,
-                                            ),
+                                            style: AppTextStyles.sectionLabel.copyWith(color: AppColors.textMuted),
                                           ),
                                         ],
                                       ),
@@ -456,15 +439,11 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: typeColor.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(99),
+                                  borderRadius: AppRadius.badgeAll,
                                 ),
                                 child: Text(
                                   typeText,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: typeColor,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: AppTextStyles.sectionLabel,
                                 ),
                               ),
                             ),
@@ -556,10 +535,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                 children: [
                   Text(
                     'Hiển thị $start–$end trong $total ngoại lệ',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
-                    ),
+                    style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                   ),
                   const Spacer(),
                   OutlinedButton(
@@ -587,7 +563,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                   const SizedBox(width: 12),
                   DropdownButton<int>(
                     value: _pageSize,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppRadius.iconBoxAll,
                     items: const [
                       DropdownMenuItem(value: 10, child: Text('10/trang')),
                       DropdownMenuItem(value: 25, child: Text('25/trang')),
@@ -620,12 +596,7 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
       scrollDirection: Axis.horizontal,
       child: DataTable(
         headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
-        headingTextStyle: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.06,
-          color: AppColors.textMuted,
-        ),
+        headingTextStyle: AppTextStyles.sectionLabel.copyWith(color: AppColors.textMuted, letterSpacing: 0.06),
         columns: [
           DataColumn(label: Text('STT')),
           if (showRetention) const DataColumn(label: Text('Lưu hồ sơ')),
@@ -695,15 +666,11 @@ class _ReviewStatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: palette.bg,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: AppRadius.badgeAll,
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: palette.text,
-        ),
+        style: AppTextStyles.captionBold,
       ),
     );
   }
@@ -742,16 +709,12 @@ class _RetentionBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRadius.iconBoxAll,
           border: Border.all(color: border, width: 0.5),
         ),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: text,
-          ),
+          style: AppTextStyles.captionBold.copyWith(color: text),
         ),
       ),
     );
@@ -785,7 +748,7 @@ class _ShimmerCell extends StatelessWidget {
           height: 12,
           decoration: BoxDecoration(
             color: AppColors.border.withValues(alpha: value),
-            borderRadius: BorderRadius.circular(99),
+            borderRadius: AppRadius.badgeAll,
           ),
         );
       },

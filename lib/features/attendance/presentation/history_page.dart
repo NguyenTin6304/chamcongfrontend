@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/layout/responsive.dart';
-import '../../../core/storage/token_storage.dart';
-import '../../../core/theme/app_colors.dart';
-import '../data/attendance_api.dart';
+import 'package:birdle/core/layout/responsive.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/attendance/data/attendance_api.dart';
 
 class HistoryPageBody extends StatefulWidget {
   const HistoryPageBody({super.key, this.onNavigate, this.refreshToken});
@@ -70,7 +74,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     final token = await _tokenStorage.getToken();
     if (!mounted) return;
     if (token == null || token.isEmpty) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+      unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false));
       return;
     }
     setState(() => _token = token);
@@ -86,7 +90,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
           .where((log) => _isWorkDateInMonth(log, month))
           .toList(growable: false);
       if (mounted) setState(() => _monthLogs = monthLogs);
-    } catch (_) {
+    } on Exception catch (_) {
       if (mounted) setState(() => _monthLogs = []);
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -110,9 +114,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   void _goToNextMonth() {
     final now = DateTime.now();
     final currentMonth = DateTime(now.year, now.month, 1);
-    if (!_selectedMonth.isBefore(currentMonth)) {
-      return; // already at current month
-    }
+    if (!_selectedMonth.isBefore(currentMonth)) return;
     final next = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
     setState(() {
       _selectedMonth = next;
@@ -141,7 +143,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       _isLoading = true;
     });
     final token = _token;
-    if (token != null) _loadMonthData(newMonth, token);
+    if (token != null) unawaited(_loadMonthData(newMonth, token));
   }
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -165,11 +167,12 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       return wd.year == date.year &&
           wd.month == date.month &&
           wd.day == date.day;
-    }).toList()..sort((a, b) {
-      final ta = DateTime.tryParse(a.time) ?? DateTime(0);
-      final tb = DateTime.tryParse(b.time) ?? DateTime(0);
-      return ta.compareTo(tb);
-    });
+    }).toList()
+      ..sort((a, b) {
+        final ta = DateTime.tryParse(a.time) ?? DateTime(0);
+        final tb = DateTime.tryParse(b.time) ?? DateTime(0);
+        return ta.compareTo(tb);
+      });
   }
 
   Color? _getDotColorForDate(DateTime date) {
@@ -286,18 +289,17 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   Widget _buildHeader() {
     return Container(
       color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
       child: Row(
         children: [
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           const Expanded(
             child: Text(
               'Lịch sử chấm công',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTextStyles.sectionTitle,
             ),
           ),
           IconButton(
@@ -319,13 +321,13 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     return ListView(
       padding: EdgeInsets.symmetric(horizontal: padding),
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _buildKpiCards(context),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _buildCalendarCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _buildDotLegend(),
-        const SizedBox(height: 20),
+        const SizedBox(height: AppSpacing.xl),
         if (_isMonthlyView) ...[
           _buildMonthlyHeader(),
           ..._buildMonthlyItems(),
@@ -333,7 +335,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
           _buildActivityHeader(),
           ..._buildDayActivityItems(_selectedDate),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xxl),
       ],
     );
   }
@@ -381,24 +383,21 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     required Color unitColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: const BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+            style: AppTextStyles.sectionLabel.copyWith(
               color: AppColors.textSecondary,
-              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -415,8 +414,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
                 padding: const EdgeInsets.only(bottom: 6, left: 2),
                 child: Text(
                   unit,
-                  style: TextStyle(
-                    fontSize: 18,
+                  style: AppTextStyles.headerTitle.copyWith(
                     fontWeight: FontWeight.w500,
                     color: unitColor,
                   ),
@@ -433,17 +431,17 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
 
   Widget _buildCalendarCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: const BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.cardAll,
       ),
       child: Column(
         children: [
           _buildCalendarHeader(),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           _buildWeekdayRow(),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           _buildDateGrid(),
         ],
       ),
@@ -456,15 +454,13 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
         Expanded(
           child: Text(
             'Tháng ${_selectedMonth.month} ${_selectedMonth.year}',
-            style: const TextStyle(
-              fontSize: 16,
+            style: AppTextStyles.sectionTitle.copyWith(
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
             ),
           ),
         ),
         _navBtn(Icons.chevron_left, _goToPrevMonth),
-        const SizedBox(width: 4),
+        const SizedBox(width: AppSpacing.xs),
         _navBtn(Icons.chevron_right, _goToNextMonth),
       ],
     );
@@ -476,9 +472,9 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       child: Container(
         width: 32,
         height: 32,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppColors.background,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRadius.iconBoxAll,
         ),
         child: Icon(icon, size: 18, color: AppColors.textPrimary),
       ),
@@ -493,8 +489,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
           child: Center(
             child: Text(
               l,
-              style: const TextStyle(
-                fontSize: 12,
+              style: AppTextStyles.caption.copyWith(
                 fontWeight: FontWeight.w500,
                 color: AppColors.textSecondary,
               ),
@@ -577,7 +572,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       textColor = AppColors.textSecondary.withValues(alpha: 0.35);
       circleBg = null;
     } else if (isSelected) {
-      textColor = Colors.white;
+      textColor = AppColors.surface;
       circleBg = AppColors.primary;
     } else if (isToday) {
       textColor = AppColors.primary;
@@ -606,13 +601,10 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
             child: Center(
               child: Text(
                 '${date.day}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: isSelected || isToday
-                      ? FontWeight.w600
-                      : FontWeight.w400,
-                  color: textColor,
-                ),
+                style: (isSelected || isToday
+                        ? AppTextStyles.bodyBold
+                        : AppTextStyles.body)
+                    .copyWith(color: textColor),
               ),
             ),
           ),
@@ -639,10 +631,10 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   Widget _buildDotLegend() {
     return const Wrap(
       alignment: WrapAlignment.center,
-      spacing: 14,
-      runSpacing: 6,
+      spacing: AppSpacing.md,
+      runSpacing: AppSpacing.sm,
       children: [
-        _LegendDot(color: AppColors.success, label: 'ĐÚNG GIỜ / VÀO SỚM'),
+        _LegendDot(color: AppColors.success, label: 'ĐÚNG GIỜ'),
         _LegendDot(color: AppColors.warning, label: 'VÀO MUỘN'),
         _LegendDot(color: AppColors.overtime, label: 'TĂNG CA'),
         _LegendDot(color: AppColors.error, label: 'NGOẠI VI'),
@@ -655,25 +647,29 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   Widget _buildActivityHeader() {
     final d = _selectedDate;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
         children: [
           Expanded(
             child: Text(
               'HOẠT ĐỘNG NGÀY ${d.day} THÁNG ${d.month}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              style: AppTextStyles.captionBold.copyWith(
                 color: AppColors.textSecondary,
                 letterSpacing: 0.5,
               ),
             ),
           ),
-          GestureDetector(
-            onTap: () => setState(() => _isMonthlyView = true),
-            child: const Text(
+          TextButton(
+            onPressed: () => setState(() => _isMonthlyView = true),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.xs,
+              ),
+            ),
+            child: Text(
               'Xem cả tháng',
-              style: TextStyle(fontSize: 13, color: AppColors.primary),
+              style: AppTextStyles.chipText.copyWith(color: AppColors.primary),
             ),
           ),
         ],
@@ -693,11 +689,11 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     final items = <Widget>[];
     if (inLog != null) {
       items.add(_buildCheckinItem(inLog));
-      items.add(const SizedBox(height: 8));
+      items.add(const SizedBox(height: AppSpacing.sm));
     }
     if (outLog != null) {
       items.add(_buildCheckoutItem(outLog));
-      items.add(const SizedBox(height: 8));
+      items.add(const SizedBox(height: AppSpacing.sm));
     }
     if (inLog != null || outLog != null) {
       items.add(_buildSummaryItem(date, inLog, outLog));
@@ -707,23 +703,25 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
 
   Widget _buildEmptyState() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxxl),
       child: Column(
-        children: const [
-          Icon(
+        children: [
+          const Icon(
             Icons.calendar_today_outlined,
             size: 48,
             color: AppColors.border,
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Text(
             'Không có dữ liệu chấm công',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'Ngày nghỉ hoặc chưa điểm danh',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -830,10 +828,10 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: const BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppRadius.cardAll,
         ),
         child: Row(
           children: [
@@ -842,28 +840,20 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
               height: 40,
               decoration: BoxDecoration(
                 color: iconBg,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.iconBoxAll,
               ),
               child: Icon(icon, size: 20, color: iconColor),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
+                  Text(title, style: AppTextStyles.bodyBold),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
+                    style: AppTextStyles.caption.copyWith(
                       color: AppColors.textSecondary,
                     ),
                   ),
@@ -874,17 +864,15 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(width: 3, height: 30, color: statusColor),
-                const SizedBox(width: 6),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
                   statusLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                  style: AppTextStyles.badgeLabel.copyWith(
                     color: statusColor,
                   ),
                 ),
                 if (onTap != null) ...[
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   const Icon(
                     Icons.chevron_right,
                     size: 18,
@@ -903,25 +891,29 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
 
   Widget _buildMonthlyHeader() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
         children: [
           Expanded(
             child: Text(
               'TẤT CẢ THÁNG ${_selectedMonth.month}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              style: AppTextStyles.captionBold.copyWith(
                 color: AppColors.textSecondary,
                 letterSpacing: 0.5,
               ),
             ),
           ),
-          GestureDetector(
-            onTap: () => setState(() => _isMonthlyView = false),
-            child: const Text(
+          TextButton(
+            onPressed: () => setState(() => _isMonthlyView = false),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.xs,
+              ),
+            ),
+            child: Text(
               '← Về lịch',
-              style: TextStyle(fontSize: 13, color: AppColors.primary),
+              style: AppTextStyles.chipText.copyWith(color: AppColors.primary),
             ),
           ),
         ],
@@ -946,11 +938,13 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
       if (dt == null) continue;
       items.add(
         Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 6),
+          padding: const EdgeInsets.only(
+            top: AppSpacing.sm,
+            bottom: AppSpacing.sm,
+          ),
           child: Text(
             'Ngày ${dt.day} tháng ${dt.month}',
-            style: const TextStyle(
-              fontSize: 13,
+            style: AppTextStyles.chipText.copyWith(
               fontWeight: FontWeight.w600,
               color: AppColors.textSecondary,
             ),
@@ -958,7 +952,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
         ),
       );
       items.addAll(_buildDayActivityItems(dt));
-      items.add(const SizedBox(height: 4));
+      items.add(const SizedBox(height: AppSpacing.xs));
     }
     return items;
   }
@@ -966,7 +960,7 @@ class _HistoryPageBodyState extends State<HistoryPageBody> {
   // ── Detail Sheet ──────────────────────────────────────────────────────────
 
   void _showDetailSheet(AttendanceLogItem log) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
@@ -995,13 +989,13 @@ class _LegendDot extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: AppSpacing.xs),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+          style: AppTextStyles.sectionLabel.copyWith(
             color: AppColors.textSecondary,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0,
           ),
         ),
       ],
@@ -1036,7 +1030,7 @@ class _LogDetailSheet extends StatelessWidget {
           Container(
             width: 40,
             height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.md),
             decoration: BoxDecoration(
               color: AppColors.border,
               borderRadius: BorderRadius.circular(2),
@@ -1044,21 +1038,24 @@ class _LogDetailSheet extends StatelessWidget {
           ),
           // Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    isIn ? 'Chi tiết điểm danh vào' : 'Chi tiết điểm danh ra',
-                    style: const TextStyle(
-                      fontSize: 16,
+                    isIn
+                        ? 'Chi tiết điểm danh vào'
+                        : 'Chi tiết điểm danh ra',
+                    style: AppTextStyles.sectionTitle.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
                     ),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                  icon: const Icon(
+                    Icons.close,
+                    color: AppColors.textSecondary,
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -1067,7 +1064,12 @@ class _LogDetailSheet extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           // Detail rows
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.lg,
+              AppSpacing.xl,
+              AppSpacing.xxl,
+            ),
             child: Column(
               children: [
                 _detailRow('Thời gian', timeStr),
@@ -1093,7 +1095,7 @@ class _LogDetailSheet extends StatelessWidget {
 
   Widget _detailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1101,8 +1103,7 @@ class _LogDetailSheet extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 14,
+              style: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
@@ -1110,8 +1111,7 @@ class _LogDetailSheet extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                fontSize: 14,
+              style: AppTextStyles.body.copyWith(
                 fontWeight: FontWeight.w500,
                 color: AppColors.textPrimary,
               ),
@@ -1123,16 +1123,16 @@ class _LogDetailSheet extends StatelessWidget {
   }
 
   String _punctualityLabel(String? s) => switch (s?.toUpperCase()) {
-    'ON_TIME' => 'Đúng giờ',
-    'LATE' => 'Vào muộn',
-    'EARLY' => 'Vào sớm',
-    _ => '—',
-  };
+        'ON_TIME' => 'Đúng giờ',
+        'LATE' => 'Vào muộn',
+        'EARLY' => 'Vào sớm',
+        _ => '—',
+      };
 
   String _checkoutLabel(String? s) => switch (s?.toUpperCase()) {
-    'ON_TIME' => 'Đúng giờ',
-    'LATE' => 'Tăng ca',
-    'EARLY' => 'Về sớm',
-    _ => '—',
-  };
+        'ON_TIME' => 'Đúng giờ',
+        'LATE' => 'Tăng ca',
+        'EARLY' => 'Về sớm',
+        _ => '—',
+      };
 }

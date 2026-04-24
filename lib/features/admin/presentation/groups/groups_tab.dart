@@ -446,7 +446,7 @@ class _SkeletonCellState extends State<_SkeletonCell>
         width: widget.width,
         height: 12,
         decoration: BoxDecoration(
-          color: const Color(0xFFE2E8F0),
+          color: AppColors.border,
           borderRadius: BorderRadius.circular(8),
         ),
       ),

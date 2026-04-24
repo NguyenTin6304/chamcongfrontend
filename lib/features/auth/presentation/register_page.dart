@@ -1,6 +1,12 @@
+import 'dart:developer' as dev;
+
 import 'package:flutter/material.dart';
 
-import '../data/auth_api.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/auth/data/auth_api.dart';
+import 'package:birdle/features/auth/presentation/widgets/auth_widgets.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -10,15 +16,15 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _nameFocusNode = FocusNode();
-  final _phoneFocusNode = FocusNode();
-  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  final _nameFocusNode = FocusNode();
+  final _phoneFocusNode = FocusNode();
   final _emailFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
   final _confirmPasswordFocusNode = FocusNode();
@@ -28,7 +34,6 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-
   String? _errorMessage;
 
   @override
@@ -46,73 +51,12 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  InputDecoration _inputDecoration({
-    required String label,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: Colors.grey.shade50,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: Theme.of(context).colorScheme.primary,
-          width: 1.6,
-        ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.red),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.red, width: 1.6),
-      ),
-    );
-  }
-
-  Widget _buildErrorBanner(String text) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline, size: 18, color: Colors.red),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  String _normalizePhone(String value) =>
+      value.trim().replaceAll(RegExp(r'[\s.-]'), '');
 
   Future<void> _submit() async {
     final form = _formKey.currentState;
-    if (form == null || !form.validate()) {
-      return;
-    }
+    if (form == null || !form.validate()) return;
 
     setState(() {
       _isLoading = true;
@@ -125,293 +69,254 @@ class _RegisterPageState extends State<RegisterPage> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final registerResult = await _authApi.register(
+      final result = await _authApi.register(
         email: email,
         password: password,
         fullName: fullName,
         phone: phone,
       );
 
-      if (!mounted) {
-        return;
-      }
-
-      Navigator.of(context).pop(registerResult.email);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _errorMessage = 'Đăng ký thất bại: $error';
-      });
+      if (!mounted) return;
+      Navigator.of(context).pop(result.email);
+    } on AuthApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = 'Đăng ký thất bại: ${e.message}');
+    } on Exception catch (e) {
+      dev.log('register: $e', name: 'RegisterPage');
+      if (!mounted) return;
+      setState(() => _errorMessage = 'Đăng ký thất bại. Vui lòng thử lại.');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _submitFromKeyboard(String _) {
-    if (_isLoading) {
-      return;
-    }
-    _submit();
-  }
-
-  String _normalizePhone(String value) {
-    return value.trim().replaceAll(RegExp(r'[\s.-]'), '');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Đăng ký tài khoản')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        title: Text(
+          'Đăng ký tài khoản',
+          style: AppTextStyles.sectionTitle.copyWith(color: AppColors.textPrimary),
+        ),
+      ),
       body: Stack(
         children: [
           Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
+              constraints: const BoxConstraints(maxWidth: AppSizes.loginFormMaxWidth),
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Card(
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.xxxl,
+                ),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: AppRadius.cardAll,
+                    boxShadow: AppShadows.elevated,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Form(
-                      key: _formKey,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Tạo tài khoản mới',
-                            style: Theme.of(context).textTheme.titleLarge,
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Tạo tài khoản mới',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.headerTitle.copyWith(
+                            color: AppColors.textPrimary,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Tài khoản sẽ được tạo với quyền USER.',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.grey.shade700),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Tài khoản sẽ được tạo với quyền USER.',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textSecondary,
                           ),
-                          const SizedBox(height: 14),
-                          if (_errorMessage != null)
-                            _buildErrorBanner(_errorMessage!),
-                          TextFormField(
-                            controller: _nameController,
-                            focusNode: _nameFocusNode,
-                            keyboardType: TextInputType.text,
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.next,
-                            autofillHints: const [AutofillHints.name],
-                            decoration: _inputDecoration(
-                              label: 'Họ và tên',
-                              icon: Icons.person,
-                            ),
-                            validator: (value) {
-                              final input = value?.trim() ?? '';
-                              if (input.isEmpty) {
-                                return 'Nhập họ và tên';
-                              }
-                              if (input.length < 2) {
-                                return 'Họ và tên tối thiểu 2 ký tự';
-                              }
-                              if (RegExp(r'\d').hasMatch(input)) {
-                                return 'Họ và tên không được chứa số';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: (_) {
-                              _emailFocusNode.requestFocus();
-                            },
-                            onChanged: (_) {
-                              if (_errorMessage != null) {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                              }
-                            },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        if (_errorMessage != null)
+                          AuthBanner(text: _errorMessage!, isError: true),
+                        TextFormField(
+                          controller: _nameController,
+                          focusNode: _nameFocusNode,
+                          keyboardType: TextInputType.text,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.name],
+                          decoration: authInputDecoration(
+                            label: 'Họ và tên',
+                            icon: Icons.person,
                           ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _emailController,
-                            focusNode: _emailFocusNode,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            autofillHints: const [AutofillHints.email],
-                            decoration: _inputDecoration(
-                              label: 'Email',
-                              icon: Icons.alternate_email,
-                            ),
-                            validator: (value) {
-                              final input = value?.trim() ?? '';
-                              if (input.isEmpty) {
-                                return 'Nhập email';
-                              }
-                              if (!input.contains('@')) {
-                                return 'Email không hợp lệ';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: (_) {
-                              _phoneFocusNode.requestFocus();
-                            },
-                            onChanged: (_) {
-                              if (_errorMessage != null) {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                              }
-                            },
+                          validator: (value) {
+                            final input = value?.trim() ?? '';
+                            if (input.isEmpty) return 'Nhập họ và tên';
+                            if (input.length < 2) return 'Họ và tên tối thiểu 2 ký tự';
+                            if (RegExp(r'\d').hasMatch(input)) {
+                              return 'Họ và tên không được chứa số';
+                            }
+                            return null;
+                          },
+                          onFieldSubmitted: (_) => _emailFocusNode.requestFocus(),
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _emailController,
+                          focusNode: _emailFocusNode,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.email],
+                          decoration: authInputDecoration(
+                            label: 'Email',
+                            icon: Icons.alternate_email,
                           ),
-                          const SizedBox(height: 14),
-                          TextFormField(
-                            controller: _phoneController,
-                            focusNode: _phoneFocusNode,
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.next,
-                            autofillHints: const [
-                              AutofillHints.telephoneNumber,
-                            ],
-                            decoration: _inputDecoration(
-                              label: 'Số điện thoại',
-                              icon: Icons.phone,
-                            ),
-                            validator: (value) {
-                              final input = value?.trim() ?? '';
-                              final normalized = _normalizePhone(input);
-                              if (input.isEmpty) {
-                                return 'Nhập số điện thoại';
-                              }
-                              if (!RegExp(
-                                r'^\d{10,11}$',
-                              ).hasMatch(normalized)) {
-                                return 'Số điện thoại không hợp lệ';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: (_) {
-                              _passwordFocusNode.requestFocus();
-                            },
-                            onChanged: (_) {
-                              if (_errorMessage != null) {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                              }
-                            },
+                          validator: (value) {
+                            final input = value?.trim() ?? '';
+                            if (input.isEmpty) return 'Nhập email';
+                            if (!input.contains('@')) return 'Email không hợp lệ';
+                            return null;
+                          },
+                          onFieldSubmitted: (_) => _phoneFocusNode.requestFocus(),
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _phoneController,
+                          focusNode: _phoneFocusNode,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.telephoneNumber],
+                          decoration: authInputDecoration(
+                            label: 'Số điện thoại',
+                            icon: Icons.phone,
                           ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _passwordController,
-                            focusNode: _passwordFocusNode,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.next,
-                            autofillHints: const [AutofillHints.newPassword],
-                            decoration: _inputDecoration(
-                              label: 'Mật khẩu',
-                              icon: Icons.lock_outline,
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                ),
-                              ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Nhập mật khẩu';
-                              }
-                              if (value.length < 6) {
-                                return 'Mật khẩu tối thiểu 6 ký tự';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: (_) {
-                              _confirmPasswordFocusNode.requestFocus();
-                            },
-                            onChanged: (_) {
-                              if (_errorMessage != null) {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _confirmPasswordController,
-                            focusNode: _confirmPasswordFocusNode,
-                            obscureText: _obscureConfirmPassword,
-                            textInputAction: TextInputAction.done,
-                            autofillHints: const [AutofillHints.newPassword],
-                            decoration: _inputDecoration(
-                              label: 'Nhập lại mật khẩu',
-                              icon: Icons.lock_reset,
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _obscureConfirmPassword =
-                                        !_obscureConfirmPassword;
-                                  });
-                                },
-                                icon: Icon(
-                                  _obscureConfirmPassword
-                                      ? Icons.visibility
-                                      : Icons.visibility_off,
-                                ),
-                              ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Nhập lại mật khẩu';
-                              }
-                              if (value != _passwordController.text) {
-                                return 'Mật khẩu nhập lại không khớp';
-                              }
-                              return null;
-                            },
-                            onFieldSubmitted: _submitFromKeyboard,
-                            onChanged: (_) {
-                              if (_errorMessage != null) {
-                                setState(() {
-                                  _errorMessage = null;
-                                });
-                              }
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            height: 48,
-                            child: FilledButton.icon(
-                              onPressed: _isLoading ? null : _submit,
-                              icon: _isLoading
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.person_add_alt_1),
-                              label: Text(
-                                _isLoading ? 'Đang tạo...' : 'Tạo tài khoản',
+                          validator: (value) {
+                            final input = value?.trim() ?? '';
+                            final normalized = _normalizePhone(input);
+                            if (input.isEmpty) return 'Nhập số điện thoại';
+                            if (!RegExp(r'^\d{10,11}$').hasMatch(normalized)) {
+                              return 'Số điện thoại không hợp lệ';
+                            }
+                            return null;
+                          },
+                          onFieldSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _passwordController,
+                          focusNode: _passwordFocusNode,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.newPassword],
+                          decoration: authInputDecoration(
+                            label: 'Mật khẩu',
+                            icon: Icons.lock_outline,
+                            suffixIcon: IconButton(
+                              onPressed: () =>
+                                  setState(() => _obscurePassword = !_obscurePassword),
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Nhập mật khẩu';
+                            if (value.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
+                            return null;
+                          },
+                          onFieldSubmitted: (_) =>
+                              _confirmPasswordFocusNode.requestFocus(),
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        TextFormField(
+                          controller: _confirmPasswordController,
+                          focusNode: _confirmPasswordFocusNode,
+                          obscureText: _obscureConfirmPassword,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.newPassword],
+                          decoration: authInputDecoration(
+                            label: 'Nhập lại mật khẩu',
+                            icon: Icons.lock_reset,
+                            suffixIcon: IconButton(
+                              onPressed: () => setState(
+                                () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                              ),
+                              icon: Icon(
+                                _obscureConfirmPassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                            ),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Nhập lại mật khẩu';
+                            if (value != _passwordController.text) {
+                              return 'Mật khẩu nhập lại không khớp';
+                            }
+                            return null;
+                          },
+                          onFieldSubmitted: (_) {
+                            if (!_isLoading) _submit();
+                          },
+                          onChanged: (_) {
+                            if (_errorMessage != null) {
+                              setState(() => _errorMessage = null);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SizedBox(
+                          height: AppSizes.touchTargetMin,
+                          child: FilledButton.icon(
+                            onPressed: _isLoading ? null : _submit,
+                            icon: _isLoading
+                                ? const SizedBox(
+                                    width: AppSpacing.lg,
+                                    height: AppSpacing.lg,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.surface,
+                                    ),
+                                  )
+                                : const Icon(Icons.person_add_alt_1),
+                            label: Text(
+                              _isLoading ? 'Đang tạo...' : 'Tạo tài khoản',
+                              style: AppTextStyles.buttonLabel,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

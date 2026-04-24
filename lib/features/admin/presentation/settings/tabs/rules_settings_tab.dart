@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../../../core/config/app_config.dart';
-import '../../../../../core/storage/token_storage.dart';
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/config/app_config.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class RulesSettingsTab extends StatefulWidget {
   const RulesSettingsTab({super.key});
@@ -87,7 +89,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         }
       }
       // 404 (no active rule yet) → keep UI defaults silently
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
@@ -113,8 +115,13 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
           return rule.copyWith(isActive: checkoutGrace > 0, fields: fields);
         case 'gps':
           final radius = _toInt(data['radius_m']);
-          if (radius == null) return rule;
-          return rule.copyWith(fields: {...rule.fields, 'min_accuracy_meters': radius});
+          final lat = _toDouble(data['latitude']);
+          final lng = _toDouble(data['longitude']);
+          final fields = Map<String, dynamic>.from(rule.fields);
+          if (radius != null) fields['min_accuracy_meters'] = radius;
+          if (lat != null) fields['latitude'] = lat;
+          if (lng != null) fields['longitude'] = lng;
+          return rule.copyWith(fields: fields);
         default:
           return rule;
       }
@@ -157,7 +164,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         await _putActiveRule({'grace_minutes': grace});
       }
       // Other rule cards are UI-only — no backend per-rule toggle
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() => _rules[index] = previous); // revert
       ScaffoldMessenger.of(context).showSnackBar(
@@ -183,6 +190,10 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         case 'gps':
           final radius = _toInt(item.fields['min_accuracy_meters']);
           if (radius != null) extra['radius_m'] = radius;
+          final lat = _toDouble(item.fields['latitude']);
+          if (lat != null) extra['latitude'] = lat;
+          final lng = _toDouble(item.fields['longitude']);
+          if (lng != null) extra['longitude'] = lng;
         default:
           break;
       }
@@ -191,7 +202,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Đã lưu cài đặt')),
       );
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
@@ -213,6 +224,10 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
           case 'gps':
             final radius = _toInt(rule.fields['min_accuracy_meters']);
             if (radius != null) extra['radius_m'] = radius;
+            final lat = _toDouble(rule.fields['latitude']); 
+            if (lat != null) extra['latitude'] = lat;
+            final lng = _toDouble(rule.fields['longitude']);
+            if (lng != null) extra['longitude'] = lng;
           default:
             break;
         }
@@ -222,7 +237,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Đã lưu cài đặt')),
       );
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Có lỗi xảy ra. Vui lòng thử lại.')),
@@ -248,18 +263,14 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Quy tắc chấm công',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: AppTextStyles.headerTitle.copyWith(color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Cấu hình áp dụng toàn hệ thống',
-                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  style: AppTextStyles.chipText.copyWith(color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: AppColors.border),
@@ -310,7 +321,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
                 onPressed: _savingAll ? null : _saveAll,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.surface,
                 ),
                 child: _savingAll
                     ? const SizedBox(
@@ -318,7 +329,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.surface,
                         ),
                       )
                     : const Text('Lưu thay đổi'),
@@ -347,7 +358,7 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         code: 'auto_checkout',
         name: 'Tự động checkout',
         icon: Icons.schedule_outlined,
-        iconBg: Color(0xFFEFF6FF),
+        iconBg: AppColors.bgPage,
         iconFg: AppColors.primary,
         isActive: true,
         fields: {'auto_checkout_time': '18:00'},
@@ -357,10 +368,10 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         code: 'gps',
         name: 'Xác thực vị trí GPS',
         icon: Icons.my_location_outlined,
-        iconBg: Color(0xFFEFF6FF),
+        iconBg: AppColors.bgPage,
         iconFg: AppColors.primary,
         isActive: true,
-        fields: {'min_accuracy_meters': 50},
+        fields: {'latitude': 0.0, 'longitude': 0.0, 'min_accuracy_meters': 200},
       ),
       _RuleItem(
         id: null,
@@ -433,7 +444,7 @@ class _RuleCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.bgCard,
         border: Border.all(color: AppColors.border, width: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.iconBoxAll,
       ),
       child: Column(
         children: [
@@ -446,7 +457,7 @@ class _RuleCard extends StatelessWidget {
                   height: 36,
                   decoration: BoxDecoration(
                     color: item.iconBg,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppRadius.iconBoxAll,
                   ),
                   child: Icon(item.icon, color: item.iconFg, size: 18),
                 ),
@@ -457,18 +468,11 @@ class _RuleCard extends StatelessWidget {
                     children: [
                       Text(
                         item.name,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textPrimary,
-                        ),
+                        style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
                       ),
                       Text(
                         _summary(),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMuted,
-                        ),
+                        style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                       ),
                     ],
                   ),
@@ -496,7 +500,7 @@ class _RuleCard extends StatelessWidget {
                           onPressed: item.saving ? null : onSave,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppColors.surface,
                           ),
                           child: item.saving
                               ? const SizedBox(
@@ -504,7 +508,7 @@ class _RuleCard extends StatelessWidget {
                                   height: 14,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: AppColors.surface,
                                   ),
                                 )
                               : const Text('Lưu'),
@@ -534,10 +538,32 @@ class _RuleCard extends StatelessWidget {
           onChanged: (v) => onChangedField('auto_checkout_time', v),
         );
       case 'gps':
-        return _NumberFieldRow(
-          label: 'min_accuracy_meters',
-          value: item.fields['min_accuracy_meters'],
-          onChanged: (v) => onChangedField('min_accuracy_meters', v),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tọa độ SYSTEM RULE',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 6),
+            _DoubleFieldRow(
+              label: 'Vĩ độ (latitude)',
+              value: item.fields['latitude'] ?? 0.0,
+              onChanged: (v) => onChangedField('latitude', v),
+            ),
+            const SizedBox(height: 8),
+            _DoubleFieldRow(
+              label: 'Kinh độ (longitude)',
+              value: item.fields['longitude'] ?? 0.0,
+              onChanged: (v) => onChangedField('longitude', v),
+            ),
+            const SizedBox(height: 8),
+            _NumberFieldRow(
+              label: 'Bán kính (m)',
+              value: item.fields['min_accuracy_meters'],
+              onChanged: (v) => onChangedField('min_accuracy_meters', v),
+            ),
+          ],
         );
       case 'overtime':
         return Column(
@@ -557,7 +583,10 @@ class _RuleCard extends StatelessWidget {
         );
       case 'auto_exception':
         final map =
-            Map<String, dynamic>.from(item.fields['trigger_conditions'] ?? {});
+            Map<String, dynamic>.from(
+              (item.fields['trigger_conditions'] as Map<dynamic, dynamic>?) ??
+                  const {},
+            );
         return Wrap(
           spacing: 8,
           runSpacing: 8,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 import 'exception_ui_helpers.dart';
 
 class ExceptionModel {
@@ -107,234 +109,239 @@ class PendingExceptionCard extends StatelessWidget {
     final workDateText = exception.workDate == null
         ? '—'
         : DateFormat('dd/MM/yyyy').format(exception.workDate!.toLocal());
-    final checkOut = exception.checkOutTime.trim().isEmpty ||
-            exception.checkOutTime == '--'
+    final checkOut =
+        exception.checkOutTime.trim().isEmpty || exception.checkOutTime == '--'
         ? '—'
         : exception.checkOutTime;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.bgCard,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(4),
-          bottomLeft: Radius.circular(4),
-          topRight: Radius.circular(12),
-          bottomRight: Radius.circular(12),
-        ),
-        border: Border(
-          left: BorderSide(width: 4, color: borderColor),
-          top: const BorderSide(width: 0.5, color: AppColors.border),
-          right: const BorderSide(width: 0.5, color: AppColors.border),
-          bottom: const BorderSide(width: 0.5, color: AppColors.border),
-        ),
+        borderRadius: AppRadius.cardAll,
+        border: Border.all(color: AppColors.border, width: 0.5),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: _avatarBg(exception.employeeName),
-                child: Text(
-                  _initials(exception.employeeName),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(width: 4, color: borderColor)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: _avatarBg(exception.employeeName),
+                  child: Text(
+                    _initials(exception.employeeName),
+                    style: AppTextStyles.chipText.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      exception.employeeName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      '${exception.employeeCode} · ${exception.departmentName}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: typeColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  exceptionTypeLabel(exception.exceptionType),
-                  style: TextStyle(
-                    color: typeColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _timeAgo(exception.createdAt),
-                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-              ),
-              const SizedBox(width: 2),
-              const Icon(Icons.more_vert, size: 16, color: AppColors.textMuted),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.exceptionCardMutedBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final itemWidth = (constraints.maxWidth - 12) / 2;
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
-                  children: [
-                    SizedBox(
-                      width: itemWidth,
-                      child: _DetailPair(
-                        label: 'Ngày yêu cầu',
-                        value: Text(workDateText, style: _valueStyle),
-                      ),
-                    ),
-                    SizedBox(
-                      width: itemWidth,
-                      child: _DetailPair(
-                        label: 'Giờ vào',
-                        value: Text(exception.checkInTime, style: _valueStyle),
-                      ),
-                    ),
-                    SizedBox(
-                      width: itemWidth,
-                      child: _DetailPair(
-                        label: 'Giờ ra',
-                        value: Text(
-                          checkOut,
-                          style: checkOut == '—'
-                              ? _valueStyle.copyWith(color: AppColors.textMuted)
-                              : _valueStyle,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        exception.employeeName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textPrimary,
                         ),
                       ),
-                    ),
-                    SizedBox(
-                      width: itemWidth,
-                      child: _DetailPair(
-                        label: 'Vị trí',
-                        value: Row(
-                          children: [
-                            Icon(
-                              isOutside
-                                  ? Icons.location_off_outlined
-                                  : Icons.location_on_outlined,
-                              size: 14,
-                              color: isOutside
-                                  ? AppColors.danger
-                                  : AppColors.success,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              isOutside ? 'Ngoài vùng' : 'Trong vùng',
-                              style: _valueStyle.copyWith(
+                      Text(
+                        '${exception.employeeCode} · ${exception.departmentName}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: typeColor.withValues(alpha: 0.12),
+                    borderRadius: AppRadius.badgeAll,
+                  ),
+                  child: Text(
+                    exceptionTypeLabel(exception.exceptionType),
+                    style: AppTextStyles.sectionLabel,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _timeAgo(exception.createdAt),
+                  style: AppTextStyles.sectionLabel.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.more_vert,
+                  size: 16,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.exceptionCardMutedBg,
+                borderRadius: AppRadius.iconBoxAll,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final itemWidth = (constraints.maxWidth - 12) / 2;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      SizedBox(
+                        width: itemWidth,
+                        child: _DetailPair(
+                          label: 'Ngày yêu cầu',
+                          value: Text(workDateText, style: _valueStyle),
+                        ),
+                      ),
+                      SizedBox(
+                        width: itemWidth,
+                        child: _DetailPair(
+                          label: 'Giờ vào',
+                          value: Text(
+                            exception.checkInTime,
+                            style: _valueStyle,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: itemWidth,
+                        child: _DetailPair(
+                          label: 'Giờ ra',
+                          value: Text(
+                            checkOut,
+                            style: checkOut == '—'
+                                ? _valueStyle.copyWith(
+                                    color: AppColors.textMuted,
+                                  )
+                                : _valueStyle,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: itemWidth,
+                        child: _DetailPair(
+                          label: 'Vị trí',
+                          value: Row(
+                            children: [
+                              Icon(
+                                isOutside
+                                    ? Icons.location_off_outlined
+                                    : Icons.location_on_outlined,
+                                size: 14,
                                 color: isOutside
                                     ? AppColors.danger
                                     : AppColors.success,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Text(
+                                isOutside ? 'Ngoài vùng' : 'Trong vùng',
+                                style: _valueStyle.copyWith(
+                                  color: isOutside
+                                      ? AppColors.danger
+                                      : AppColors.success,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: isProcessing ? null : onViewDetail,
-                child: const Text(
-                  'Xem chi tiết',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: isProcessing || !canDecide ? null : onReject,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.danger),
-                  foregroundColor: AppColors.danger,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: isProcessing ? null : onViewDetail,
+                  child: const Text(
+                    'Xem chi tiết',
+                    style: TextStyle(color: AppColors.textMuted),
                   ),
                 ),
-                child: isProcessing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Từ chối'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: isProcessing || !canDecide ? null : onApprove,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: isProcessing || !canDecide ? null : onReject,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.danger),
+                    foregroundColor: AppColors.danger,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.iconBoxAll,
+                    ),
                   ),
+                  child: isProcessing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Từ chối'),
                 ),
-                child: isProcessing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Phê duyệt'),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: isProcessing || !canDecide ? null : onApprove,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: AppColors.surface,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.iconBoxAll,
+                    ),
+                  ),
+                  child: isProcessing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.surface,
+                          ),
+                        )
+                      : const Text('Phê duyệt'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-const TextStyle _valueStyle = TextStyle(
-  fontSize: 12,
-  fontWeight: FontWeight.w500,
+final TextStyle _valueStyle = AppTextStyles.caption.copyWith(
   color: AppColors.textPrimary,
 );
 
@@ -351,7 +358,9 @@ class _DetailPair extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          style: AppTextStyles.sectionLabel.copyWith(
+            color: AppColors.textMuted,
+          ),
         ),
         const SizedBox(height: 2),
         value,

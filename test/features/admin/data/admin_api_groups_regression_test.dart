@@ -23,6 +23,14 @@ import 'package:http/testing.dart';
 const _api = AdminApi();
 const _tok = 'test-token';
 
+http.Response _utf8Response(String body, int statusCode) {
+  return http.Response.bytes(
+    utf8.encode(body),
+    statusCode,
+    headers: const {'content-type': 'application/json; charset=utf-8'},
+  );
+}
+
 /// Geofence JSON fixture with all required fields.
 Map<String, dynamic> _geoFix({
   int id = 10,
@@ -32,16 +40,15 @@ Map<String, dynamic> _geoFix({
   double lng = 106.7,
   int radiusM = 200,
   bool active = true,
-}) =>
-    {
-      'id': id,
-      'group_id': groupId,
-      'name': name,
-      'latitude': lat,
-      'longitude': lng,
-      'radius_m': radiusM,
-      'active': active,
-    };
+}) => {
+  'id': id,
+  'group_id': groupId,
+  'name': name,
+  'latitude': lat,
+  'longitude': lng,
+  'radius_m': radiusM,
+  'active': active,
+};
 
 /// Group JSON fixture.
 Map<String, dynamic> _groupFix({
@@ -60,10 +67,18 @@ Map<String, dynamic> _groupFix({
     'name': name,
     'active': active,
   };
-  if (startTime != null) m['start_time'] = startTime;
-  if (endTime != null) m['end_time'] = endTime;
-  if (graceMinutes != null) m['grace_minutes'] = graceMinutes;
-  if (checkoutGraceMinutes != null) m['checkout_grace_minutes'] = checkoutGraceMinutes;
+  if (startTime != null) {
+    m['start_time'] = startTime;
+  }
+  if (endTime != null) {
+    m['end_time'] = endTime;
+  }
+  if (graceMinutes != null) {
+    m['grace_minutes'] = graceMinutes;
+  }
+  if (checkoutGraceMinutes != null) {
+    m['checkout_grace_minutes'] = checkoutGraceMinutes;
+  }
   return m;
 }
 
@@ -95,11 +110,17 @@ void main() {
       final client = MockClient((req) async {
         expect(req.url.path, endsWith('/groups/geofences/summary'));
         expect(req.headers['Authorization'], contains(_tok));
-        return http.Response(
+        return _utf8Response(
           jsonEncode({
             '1': [_geoFix(id: 10, groupId: 1, name: 'Zone A', radiusM: 200)],
             '2': [
-              _geoFix(id: 20, groupId: 2, name: 'Zone B', radiusM: 150, active: false),
+              _geoFix(
+                id: 20,
+                groupId: 2,
+                name: 'Zone B',
+                radiusM: 150,
+                active: false,
+              ),
               _geoFix(id: 21, groupId: 2, name: 'Zone C', radiusM: 300),
             ],
           }),
@@ -130,7 +151,7 @@ void main() {
 
     test('skips non-numeric string keys', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode({
             '1': [_geoFix()],
             'invalid_key': [_geoFix(id: 99, groupId: 0, name: 'Ghost')],
@@ -152,7 +173,7 @@ void main() {
 
     test('returns empty map when response is {}', () async {
       final client = MockClient((_) async {
-        return http.Response(jsonEncode(<String, dynamic>{}), 200);
+        return _utf8Response(jsonEncode(<String, dynamic>{}), 200);
       });
 
       final result = await http.runWithClient(
@@ -166,7 +187,7 @@ void main() {
     test('appends group_ids param when provided', () async {
       final client = MockClient((req) async {
         expect(req.url.queryParameters['group_ids'], '1,2,3');
-        return http.Response(jsonEncode(<String, dynamic>{}), 200);
+        return _utf8Response(jsonEncode(<String, dynamic>{}), 200);
       });
 
       await http.runWithClient(
@@ -178,7 +199,7 @@ void main() {
     test('does NOT append group_ids when list is empty', () async {
       final client = MockClient((req) async {
         expect(req.url.queryParameters.containsKey('group_ids'), isFalse);
-        return http.Response(jsonEncode(<String, dynamic>{}), 200);
+        return _utf8Response(jsonEncode(<String, dynamic>{}), 200);
       });
 
       await http.runWithClient(
@@ -189,7 +210,7 @@ void main() {
 
     test('throws on non-200 status', () async {
       final client = MockClient((_) async {
-        return http.Response(jsonEncode({'detail': 'Forbidden'}), 403);
+        return _utf8Response(jsonEncode({'detail': 'Forbidden'}), 403);
       });
 
       await expectLater(
@@ -204,8 +225,11 @@ void main() {
     test('handles non-list value for a group key gracefully', () async {
       // If backend sends {"1": null}, it should not crash.
       final client = MockClient((_) async {
-        return http.Response(
-          jsonEncode({'1': null, '2': [_geoFix(groupId: 2)]}),
+        return _utf8Response(
+          jsonEncode({
+            '1': null,
+            '2': [_geoFix(groupId: 2)],
+          }),
           200,
         );
       });
@@ -229,7 +253,7 @@ void main() {
   group('listGroups – null-safety', () {
     test('maps all optional fields when present', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode([
             _groupFix(
               id: 1,
@@ -264,7 +288,7 @@ void main() {
 
     test('handles all-null optional fields without crash', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode([
             {'id': 2, 'code': 'G02', 'name': 'Nhóm chiều', 'active': false},
           ]),
@@ -288,7 +312,7 @@ void main() {
 
     test('returns empty list when API returns []', () async {
       final client = MockClient((_) async {
-        return http.Response(jsonEncode(<dynamic>[]), 200);
+        return _utf8Response(jsonEncode(<dynamic>[]), 200);
       });
 
       final groups = await http.runWithClient(
@@ -301,7 +325,7 @@ void main() {
 
     test('throws on error response', () async {
       final client = MockClient((_) async {
-        return http.Response(jsonEncode({'detail': 'Unauthorized'}), 401);
+        return _utf8Response(jsonEncode({'detail': 'Unauthorized'}), 401);
       });
 
       await expectLater(
@@ -320,15 +344,17 @@ void main() {
       Map<String, dynamic>? sentBody;
       final client = MockClient((req) async {
         sentBody = jsonDecode(req.body) as Map<String, dynamic>;
-        return http.Response(
-          jsonEncode(_groupFix(
-            id: 99,
-            code: 'G99',
-            name: 'New Group',
-            startTime: '08:00',
-            endTime: '17:30',
-            graceMinutes: 10,
-          )),
+        return _utf8Response(
+          jsonEncode(
+            _groupFix(
+              id: 99,
+              code: 'G99',
+              name: 'New Group',
+              startTime: '08:00',
+              endTime: '17:30',
+              graceMinutes: 10,
+            ),
+          ),
           201,
         );
       });
@@ -358,7 +384,10 @@ void main() {
       Map<String, dynamic>? sentBody;
       final client = MockClient((req) async {
         sentBody = jsonDecode(req.body) as Map<String, dynamic>;
-        return http.Response(jsonEncode(_groupFix(code: 'G88', name: 'Min')), 201);
+        return _utf8Response(
+          jsonEncode(_groupFix(code: 'G88', name: 'Min')),
+          201,
+        );
       });
 
       await http.runWithClient(
@@ -382,7 +411,7 @@ void main() {
       Map<String, dynamic>? sentBody;
       final client = MockClient((req) async {
         sentBody = jsonDecode(req.body) as Map<String, dynamic>;
-        return http.Response(jsonEncode(_groupFix(id: 1)), 200);
+        return _utf8Response(jsonEncode(_groupFix(id: 1)), 200);
       });
 
       await http.runWithClient(
@@ -403,7 +432,7 @@ void main() {
       Map<String, dynamic>? sentBody;
       final client = MockClient((req) async {
         sentBody = jsonDecode(req.body) as Map<String, dynamic>;
-        return http.Response(
+        return _utf8Response(
           jsonEncode(_groupFix(id: 1, checkoutGraceMinutes: 1080)),
           200,
         );
@@ -433,10 +462,7 @@ void main() {
       final client = MockClient((req) async {
         sentBody = jsonDecode(req.body) as Map<String, dynamic>;
         calledPath = req.url.path;
-        return http.Response(
-          jsonEncode(_empFix(id: 100, groupId: null)),
-          200,
-        );
+        return _utf8Response(jsonEncode(_empFix(id: 100, groupId: null)), 200);
       });
 
       await http.runWithClient(
@@ -457,18 +483,12 @@ void main() {
       Map<String, dynamic>? sentBody;
       final client = MockClient((req) async {
         sentBody = jsonDecode(req.body) as Map<String, dynamic>;
-        return http.Response(
-          jsonEncode(_empFix(id: 100, groupId: 3)),
-          200,
-        );
+        return _utf8Response(jsonEncode(_empFix(id: 100, groupId: 3)), 200);
       });
 
       await http.runWithClient(
-        () => _api.assignEmployeeGroup(
-          token: _tok,
-          employeeId: 100,
-          groupId: 3,
-        ),
+        () =>
+            _api.assignEmployeeGroup(token: _tok, employeeId: 100, groupId: 3),
         () => client,
       );
 
@@ -477,18 +497,15 @@ void main() {
 
     test('returns updated EmployeeLite with new groupId', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode(_empFix(id: 100, groupId: 5, fullName: 'Trần Thị B')),
           200,
         );
       });
 
       final emp = await http.runWithClient(
-        () => _api.assignEmployeeGroup(
-          token: _tok,
-          employeeId: 100,
-          groupId: 5,
-        ),
+        () =>
+            _api.assignEmployeeGroup(token: _tok, employeeId: 100, groupId: 5),
         () => client,
       );
 
@@ -505,7 +522,7 @@ void main() {
   group('deleteGroup', () {
     test('completes without throwing on 200', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode({'ok': true, 'deleted_group_id': 1}),
           200,
         );
@@ -522,7 +539,7 @@ void main() {
 
     test('throws on 404', () async {
       final client = MockClient((_) async {
-        return http.Response(jsonEncode({'detail': 'Group not found'}), 404);
+        return _utf8Response(jsonEncode({'detail': 'Group not found'}), 404);
       });
 
       await expectLater(
@@ -542,7 +559,7 @@ void main() {
   group('GroupGeofenceLite mapping – null-safety', () {
     test('uses fallback 0 when radius_m missing', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode([
             {
               'id': 5,
@@ -568,7 +585,7 @@ void main() {
 
     test('active defaults to true when field missing', () async {
       final client = MockClient((_) async {
-        return http.Response(
+        return _utf8Response(
           jsonEncode([
             {
               'id': 6,

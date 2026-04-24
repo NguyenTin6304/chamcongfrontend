@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/widgets/common/notification_bell.dart';
 
 class AdminTopbar extends StatelessWidget {
   const AdminTopbar({
@@ -25,10 +28,10 @@ class AdminTopbar extends StatelessWidget {
     return Container(
       height: 60,
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
       child: Row(
         children: [
           Expanded(
@@ -36,47 +39,34 @@ class AdminTopbar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                Text(title, style: AppTextStyles.headerTitle),
                 Text(
                   dateLabel,
-                  style: const TextStyle(
-                    fontSize: 13,
+                  style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textMuted,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           IconButton(
             tooltip: 'Tải lại',
             onPressed: onReloadTap,
             icon: const Icon(Icons.refresh),
           ),
-          const SizedBox(width: 4),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_outlined),
-          ),
-          const SizedBox(width: 4),
+          const NotificationBell(),
+          const SizedBox(width: AppSpacing.xs),
           InkWell(
             onTap: onAvatarTap,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: AppRadius.badgeAll,
             child: CircleAvatar(
               radius: 16,
               backgroundColor: AppColors.border,
               child: Text(
                 avatarText,
-                style: const TextStyle(
+                style: AppTextStyles.captionBold.copyWith(
                   color: AppColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),

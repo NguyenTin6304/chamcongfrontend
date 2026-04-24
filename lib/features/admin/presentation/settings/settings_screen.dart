@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 import 'tabs/explanation_policy_settings_tab.dart';
 import 'tabs/general_settings_tab.dart';
 import 'tabs/rules_settings_tab.dart';
@@ -38,11 +40,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Container(
             decoration: BoxDecoration(
               color: AppColors.bgCard,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppRadius.cardAll,
               border: Border.all(color: AppColors.border, width: 0.5),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppRadius.cardAll,
               child: ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -79,9 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       horizontal: 16,
                                     ),
                                     color: active
-                                        ? const Color(0xFFEFF6FF)
+                                        ? AppColors.bgPage
                                         : (hover
-                                              ? const Color(0xFFF8FAFC)
+                                              ? AppColors.background
                                               : Colors.transparent),
                                     child: Row(
                                       children: [
@@ -95,15 +97,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         const SizedBox(width: 8),
                                         Text(
                                           item.label,
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: active
-                                                ? AppColors.primary
-                                                : AppColors.textMuted,
-                                            fontWeight: active
-                                                ? FontWeight.w600
-                                                : FontWeight.w500,
-                                          ),
+                                          style: AppTextStyles.chipText,
                                         ),
                                       ],
                                     ),
@@ -126,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Container(
             decoration: BoxDecoration(
               color: AppColors.bgCard,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppRadius.cardAll,
               border: Border.all(color: AppColors.border, width: 0.5),
             ),
             child: IndexedStack(
@@ -155,7 +149,7 @@ class _PlaceholderTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -163,7 +157,7 @@ class _PlaceholderTab extends StatelessWidget {
           SizedBox(height: 8),
           Text(
             'Tính năng đang phát triển',
-            style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+            style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
           ),
         ],
       ),

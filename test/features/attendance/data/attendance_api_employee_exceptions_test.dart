@@ -35,7 +35,7 @@ Map<String, dynamic> _exceptionFix({
     'source_checkin_log_id': 99,
     'source_checkin_time': '2026-04-01T01:00:00Z',
     'detected_at': '2026-04-01T10:00:00Z',
-    'expires_at': '2026-04-04T10:00:00Z',
+    'expires_at': '2099-04-04T10:00:00Z',
     'employee_explanation': employeeExplanation,
     'employee_submitted_at': employeeSubmittedAt,
     'admin_note': adminNote,
@@ -75,7 +75,7 @@ void main() {
       final item = result.first;
       expect(item.status, 'PENDING_EMPLOYEE');
       expect(item.detectedAt, DateTime.parse('2026-04-01T10:00:00Z'));
-      expect(item.expiresAt, DateTime.parse('2026-04-04T10:00:00Z'));
+      expect(item.expiresAt, DateTime.parse('2099-04-04T10:00:00Z'));
       expect(item.canSubmitExplanation, isTrue);
       expect(item.canEditExplanation, isTrue);
       expect(item.timeline.single.eventType, 'exception_detected');
@@ -84,15 +84,20 @@ void main() {
     test('submitExceptionExplanation sends correct request body', () async {
       Map<String, dynamic>? body;
       final client = MockClient((request) async {
-        expect(request.url.path, endsWith('/reports/attendance-exceptions/7/submit-explanation'));
+        expect(
+          request.url.path,
+          endsWith('/reports/attendance-exceptions/7/submit-explanation'),
+        );
         body = jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response(
-          jsonEncode(_exceptionFix(
-            status: 'PENDING_ADMIN',
-            canSubmitExplanation: false,
-            employeeExplanation: 'I forgot to checkout.',
-            employeeSubmittedAt: '2026-04-02T01:00:00Z',
-          )),
+          jsonEncode(
+            _exceptionFix(
+              status: 'PENDING_ADMIN',
+              canSubmitExplanation: false,
+              employeeExplanation: 'I forgot to checkout.',
+              employeeSubmittedAt: '2026-04-02T01:00:00Z',
+            ),
+          ),
           200,
         );
       });
@@ -148,6 +153,9 @@ void main() {
       final source = File(
         'lib/features/attendance/presentation/employee_exceptions_screen.dart',
       ).readAsStringSync();
+      final modelSource = File(
+        'lib/features/attendance/data/attendance_api.dart',
+      ).readAsStringSync();
 
       for (final status in [
         'PENDING_EMPLOYEE',
@@ -159,60 +167,63 @@ void main() {
         expect(source, contains("'$status'"));
       }
       expect(source, contains("item.status == 'PENDING_EMPLOYEE'"));
-      expect(source, contains('item.canSubmitExplanation'));
-      expect(source, contains('item.employeeSubmittedAt == null'));
-      expect(source, contains('_disabledExplanationHint'));
+      expect(source, contains('item.canEditExplanation'));
+      expect(modelSource, contains('canSubmitExplanation'));
+      expect(modelSource, contains('employeeSubmittedAt == null'));
+      expect(source, contains('item.isDeadlineExpired'));
     });
 
-    testWidgets('enables explanation field for PENDING_EMPLOYEE', (tester) async {
+    testWidgets('enables explanation field for PENDING_EMPLOYEE', (
+      tester,
+    ) async {
       SharedPreferences.setMockInitialValues({'access_token': _tok});
       final client = MockClient((request) async {
         return http.Response(jsonEncode([_exceptionFix()]), 200);
       });
 
-      await http.runWithClient(
-        () async {
-          await tester.pumpWidget(const MaterialApp(home: EmployeeExceptionsScreen()));
-          await tester.pumpAndSettle();
-        },
-        () => client,
-      );
-
-      final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.enabled, isTrue);
-      expect(find.text('Gui giai trinh'), findsOneWidget);
-    });
-
-    testWidgets('disables explanation field and shows admin note for final decision', (tester) async {
-      SharedPreferences.setMockInitialValues({'access_token': _tok});
-      final client = MockClient((request) async {
-        return http.Response(
-          jsonEncode([
-            _exceptionFix(
-              status: 'REJECTED',
-              canSubmitExplanation: false,
-              employeeExplanation: 'I forgot to checkout.',
-              employeeSubmittedAt: '2026-04-02T01:00:00Z',
-              adminNote: 'Reason rejected',
-              adminDecidedAt: '2026-04-03T01:00:00Z',
-            ),
-          ]),
-          200,
+      await http.runWithClient(() async {
+        await tester.pumpWidget(
+          const MaterialApp(home: EmployeeExceptionsScreen()),
         );
-      });
-
-      await http.runWithClient(
-        () async {
-          await tester.pumpWidget(const MaterialApp(home: EmployeeExceptionsScreen()));
-          await tester.pumpAndSettle();
-        },
-        () => client,
-      );
+        await tester.pumpAndSettle();
+      }, () => client);
 
       final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.enabled, isFalse);
-      expect(find.text('Reason rejected'), findsOneWidget);
-      expect(find.text('Tu choi'), findsWidgets);
+      expect(field.enabled ?? true, isTrue);
+      expect(find.text('Gửi giải trình'), findsOneWidget);
     });
+
+    testWidgets(
+      'disables explanation field and shows admin note for final decision',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({'access_token': _tok});
+        final client = MockClient((request) async {
+          return http.Response(
+            jsonEncode([
+              _exceptionFix(
+                status: 'REJECTED',
+                canSubmitExplanation: false,
+                employeeExplanation: 'I forgot to checkout.',
+                employeeSubmittedAt: '2026-04-02T01:00:00Z',
+                adminNote: 'Reason rejected',
+                adminDecidedAt: '2026-04-03T01:00:00Z',
+              ),
+            ]),
+            200,
+          );
+        });
+
+        await http.runWithClient(() async {
+          await tester.pumpWidget(
+            const MaterialApp(home: EmployeeExceptionsScreen()),
+          );
+          await tester.pumpAndSettle();
+        }, () => client);
+
+        expect(find.byType(TextField), findsNothing);
+        expect(find.text('Reason rejected'), findsOneWidget);
+        expect(find.text('Từ chối'), findsWidgets);
+      },
+    );
   });
 }

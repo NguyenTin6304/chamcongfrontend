@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/download/file_downloader.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 import '../../data/admin_api.dart';
 import '../../data/admin_data_cache.dart';
 import '../../../../widgets/common/kpi_card.dart';
@@ -130,7 +132,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
       });
     } on UnauthorizedException {
       AdminDataCache.instance.sessionExpired.value = true;
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) {
         return;
       }
@@ -155,7 +157,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         status: 'PENDING_ADMIN',
       );
       return rows.map(_mapExceptionItem).toList(growable: false);
-    } catch (_) {
+    } on Exception catch (_) {
       final fallback = await _api.listDashboardExceptions(
         token: token,
         status: 'PENDING_ADMIN',
@@ -187,7 +189,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
     try {
       final policy = await _api.getExceptionPolicy(token);
       return policy.gracePeriodDays;
-    } catch (_) {
+    } on Exception catch (_) {
       return _gracePeriodDays;
     }
   }
@@ -252,7 +254,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
             exceptionType: type,
             statusFilter: status,
           );
-        } catch (_) {
+        } on Exception catch (_) {
           return const <AttendanceExceptionItem>[];
         }
       }),
@@ -549,12 +551,9 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                       const SizedBox(height: 12),
                       const _DialogSectionTitle('Timeline'),
                       if (timeline.isEmpty)
-                        const Text(
+                        Text(
                           'Không có timeline.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
+                          style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                         )
                       else
                         ...timeline.map(_buildTimelineRow),
@@ -571,7 +570,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                                       : DateFormat('HH:mm  dd/MM/yyyy').format(
                                           selectedCheckoutTime!.toLocal(),
                                         ),
-                                  style: const TextStyle(fontSize: 13),
+                                  style: AppTextStyles.chipText,
                                 ),
                               ),
                               TextButton.icon(
@@ -633,14 +632,11 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                           ),
                         ),
                         if (initialApprove == false)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(top: 6),
                             child: Text(
                               'Bắt buộc nhập note khi từ chối.',
-                              style: TextStyle(
-                                color: AppColors.danger,
-                                fontSize: 12,
-                              ),
+                              style: AppTextStyles.caption.copyWith(color: AppColors.danger),
                             ),
                           ),
                       ],
@@ -950,7 +946,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         exceptionType: exceptionType,
         statusFilter: _selectedStatus,
       );
-    } catch (_) {
+    } on Exception catch (_) {
       if (ignoreErrors) {
         return const [];
       }
@@ -1039,7 +1035,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   // ignore: unused_element
   Widget _buildPendingCards(List<ExceptionModel> pending) {
     if (pending.isEmpty) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: Text(
           'Không có yêu cầu chờ xử lý.',
@@ -1187,7 +1183,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.bgCard,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: AppRadius.cardAll,
             border: Border.all(color: AppColors.border, width: 0.5),
           ),
           child: Column(
@@ -1203,7 +1199,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                             final isActive = _selectedStatus == tab.id;
                             final palette = _tabPalette(tab.id, isActive);
                             return InkWell(
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: AppRadius.badgeAll,
                               onTap: () async {
                                 if (_selectedStatus == tab.id) {
                                   return;
@@ -1220,7 +1216,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: palette.bg,
-                                  borderRadius: BorderRadius.circular(999),
+                                  borderRadius: AppRadius.badgeAll,
                                   border: Border.all(color: palette.border),
                                 ),
                                 child: Text(
@@ -1338,7 +1334,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                     onPressed: _exporting ? null : _exportExcel,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.surface,
                     ),
                     icon: _exporting
                         ? const SizedBox(
@@ -1346,7 +1342,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                             height: 12,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: AppColors.surface,
                             ),
                           )
                         : const Icon(Icons.download_rounded, size: 16),
@@ -1360,14 +1356,10 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         const SizedBox(height: 16),
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'Lịch sử xử lý ngoại lệ',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
-                ),
+                style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
               ),
             ),
           ],
@@ -1407,11 +1399,7 @@ class _DialogSectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-        ),
+        style: AppTextStyles.chipText.copyWith(color: AppColors.textPrimary),
       ),
     );
   }
@@ -1434,16 +1422,13 @@ class _DialogInfoRow extends StatelessWidget {
             width: 150,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textPrimary,
-              ),
+              style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
             ),
           ),
         ],

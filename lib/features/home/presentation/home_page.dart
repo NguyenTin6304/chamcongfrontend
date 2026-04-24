@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -6,19 +7,24 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../core/config/app_config.dart';
-import '../../../core/layout/responsive.dart';
-import '../../../core/storage/token_storage.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../attendance/data/attendance_api.dart';
+import 'package:birdle/core/layout/responsive.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/utils/vn_date_utils.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/attendance/data/attendance_api.dart';
+import 'package:birdle/features/auth/data/auth_session_service.dart';
+import 'package:birdle/features/home/presentation/widgets/activity_section.dart';
+import 'package:birdle/features/home/presentation/widgets/cta_button.dart';
+import 'package:birdle/features/home/presentation/widgets/gps_status_chip.dart';
+import 'package:birdle/features/home/presentation/widgets/home_header.dart';
+import 'package:birdle/features/home/presentation/widgets/map_panel.dart';
+import 'package:birdle/features/home/presentation/widgets/summary_section.dart';
 
 class HomePageBody extends StatefulWidget {
   const HomePageBody({super.key, this.onNavigate, this.onAttendanceChanged});
 
-  /// Called when this body wants to switch tabs in AppScaffold.
   final ValueChanged<int>? onNavigate;
-
-  /// Called after a successful check-in or check-out so other tabs can refresh.
   final VoidCallback? onAttendanceChanged;
 
   @override
@@ -26,44 +32,40 @@ class HomePageBody extends StatefulWidget {
 }
 
 class _HomePageBodyState extends State<HomePageBody> {
-  static const _vnWeekdays = [
-    'Thứ Hai',
-    'Thứ Ba',
-    'Thứ Tư',
-    'Thứ Năm',
-    'Thứ Sáu',
-    'Thứ Bảy',
-    'Chủ Nhật',
-  ];
 
-  final _tokenStorage = TokenStorage();
+  final _authSession = AuthSessionService();
   final _attendanceApi = const AttendanceApi();
+  final MapController _mapController = MapController();
 
-  String? _token;
   AttendanceStatusResult? _status;
   Position? _currentPosition;
+  List<GeofencePoint> _geofences = [];
   bool _isLoadingAction = false;
   bool _isLoadingPage = true;
+  bool _isLocating = false;
   List<AttendanceLogItem> _recentLogs = [];
   Timer? _clockTimer;
-  DateTime _now = DateTime.now();
+  StreamSubscription<Position>? _positionStream;
+  late final ValueNotifier<DateTime> _nowNotifier;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() => _now = DateTime.now());
-      }
-    });
+    _nowNotifier = ValueNotifier(DateTime.now());
+    _clockTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _nowNotifier.value = DateTime.now(),
+    );
     _loadPageData();
   }
 
   @override
   void dispose() {
     _clockTimer?.cancel();
+    _positionStream?.cancel();
+    _nowNotifier.dispose();
     super.dispose();
   }
 
@@ -73,56 +75,165 @@ class _HomePageBodyState extends State<HomePageBody> {
     if (!mounted) return;
     setState(() => _isLoadingPage = true);
 
-    final token = await _tokenStorage.getToken();
+    final token = await _resolveToken();
     if (!mounted) return;
 
-    if (token == null || token.isEmpty) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+    if (token == null) {
+      setState(() => _isLoadingPage = false);
       return;
     }
 
-    setState(() => _token = token);
-
-    await Future.wait([_loadStatus(token), _loadLogs(token), _fetchLocation()]);
+    await Future.wait([
+      _loadStatus(token),
+      _loadLogs(token),
+      _fetchLocation(),
+      _loadGeofences(token),
+    ]);
 
     if (mounted) setState(() => _isLoadingPage = false);
+  }
+
+  Future<String?> _resolveToken() async {
+    try {
+      final token = await _authSession.resolveAccessToken();
+      if (!mounted) return null;
+      if (token == null || token.isEmpty) {
+        unawaited(Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false));
+        return null;
+      }
+      return token;
+    } on Exception catch (e) {
+      if (!mounted) return null;
+      _showSnack('Không thể khôi phục phiên đăng nhập: $e');
+      return null;
+    }
   }
 
   Future<void> _loadStatus(String token) async {
     try {
       final status = await _attendanceApi.getStatus(token);
       if (mounted) setState(() => _status = status);
-    } catch (_) {}
+    } on Exception catch (e) {
+      dev.log('_loadStatus: $e', name: 'HomePageBody');
+    }
   }
 
   Future<void> _loadLogs(String token) async {
     try {
       final logs = await _attendanceApi.getMyLogs(token);
       if (mounted) setState(() => _recentLogs = logs);
-    } catch (_) {}
+    } on Exception catch (e) {
+      dev.log('_loadLogs: $e', name: 'HomePageBody');
+    }
+  }
+
+  Future<void> _loadGeofences(String token) async {
+    try {
+      final geofences = await _attendanceApi.getMyGeofences(token);
+      if (mounted) setState(() => _geofences = geofences);
+    } on Exception catch (e) {
+      dev.log('_loadGeofences: $e', name: 'HomePageBody');
+    }
+  }
+
+  /// Returns true if GPS service is on and permission is granted.
+  /// Optionally shows a snack on failure.
+  Future<bool> _hasGpsAccess({bool showSnackOnFailure = false}) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (showSnackOnFailure) _showSnack('Dịch vụ GPS đang tắt.');
+      return false;
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (showSnackOnFailure) _showSnack('Chưa cấp quyền vị trí.');
+      return false;
+    }
+    return true;
   }
 
   Future<void> _fetchLocation() async {
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
+      if (!await _hasGpsAccess()) return;
 
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return;
-      }
-
+      // First fix: always accept regardless of accuracy so the map shows immediately.
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
+          accuracy: LocationAccuracy.best,
         ),
       );
       if (mounted) setState(() => _currentPosition = position);
-    } catch (_) {}
+
+      // Stream: only replace when new fix is strictly better (prevents WiFi-noise jumps).
+      await _positionStream?.cancel();
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 5,
+        ),
+      ).listen((pos) {
+        if (!mounted) return;
+        final current = _currentPosition;
+        if (current != null && pos.accuracy >= current.accuracy) return;
+        setState(() => _currentPosition = pos);
+        try {
+          _mapController.move(
+            LatLng(pos.latitude, pos.longitude),
+            _mapController.camera.zoom,
+          );
+        } on Exception catch (_) {}
+      });
+    } on Exception catch (_) {}
+  }
+
+  // ── GPS Refresh ───────────────────────────────────────────────────────────
+
+  Future<void> _refreshLocation() async {
+    if (_isLocating) return;
+    setState(() => _isLocating = true);
+    try {
+      if (!await _hasGpsAccess(showSnackOnFailure: true)) return;
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _currentPosition = pos);
+      try {
+        _mapController.move(
+          LatLng(pos.latitude, pos.longitude),
+          _mapController.camera.zoom,
+        );
+      } on Exception catch (_) {}
+
+      // Restart stream if it was never started (e.g. GPS disabled on initial load).
+      _positionStream ??= Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          distanceFilter: 5,
+        ),
+      ).listen((streamPos) {
+        if (!mounted) return;
+        final current = _currentPosition;
+        if (current != null && streamPos.accuracy >= current.accuracy) return;
+        setState(() => _currentPosition = streamPos);
+        try {
+          _mapController.move(
+            LatLng(streamPos.latitude, streamPos.longitude),
+            _mapController.camera.zoom,
+          );
+        } on Exception catch (_) {}
+      });
+    } on Exception catch (e) {
+      if (mounted) _showSnack('Không thể lấy vị trí: $e');
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
+    }
   }
 
   // ── Action Handlers ───────────────────────────────────────────────────────
@@ -131,29 +242,25 @@ class _HomePageBodyState extends State<HomePageBody> {
   Future<void> _handleCheckout() => _doAction(isCheckin: false);
 
   Future<void> _doAction({required bool isCheckin}) async {
-    final token = _token;
-    if (token == null) return;
-
     setState(() => _isLoadingAction = true);
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) throw Exception('Dịch vụ GPS đang tắt.');
+      final token = await _resolveToken();
+      if (token == null) return;
 
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+      Position position;
+      if (_currentPosition != null) {
+        position = _currentPosition!;
+      } else {
+        if (!await _hasGpsAccess()) {
+          throw Exception('GPS không khả dụng hoặc chưa cấp quyền.');
+        }
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.best,
+          ),
+        );
+        if (mounted) setState(() => _currentPosition = position);
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        throw Exception('Chưa cấp quyền vị trí.');
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-      if (mounted) setState(() => _currentPosition = position);
 
       final result = isCheckin
           ? await _attendanceApi.checkin(
@@ -178,7 +285,7 @@ class _HomePageBodyState extends State<HomePageBody> {
       _showSnack(
         '${isCheckin ? 'Điểm danh vào' : 'Điểm danh ra'} thất bại: ${e.message}',
       );
-    } catch (e) {
+    } on Exception catch (e) {
       _showSnack('Lỗi: $e');
     } finally {
       if (mounted) setState(() => _isLoadingAction = false);
@@ -192,8 +299,6 @@ class _HomePageBodyState extends State<HomePageBody> {
 
   // ── Computed Getters ──────────────────────────────────────────────────────
 
-  /// Canonical work date for a log — uses backend-assigned [workDate] when
-  /// available, falls back to local calendar date of [time] for legacy logs.
   DateTime _logWorkDate(AttendanceLogItem log) {
     if (log.workDate != null) return log.workDate!;
     return DateTime.tryParse(log.time)?.toLocal() ?? DateTime(2000);
@@ -296,21 +401,22 @@ class _HomePageBodyState extends State<HomePageBody> {
     return inLogs.isEmpty ? null : inLogs.first;
   }
 
-  String? get _geofenceName {
-    return _latestLog?.matchedGeofence;
-  }
-
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final isDesktop = context.isDesktop;
     final padding = context.pagePadding;
+    final mapHeight = isDesktop
+        ? AppSizes.mapHeightDesktop
+        : AppSizes.mapHeightMobile;
 
     return SafeArea(
       child: Column(
         children: [
-          _buildHeader(isDesktop),
+          HomeHeader(
+            onNavigateToProfile: () => widget.onNavigate?.call(2),
+          ),
           Expanded(
             child: _isLoadingPage
                 ? const Center(child: CircularProgressIndicator())
@@ -319,30 +425,71 @@ class _HomePageBodyState extends State<HomePageBody> {
                     child: ListView(
                       padding: EdgeInsets.symmetric(horizontal: padding),
                       children: [
-                        const SizedBox(height: 20),
-                        _buildGpsChip(),
+                        const SizedBox(height: AppSpacing.xl),
+                        GpsStatusChip(hasGps: _currentPosition != null),
                         if (_isEmployeeInactive) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppSpacing.md),
                           _buildEmployeeInactiveNotice(),
                         ] else if (_employeeNotAssigned) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppSpacing.md),
                           _buildEmployeePendingNotice(),
                         ],
-                        const SizedBox(height: 16),
-                        _buildClock(context),
-                        const SizedBox(height: 4),
-                        _buildDateText(),
-                        const SizedBox(height: 16),
-                        _buildStatusChips(),
-                        const SizedBox(height: 16),
-                        _buildMap(context),
-                        const SizedBox(height: 20),
-                        _buildCtaButton(context),
-                        const SizedBox(height: 24),
-                        _buildSummarySection(),
-                        const SizedBox(height: 24),
-                        _buildActivitySection(),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: AppSpacing.lg),
+                        ValueListenableBuilder<DateTime>(
+                          valueListenable: _nowNotifier,
+                          builder: (_, now, _) => Column(
+                            children: [
+                              Center(
+                                child: Text(
+                                  DateFormat('HH:mm').format(now),
+                                  style: AppTextStyles.clockDisplay.copyWith(
+                                    fontSize: context.clockSize,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Center(
+                                child: Text(
+                                  '${VnDateUtils.weekdays[now.weekday - 1]}, ngày ${now.day} tháng ${now.month}',
+                                  style: AppTextStyles.body.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        _buildPunctualityChips(),
+                        const SizedBox(height: AppSpacing.lg),
+                        MapPanel(
+                          mapController: _mapController,
+                          currentPosition: _currentPosition,
+                          geofences: _geofences,
+                          isLocating: _isLocating,
+                          onRefreshLocation: _refreshLocation,
+                          mapHeight: mapHeight,
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        CtaButton(
+                          status: _status,
+                          isLoadingAction: _isLoadingAction,
+                          isEmployeeInactive: _isEmployeeInactive,
+                          employeeNotAssigned: _employeeNotAssigned,
+                          onCheckin: _handleCheckin,
+                          onCheckout: _handleCheckout,
+                          isDesktop: isDesktop,
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        SummarySection(
+                          todayWorkDuration: _todayWorkDuration,
+                          weekWorkDuration: _weekWorkDuration,
+                          onViewHistory: () => widget.onNavigate?.call(1),
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        ActivitySection(logs: _recentLogs),
+                        const SizedBox(height: AppSpacing.xxl),
                       ],
                     ),
                   ),
@@ -352,105 +499,36 @@ class _HomePageBodyState extends State<HomePageBody> {
     );
   }
 
-  // ── Header ────────────────────────────────────────────────────────────────
-
-  Widget _buildHeader(bool isDesktop) {
-    return Container(
-      color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          const Icon(Icons.location_pin, color: AppColors.primary, size: 20),
-          const SizedBox(width: 4),
-          const Text(
-            'Chấm Công',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => widget.onNavigate?.call(2),
-            child: const CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.primaryLight,
-              child: Icon(Icons.person, color: AppColors.primary, size: 20),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── GPS Chip ──────────────────────────────────────────────────────────────
-
-  Widget _buildGpsChip() {
-    final hasGps = _currentPosition != null;
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: hasGps ? AppColors.successLight : AppColors.warningLight,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: hasGps ? AppColors.success : AppColors.warning,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              hasGps ? 'GPS đang hoạt động' : 'GPS không hoạt động',
-              style: TextStyle(
-                color: hasGps ? AppColors.success : AppColors.warning,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // ── Inline notice widgets (task 1.7) ─────────────────────────────────────
 
   Widget _buildEmployeeInactiveNotice() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: AppSpacing.paddingAllMd,
       decoration: BoxDecoration(
         color: AppColors.errorLight,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.error, width: 0.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Icon(Icons.block, color: AppColors.error, size: 22),
-          SizedBox(width: 10),
+        children: [
+          const Icon(Icons.block, color: AppColors.error, size: 22),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Tài khoản bị vô hiệu hoá',
-                  style: TextStyle(
-                    fontSize: 14,
+                  style: AppTextStyles.bodyBold.copyWith(
                     fontWeight: FontWeight.w700,
                     color: AppColors.error,
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Admin đã vô hiệu hoá tài khoản nhân viên của bạn. Vui lòng liên hệ quản trị viên để được hỗ trợ.',
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -464,34 +542,32 @@ class _HomePageBodyState extends State<HomePageBody> {
 
   Widget _buildEmployeePendingNotice() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: AppSpacing.paddingAllMd,
       decoration: BoxDecoration(
         color: AppColors.warningLight,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.cardAll,
         border: Border.all(color: AppColors.warning, width: 0.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(Icons.hourglass_empty, color: AppColors.warning, size: 22),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Chưa được gán nhân viên',
-                  style: TextStyle(
-                    fontSize: 14,
+                  style: AppTextStyles.bodyBold.copyWith(
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 4),
-                const Text(
+                const SizedBox(height: AppSpacing.xs),
+                Text(
                   'Tài khoản của bạn chưa được admin gán nhân viên. Bạn chưa thể chấm công cho đến khi được duyệt.',
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -503,467 +579,37 @@ class _HomePageBodyState extends State<HomePageBody> {
     );
   }
 
-  // ── Clock ─────────────────────────────────────────────────────────────────
+  // ── Clock & date — rebuilt only by ValueNotifier, not full setState ─────
 
-  Widget _buildClock(BuildContext context) {
-    return Center(
-      child: Text(
-        DateFormat('HH:mm').format(_now),
-        style: TextStyle(
-          fontSize: context.clockSize,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-          height: 1,
-        ),
-      ),
-    );
-  }
+  // ── Punctuality chip ─────────────────────────────────────────────────────
 
-  Widget _buildDateText() {
-    final weekday = _vnWeekdays[_now.weekday - 1];
-    return Center(
-      child: Text(
-        '$weekday, ngày ${_now.day} tháng ${_now.month}',
-        style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
-      ),
-    );
-  }
-
-  // ── Status Chips ──────────────────────────────────────────────────────────
-
-  Widget _buildStatusChips() {
+  Widget _buildPunctualityChips() {
     final punctuality = _lastInLog?.punctualityStatus;
-
     if (_status?.currentState != 'IN' || punctuality == null) {
       return const SizedBox.shrink();
     }
 
-    return Center(child: _buildPunctualityChip(punctuality));
-  }
-
-  Widget _buildPunctualityChip(String punctuality) {
-    final (Color bg, Color fg, String label) = switch (punctuality
-        .toUpperCase()) {
+    final (Color bg, Color fg, String label) = switch (
+        punctuality.toUpperCase()) {
       'EARLY' => (AppColors.successLight, AppColors.success, 'Vào sớm'),
       'LATE' => (AppColors.warningLight, AppColors.warning, 'Vào muộn'),
       _ => (AppColors.successLight, AppColors.success, 'Đúng giờ'),
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 13, color: fg, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  // ── Map ───────────────────────────────────────────────────────────────────
-
-  Widget _buildMap(BuildContext context) {
-    final mapHeight = context.isDesktop ? 260.0 : 200.0;
-    final position = _currentPosition;
-
-    if (position == null) {
-      return Container(
-        height: mapHeight,
-        decoration: BoxDecoration(
-          color: AppColors.border,
-          borderRadius: BorderRadius.circular(12),
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
         ),
-        child: const Center(
-          child: Icon(
-            Icons.map_outlined,
-            size: 48,
-            color: AppColors.textSecondary,
+        decoration: BoxDecoration(color: bg, borderRadius: AppRadius.chipAll),
+        child: Text(
+          label,
+          style: AppTextStyles.chipText.copyWith(
+            color: fg,
+            fontWeight: FontWeight.w600,
           ),
         ),
-      );
-    }
-
-    final center = LatLng(position.latitude, position.longitude);
-    final geofenceName = _geofenceName;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        height: mapHeight,
-        child: Stack(
-          children: [
-            FlutterMap(
-              options: MapOptions(
-                initialCenter: center,
-                initialZoom: 15,
-                interactionOptions: const InteractionOptions(
-                  flags: InteractiveFlag.none,
-                ),
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate:
-                      'https://maps.geoapify.com/v1/tile/${AppConfig.geoapifyMapStyle}/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}',
-                  userAgentPackageName: 'com.example.birdle',
-                ),
-                CircleLayer(
-                  circles: [
-                    CircleMarker(
-                      point: center,
-                      radius: 8,
-                      color: AppColors.primary,
-                      borderColor: AppColors.surface,
-                      borderStrokeWidth: 2,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            if (geofenceName != null)
-              Positioned(
-                bottom: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.textPrimary.withValues(alpha: 0.12),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.pin_drop_outlined,
-                        size: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Lần gần nhất: $geofenceName',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── CTA Button ────────────────────────────────────────────────────────────
-
-  Widget _buildCtaButton(BuildContext context) {
-    final canCheckin = _status?.canCheckin ?? false;
-    final canCheckout = _status?.canCheckout ?? false;
-
-    final Color bgColor;
-    final String label;
-    final VoidCallback? onTap;
-
-    if (_isLoadingAction) {
-      bgColor = canCheckout ? AppColors.error : AppColors.primary;
-      label = '';
-      onTap = null;
-    } else if (_isEmployeeInactive) {
-      bgColor = AppColors.errorLight;
-      label = 'Tài khoản bị vô hiệu hoá';
-      onTap = null;
-    } else if (_employeeNotAssigned) {
-      bgColor = AppColors.border;
-      label = 'Chưa được gán nhân viên';
-      onTap = null;
-    } else if (canCheckin) {
-      bgColor = AppColors.primary;
-      label = 'Điểm danh vào →';
-      onTap = _handleCheckin;
-    } else if (canCheckout) {
-      bgColor = AppColors.success;
-      label = 'Điểm danh ra →';
-      onTap = _handleCheckout;
-    } else {
-      bgColor = AppColors.border;
-      label = 'Điểm danh vào →';
-      onTap = null;
-    }
-
-    final button = SizedBox(
-      height: 56,
-      child: Material(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(28),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(28),
-          child: Center(
-            child: _isLoadingAction
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: AppColors.surface,
-                      strokeWidth: 2.5,
-                    ),
-                  )
-                : Text(
-                    label,
-                    style: TextStyle(
-                      color: _isEmployeeInactive
-                          ? AppColors.error
-                          : (onTap != null
-                              ? AppColors.surface
-                              : AppColors.textSecondary),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-          ),
-        ),
-      ),
-    );
-
-    if (context.isDesktop) {
-      return Center(child: SizedBox(width: 480, child: button));
-    }
-    return SizedBox(width: double.infinity, child: button);
-  }
-
-  // ── Summary Section ───────────────────────────────────────────────────────
-
-  Widget _buildSummarySection() {
-    final todayWork = _todayWorkDuration;
-    final todayH = todayWork.inHours;
-    final todayM = todayWork.inMinutes % 60;
-    final weekWork = _weekWorkDuration;
-    final weekH = weekWork.inHours;
-    final weekM = weekWork.inMinutes % 60;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Tổng hợp hôm nay',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-            GestureDetector(
-              onTap: () => widget.onNavigate?.call(1),
-              child: const Text(
-                'Xem nhật ký',
-                style: TextStyle(fontSize: 14, color: AppColors.primary),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                label: 'GIỜ CÔNG HÔM NAY',
-                value: '${todayH}h ${todayM.toString().padLeft(2, '0')}',
-                accentColor: AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildSummaryCard(
-                label: 'GIỜ CÔNG TUẦN',
-                value: '${weekH}h ${weekM.toString().padLeft(2, '0')}',
-                accentColor: AppColors.overtime,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryCard({
-    required String label,
-    required String value,
-    required Color accentColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border(left: BorderSide(color: accentColor, width: 3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: accentColor,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: accentColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Activity Section ──────────────────────────────────────────────────────
-
-  Widget _buildActivitySection() {
-    final sorted = [..._recentLogs]
-      ..sort((a, b) {
-        final ta = DateTime.tryParse(b.time) ?? DateTime(0);
-        final tb = DateTime.tryParse(a.time) ?? DateTime(0);
-        return ta.compareTo(tb);
-      });
-    final recent = sorted.take(3).toList();
-    if (recent.isEmpty) return const SizedBox.shrink();
-
-    final firstDt = DateTime.tryParse(recent.first.time)?.toLocal();
-    final dateLabel = firstDt == null
-        ? ''
-        : '${_vnWeekdays[firstDt.weekday - 1]}, ${firstDt.day} tháng ${firstDt.month}';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'SỰ KIỆN GẦN NHẤT',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            Text(
-              dateLabel,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ...recent.map(_buildActivityItem),
-      ],
-    );
-  }
-
-  Widget _buildActivityItem(AttendanceLogItem log) {
-    final isIn = log.type.toUpperCase() == 'IN';
-    final dt = DateTime.tryParse(log.time)?.toLocal();
-    final timeStr = dt == null ? '--:--' : DateFormat('HH:mm').format(dt);
-    final amPm = dt == null ? '' : (dt.hour < 12 ? 'SA' : 'CH');
-    final isSuccess = !log.isOutOfRange;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isIn ? AppColors.primaryLight : AppColors.errorLight,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              isIn ? Icons.login : Icons.logout,
-              size: 20,
-              color: isIn ? AppColors.primary : AppColors.error,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isIn ? 'Đã điểm danh vào' : 'Đã điểm danh ra',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  log.matchedGeofence ??
-                      (isIn ? 'Bắt đầu ca làm' : 'Kết thúc ca làm'),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$timeStr $amPm',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                isSuccess ? 'THÀNH CÔNG' : 'NGOÀI PHẠM VI',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: isSuccess ? AppColors.success : AppColors.error,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

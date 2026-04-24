@@ -245,6 +245,22 @@ class EmployeeNotAssignedException implements Exception {
   String toString() => 'Tài khoản chưa được gán nhân viên.';
 }
 
+class GeofencePoint {
+  const GeofencePoint({
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    required this.radiusM,
+    this.source,
+  });
+
+  final String name;
+  final double latitude;
+  final double longitude;
+  final int radiusM;
+  final String? source;
+}
+
 class AttendanceApi {
   const AttendanceApi();
 
@@ -538,6 +554,27 @@ class AttendanceApi {
       riskFlags: _toStringList(details['risk_flags']),
       decision: details['decision'] as String?,
     );
+  }
+
+  Future<List<GeofencePoint>> getMyGeofences(String token) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/attendance/geofences');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final list = _parseJsonList(response.body);
+      return list
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (e) => GeofencePoint(
+              name: e['name'] as String? ?? '',
+              latitude: (e['latitude'] as num).toDouble(),
+              longitude: (e['longitude'] as num).toDouble(),
+              radiusM: (e['radius_m'] as num).toInt(),
+              source: e['source'] as String?,
+            ),
+          )
+          .toList();
+    }
+    return [];
   }
 
   Map<String, String> _authHeaders(String token) {

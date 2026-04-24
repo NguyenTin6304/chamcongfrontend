@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
 
 class DeadlineChip extends StatefulWidget {
   const DeadlineChip({
@@ -46,13 +48,9 @@ class _DeadlineChipState extends State<DeadlineChip> {
 
   void _startTimer() {
     _timer?.cancel();
-    if (widget.deadline == null) {
-      return;
-    }
+    if (widget.deadline == null) return;
     _timer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {});
       widget.onTick?.call();
     });
@@ -62,8 +60,6 @@ class _DeadlineChipState extends State<DeadlineChip> {
   Widget build(BuildContext context) {
     final deadline = widget.deadline;
     final state = _deadlineState(deadline);
-    final horizontal = widget.compact ? 8.0 : 10.0;
-    final vertical = widget.compact ? 4.0 : 6.0;
 
     return Tooltip(
       message: deadline == null
@@ -71,21 +67,20 @@ class _DeadlineChipState extends State<DeadlineChip> {
           : DateFormat('dd/MM/yyyy HH:mm').format(deadline.toLocal()),
       child: Container(
         padding: EdgeInsets.symmetric(
-          horizontal: horizontal,
-          vertical: vertical,
+          horizontal: widget.compact ? AppSpacing.sm : AppSpacing.md,
+          vertical: widget.compact ? AppSpacing.xs : AppSpacing.sm,
         ),
         decoration: BoxDecoration(
           color: state.bg,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRadius.smallAll,
           border: Border.all(color: state.border, width: 0.5),
         ),
         child: Text(
           state.label,
-          style: TextStyle(
-            fontSize: widget.compact ? 11 : 12,
-            fontWeight: FontWeight.w600,
-            color: state.text,
-          ),
+          style: (widget.compact
+                  ? AppTextStyles.sectionLabel
+                  : AppTextStyles.captionBold)
+              .copyWith(color: state.text),
         ),
       ),
     );
@@ -142,22 +137,16 @@ class _DeadlineChipState extends State<DeadlineChip> {
   String _longLabel(Duration remaining) {
     final days = remaining.inDays;
     final hours = remaining.inHours.remainder(24);
-    if (hours == 0) {
-      return 'Còn $days ngày';
-    }
+    if (hours == 0) return 'Còn $days ngày';
     return 'Còn $days ngày $hours giờ';
   }
 
-  String _hourLabel(Duration remaining) {
-    return 'Còn ${remaining.inHours} giờ';
-  }
+  String _hourLabel(Duration remaining) => 'Còn ${remaining.inHours} giờ';
 
   String _hourMinuteLabel(Duration remaining) {
     final hours = remaining.inHours;
     final minutes = remaining.inMinutes.remainder(60);
-    if (hours <= 0) {
-      return 'Còn $minutes phút';
-    }
+    if (hours <= 0) return 'Còn $minutes phút';
     return 'Còn $hours giờ $minutes phút';
   }
 }

@@ -5,13 +5,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/download/file_downloader.dart';
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
-import '../exceptions/widgets/exception_ui_helpers.dart';
+import 'package:birdle/core/download/file_downloader.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_dimensions.dart';
+import 'package:birdle/core/theme/app_text_styles.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/exception_ui_helpers.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
 
 class DashboardTab extends StatefulWidget {
   const DashboardTab({required this.onNavigateTo, super.key});
@@ -99,7 +101,7 @@ class _DashboardTabState extends State<DashboardTab> {
       setState(() {
         _summary = data;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() {
         _summary = null;
@@ -133,7 +135,7 @@ class _DashboardTabState extends State<DashboardTab> {
       setState(() {
         _logs = result.items;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() {
         _logs = const [];
@@ -165,7 +167,7 @@ class _DashboardTabState extends State<DashboardTab> {
       setState(() {
         _weekly = rows;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() {
         _weekly = const [];
@@ -199,7 +201,7 @@ class _DashboardTabState extends State<DashboardTab> {
       setState(() {
         _geofences = rows;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() {
         _geofences = const [];
@@ -224,7 +226,7 @@ class _DashboardTabState extends State<DashboardTab> {
       setState(() {
         _exceptions = rows;
       });
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       setState(() {
         _exceptions = const [];
@@ -287,7 +289,7 @@ class _DashboardTabState extends State<DashboardTab> {
         exceptionType: exceptionType,
         statusFilter: status,
       );
-    } catch (_) {
+    } on Exception catch (_) {
       return const <AttendanceExceptionItem>[];
     }
   }
@@ -334,7 +336,7 @@ class _DashboardTabState extends State<DashboardTab> {
       await saveBytesAsFile(bytes: result.bytes, fileName: result.fileName);
       if (!mounted) return;
       _showSnack('Xuất CSV thành công.');
-    } catch (_) {
+    } on Exception catch (_) {
       if (!mounted) return;
       _showSnack('Không thể xuất CSV. Vui lòng thử lại.');
     } finally {
@@ -381,18 +383,18 @@ class _DashboardTabState extends State<DashboardTab> {
   static Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'late':
-        return const Color(0xFFD97706);
+        return AppColors.warning;
       case 'out_of_range':
       case 'outofrange':
       case 'oor':
       case 'absent':
       case 'missing_checkin_anomaly':
-        return const Color(0xFFDC2626);
+        return AppColors.error;
       case 'missed_checkout':
       case 'pending_timesheet':
-        return const Color(0xFFD97706);
+        return AppColors.warning;
       default:
-        return const Color(0xFF16A34A);
+        return AppColors.success;
     }
   }
 
@@ -453,8 +455,8 @@ class _DashboardTabState extends State<DashboardTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 12,
-          runSpacing: 12,
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.md,
           children: [
             SizedBox(
               width: 230,
@@ -541,16 +543,16 @@ class _DashboardTabState extends State<DashboardTab> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _buildAttendanceTableCard(),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxWidth < 980) {
               return Column(
                 children: [
                   _buildWeeklyChartCard(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
                   _buildGeofenceListCard(),
                 ],
               );
@@ -559,13 +561,13 @@ class _DashboardTabState extends State<DashboardTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(flex: 6, child: _buildWeeklyChartCard()),
-                const SizedBox(width: 16),
+                const SizedBox(width: AppSpacing.lg),
                 Expanded(flex: 4, child: _buildGeofenceListCard()),
               ],
             );
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _buildExceptionsCard(),
       ],
     );
@@ -574,19 +576,19 @@ class _DashboardTabState extends State<DashboardTab> {
   Widget _buildAttendanceTableCard() {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      shape: const RoundedRectangleBorder(
+        borderRadius: AppRadius.cardAll,
+        side: BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 2),
             if (_loadingLogs) _buildDashboardLogSkeleton(),
             if (!_loadingLogs && _logs.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(child: Text('Chưa có dữ liệu hôm nay')),
               ),
@@ -595,7 +597,7 @@ class _DashboardTabState extends State<DashboardTab> {
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
-                    const Color(0xFFF8FAFC),
+                    AppColors.surface,
                   ),
                   columns: const [
                     DataColumn(label: Text('Nhân viên')),
@@ -629,9 +631,8 @@ class _DashboardTabState extends State<DashboardTab> {
                                   Text(row.employeeName),
                                   Text(
                                     row.employeeCode,
-                                    style: const TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontSize: 12,
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -664,16 +665,16 @@ class _DashboardTabState extends State<DashboardTab> {
                                         : Icons.location_off_outlined,
                                     size: 16,
                                     color: inRange
-                                        ? const Color(0xFF16A34A)
-                                        : const Color(0xFFDC2626),
+                                        ? AppColors.success
+                                        : AppColors.error,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     inRange ? 'Trong vùng' : 'Ngoài vùng',
                                     style: TextStyle(
                                       color: inRange
-                                          ? const Color(0xFF16A34A)
-                                          : const Color(0xFFDC2626),
+                                          ? AppColors.success
+                                          : AppColors.error,
                                     ),
                                   ),
                                 ],
@@ -701,7 +702,7 @@ class _DashboardTabState extends State<DashboardTab> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+        headingRowColor: WidgetStateProperty.all(AppColors.surface),
         columns: const [
           DataColumn(label: Text('Nhân viên')),
           DataColumn(label: Text('Phòng ban')),
@@ -733,12 +734,12 @@ class _DashboardTabState extends State<DashboardTab> {
     final monthLabel = DateFormat('MM/yyyy').format(_weeklyMonth);
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      shape: const RoundedRectangleBorder(
+        borderRadius: AppRadius.cardAll,
+        side: BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -746,11 +747,16 @@ class _DashboardTabState extends State<DashboardTab> {
               builder: (context, constraints) {
                 final compact = constraints.maxWidth < 560;
                 final monthPicker = Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
+                  decoration: const BoxDecoration(
                     color: AppColors.bgPage,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.border),
+                    borderRadius: AppRadius.iconBoxAll,
+                    border: Border.fromBorderSide(
+                      BorderSide(color: AppColors.border),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -769,10 +775,7 @@ class _DashboardTabState extends State<DashboardTab> {
                         child: Text(
                           monthLabel,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: AppTextStyles.bodyBold,
                         ),
                       ),
                       IconButton(
@@ -791,19 +794,19 @@ class _DashboardTabState extends State<DashboardTab> {
                 return monthPicker;
               },
             ),
-            const SizedBox(height: 8),
-            const Text(
+            const SizedBox(height: AppSpacing.sm),
+            Text(
               'Xu hướng chấm công hàng tháng',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: AppTextStyles.sectionTitle.copyWith(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             const Row(
               children: [
-                _LegendDot(color: Color(0xFF16A34A), label: 'Đúng giờ'),
-                SizedBox(width: 14),
-                _LegendDot(color: Color(0xFFD97706), label: 'Đi muộn'),
-                SizedBox(width: 14),
-                _LegendDot(color: Color(0xFFDC2626), label: 'Ngoài vùng'),
+                _LegendDot(color: AppColors.success, label: 'Đúng giờ'),
+                SizedBox(width: AppSpacing.md),
+                _LegendDot(color: AppColors.warning, label: 'Đi muộn'),
+                SizedBox(width: AppSpacing.md),
+                _LegendDot(color: AppColors.error, label: 'Ngoài vùng'),
               ],
             ),
             const SizedBox(height: 14),
@@ -821,21 +824,21 @@ class _DashboardTabState extends State<DashboardTab> {
   Widget _buildGeofenceListCard() {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      shape: const RoundedRectangleBorder(
+        borderRadius: AppRadius.cardAll,
+        side: BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Khu vực địa lý đang hoạt động',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    style: AppTextStyles.bodyBold,
                   ),
                 ),
                 TextButton(
@@ -844,57 +847,54 @@ class _DashboardTabState extends State<DashboardTab> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.sm),
             if (_loadingGeofences)
               ...List<Widget>.generate(
                 3,
-                (_) => const Padding(
+                (_) => Padding(
                   padding: EdgeInsets.only(bottom: 10),
                   child: _SkeletonRow(),
                 ),
               ),
             if (!_loadingGeofences && _geofences.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(bottom: 10),
                 child: Text('Chưa có khu vực địa lý.'),
               ),
             if (!_loadingGeofences)
               ..._geofences.map((item) {
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: AppRadius.iconBoxAll,
+                    border: Border.fromBorderSide(BorderSide(color: AppColors.border)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         width: 34,
                         height: 34,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(8),
+                        decoration: const BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: AppRadius.iconBoxAll,
                         ),
                         child: const Icon(Icons.location_on_outlined, size: 18),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               item.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: AppTextStyles.bodyBold,
                             ),
                             Text(
                               '${item.memberCount} thành viên',
-                              style: const TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 12,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -905,8 +905,8 @@ class _DashboardTabState extends State<DashboardTab> {
                         height: 8,
                         decoration: BoxDecoration(
                           color: item.active
-                              ? const Color(0xFF16A34A)
-                              : const Color(0xFF94A3B8),
+                              ? AppColors.success
+                              : AppColors.textSecondary,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -914,20 +914,17 @@ class _DashboardTabState extends State<DashboardTab> {
                   ),
                 );
               }),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             _DashedBorderButton(
               onTap: () => widget.onNavigateTo('geofences'),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add, size: 18, color: Color(0xFF334155)),
-                  SizedBox(width: 8),
+                  Icon(Icons.add, size: 18, color: AppColors.textPrimary),
+                  SizedBox(width: AppSpacing.sm),
                   Text(
                     'Thêm khu vực mới',
-                    style: TextStyle(
-                      color: Color(0xFF334155),
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: AppTextStyles.bodyBold,
                   ),
                 ],
               ),
@@ -941,27 +938,27 @@ class _DashboardTabState extends State<DashboardTab> {
   Widget _buildExceptionsCard() {
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
+      shape: const RoundedRectangleBorder(
+        borderRadius: AppRadius.cardAll,
+        side: BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Các ngoại lệ gần đây',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: AppTextStyles.sectionTitle.copyWith(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.sm),
             if (_loadingExceptions)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: LinearProgressIndicator(minHeight: 2),
               ),
             if (!_loadingExceptions && _exceptions.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: Text('Không có ngoại lệ chưa được giải quyết.'),
               ),
@@ -969,41 +966,35 @@ class _DashboardTabState extends State<DashboardTab> {
               ..._exceptions.map((item) {
                 final palette = exceptionStatusPalette(item.status);
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    borderRadius: BorderRadius.circular(10),
+                  margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: const BoxDecoration(
+                    border: Border.fromBorderSide(BorderSide(color: AppColors.border)),
+                    borderRadius: AppRadius.iconBoxAll,
                   ),
                   child: Row(
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: const Color(0xFFE2E8F0),
+                        backgroundColor: AppColors.surface,
                         child: Text(
                           item.initials,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: AppTextStyles.badgeLabel,
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               item.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: AppTextStyles.bodyBold,
                             ),
                             Text(
                               item.reason,
-                              style: const TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 12,
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -1011,12 +1002,11 @@ class _DashboardTabState extends State<DashboardTab> {
                       ),
                       Text(
                         item.timeLabel,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF64748B),
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       _StatusBadge(
                         label: exceptionStatusLabel(item.status),
                         backgroundColor: palette.bg,
@@ -1060,18 +1050,14 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground = textColor ?? color ?? AppColors.textPrimary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: backgroundColor ?? foreground.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: AppRadius.badgeAll,
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: foreground,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
+        style: AppTextStyles.captionBold.copyWith(color: foreground),
       ),
     );
   }
@@ -1092,10 +1078,10 @@ class _LegendDot extends StatelessWidget {
           height: 10,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: AppSpacing.sm),
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
         ),
       ],
     );
@@ -1116,24 +1102,24 @@ class _MockWeeklyChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!loading && error) {
-      return const SizedBox(
+      return SizedBox(
         height: 240,
         child: Center(
           child: Text(
             'Không thể tải dữ liệu xu hướng',
-            style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
         ),
       );
     }
 
     if (!loading && data.isEmpty) {
-      return const SizedBox(
+      return SizedBox(
         height: 240,
         child: Center(
           child: Text(
             'Chưa có dữ liệu xu hướng',
-            style: TextStyle(fontSize: 14, color: Color(0xFF94A3B8)),
+            style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
           ),
         ),
       );
@@ -1217,9 +1203,8 @@ class _MockWeeklyChart extends StatelessWidget {
                           fit: BoxFit.scaleDown,
                           child: Text(
                             '$v',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF64748B),
+                            style: AppTextStyles.sectionLabel.copyWith(
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -1277,7 +1262,7 @@ class _MockWeeklyChart extends StatelessWidget {
                                                     5,
                                                     (_) => Container(
                                                       height: 1,
-                                                      color: const Color(0xFFF1F5F9),
+                                                      color: AppColors.border,
                                                     ),
                                                   ),
                                                 ),
@@ -1293,21 +1278,21 @@ class _MockWeeklyChart extends StatelessWidget {
                                                     _MiniBar(
                                                       width: barWidth,
                                                       height: h * (item.onTime / maxY),
-                                                      color: const Color(0xFF16A34A),
+                                                      color: AppColors.success,
                                                       loading: loading,
                                                     ),
                                                     SizedBox(width: barGap),
                                                     _MiniBar(
                                                       width: barWidth,
                                                       height: h * (item.late / maxY),
-                                                      color: const Color(0xFFD97706),
+                                                      color: AppColors.warning,
                                                       loading: loading,
                                                     ),
                                                     SizedBox(width: barGap),
                                                     _MiniBar(
                                                       width: barWidth,
                                                       height: h * (item.outOfRange / maxY),
-                                                      color: const Color(0xFFDC2626),
+                                                      color: AppColors.error,
                                                       loading: loading,
                                                     ),
                                                   ],
@@ -1318,7 +1303,7 @@ class _MockWeeklyChart extends StatelessWidget {
                                         },
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: AppSpacing.sm),
                                     Text(
                                       showLabel ? item.day : '',
                                       maxLines: 1,
@@ -1326,7 +1311,7 @@ class _MockWeeklyChart extends StatelessWidget {
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: labelFontSize,
-                                        color: const Color(0xFF64748B),
+                                        color: AppColors.textSecondary,
                                       ),
                                     ),
                                   ],
@@ -1368,7 +1353,7 @@ class _MiniBar extends StatelessWidget {
       height: height.clamp(8.0, 220.0),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: AppRadius.badgeAll,
       ),
     );
     if (!loading) {
@@ -1418,13 +1403,13 @@ class _DashedBorderButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _DashedRRectPainter(color: const Color(0xFFCBD5E1), radius: 10),
+      painter: _DashedRRectPainter(color: AppColors.borderLight, radius: 10),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRadius.iconBoxAll,
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: child,
         ),
       ),
@@ -1496,9 +1481,9 @@ class _SkeletonCellState extends State<_SkeletonCell>
       child: Container(
         width: widget.width,
         height: 12,
-        decoration: BoxDecoration(
-          color: const Color(0xFFE2E8F0),
-          borderRadius: BorderRadius.circular(8),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: AppRadius.iconBoxAll,
         ),
       ),
     );
@@ -1511,18 +1496,18 @@ class _SkeletonRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppRadius.iconBoxAll,
+        border: Border.fromBorderSide(BorderSide(color: AppColors.border)),
       ),
       child: const Row(
         children: [
           _SkeletonCell(width: 34),
-          SizedBox(width: 10),
+          SizedBox(width: AppSpacing.md),
           Expanded(child: _SkeletonCell(width: 120)),
-          SizedBox(width: 10),
+          SizedBox(width: AppSpacing.md),
           _SkeletonCell(width: 8),
         ],
       ),

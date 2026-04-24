@@ -179,6 +179,43 @@ class AuthApi {
     );
   }
 
+  Future<void> testExceptionNotification({
+    required String token,
+    required String eventType,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/test-exception-notification');
+    final response = await _safePost(
+      uri,
+      body: jsonEncode({'event_type': eventType}),
+      headers: {'Authorization': 'Bearer $token'},
+      timeoutMessage: 'Test notification quá thời gian.',
+      networkMessage: 'Không thể kết nối máy chủ.',
+    );
+    if (response.statusCode == 200) return;
+    final data = _parseJsonMap(response.body);
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Test thất bại (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
+  }
+
+  Future<void> testNotification({required String token}) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/auth/test-notification');
+    final response = await _safePost(
+      uri,
+      body: '{}',
+      headers: {'Authorization': 'Bearer $token'},
+      timeoutMessage: 'Test notification quá thời gian.',
+      networkMessage: 'Không thể kết nối máy chủ.',
+    );
+    if (response.statusCode == 200) return;
+    final data = _parseJsonMap(response.body);
+    throw AuthApiException(
+      _extractErrorMessage(data, 'Test thất bại (${response.statusCode})'),
+      statusCode: response.statusCode,
+    );
+  }
+
   Future<void> changePassword({
     required String token,
     required String currentPassword,

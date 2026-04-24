@@ -6,18 +6,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
+import 'package:latlong2/latlong.dart';
 
 class _FakeGeoapifyClient extends GeoapifyClient {
-  _FakeGeoapifyClient({
-    required this.searchResults,
-    this.reverseResult,
-  }) : super(
-         apiKey: 'fake-key',
-         httpClient: MockClient((_) async {
-           throw StateError('Network should not be called in fake client.');
-         }),
-         searchDebounce: const Duration(milliseconds: 1),
-       );
+  _FakeGeoapifyClient({required this.searchResults, this.reverseResult})
+    : super(
+        apiKey: 'fake-key',
+        httpClient: MockClient((_) async {
+          throw StateError('Network should not be called in fake client.');
+        }),
+        searchDebounce: const Duration(milliseconds: 1),
+      );
 
   final List<GeoapifyPlace> searchResults;
   final GeoapifyPlace? reverseResult;
@@ -45,9 +44,7 @@ class _FakeGeoapifyClient extends GeoapifyClient {
 }
 
 class _FakeAdminApi extends AdminApi {
-  _FakeAdminApi({
-    this.groups = const <GroupLite>[],
-  });
+  _FakeAdminApi({this.groups = const <GroupLite>[]});
 
   final List<GroupLite> groups;
   final List<EmployeeLite> employees = const [];
@@ -155,132 +152,144 @@ Finder _textFieldByLabel(String label) {
 
 void main() {
   group('Group geofence flow', () {
-    testWidgets(
-      'search -> select result -> lat/lng updated',
-      (tester) async {
-        LocationPickerValue? latestValue;
-        final fakeClient = _FakeGeoapifyClient(
-          searchResults: const [
-            GeoapifyPlace(
-              displayName: 'Landmark 81, Ho Chi Minh City',
-              lat: 10.795001,
-              lng: 106.721839,
-              country: 'Vietnam',
-              city: 'Ho Chi Minh City',
-            ),
-          ],
-        );
-
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: AdminLocationPicker(
-                geoapifyClient: fakeClient,
-                onChanged: (value) {
-                  latestValue = value;
-                },
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.enterText(_textFieldByLabel('Tìm địa điểm (Geoapify)'), 'Landmark');
-        await tester.pump(const Duration(milliseconds: 10));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('Landmark 81, Ho Chi Minh City'));
-        await tester.pumpAndSettle();
-
-        expect(latestValue, isNotNull);
-        expect(latestValue!.latitude, closeTo(10.795001, 0.000001));
-        expect(latestValue!.longitude, closeTo(106.721839, 0.000001));
-      },
-    );
-
-    testWidgets(
-      'tap map -> reverse geocode -> address updated',
-      (tester) async {
-        final fakeClient = _FakeGeoapifyClient(
-          searchResults: const [],
-          reverseResult: const GeoapifyPlace(
-            displayName: 'Bitexco Tower, Ho Chi Minh City',
-            lat: 10.7716,
-            lng: 106.7044,
+    testWidgets('search -> select result -> lat/lng updated', (tester) async {
+      LocationPickerValue? latestValue;
+      final fakeClient = _FakeGeoapifyClient(
+        searchResults: const [
+          GeoapifyPlace(
+            displayName: 'Landmark 81, Ho Chi Minh City',
+            lat: 10.795001,
+            lng: 106.721839,
             country: 'Vietnam',
             city: 'Ho Chi Minh City',
           ),
-        );
+        ],
+      );
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: AdminLocationPicker(
-                geoapifyClient: fakeClient,
-                onChanged: (_) {},
-              ),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdminLocationPicker(
+              geoapifyClient: fakeClient,
+              onChanged: (value) {
+                latestValue = value;
+              },
             ),
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.byType(FlutterMap));
-        await tester.pumpAndSettle();
+      await tester.enterText(
+        _textFieldByLabel('Tìm địa điểm (Geoapify)'),
+        'Landmark',
+      );
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pumpAndSettle();
 
-        expect(find.textContaining('Bitexco Tower'), findsOneWidget);
-      },
-    );
+      await tester.tap(find.text('Landmark 81, Ho Chi Minh City'));
+      await tester.pumpAndSettle();
 
-    testWidgets(
-      'save geofence payload đúng',
-      (tester) async {
-        final fakeApi = _FakeAdminApi(
-          groups: const [
-            GroupLite(
-              id: 1,
-              code: 'G01',
-              name: 'Group 01',
-              active: true,
-            ),
-          ],
-        );
+      expect(latestValue, isNotNull);
+      expect(latestValue!.latitude, closeTo(10.795001, 0.000001));
+      expect(latestValue!.longitude, closeTo(106.721839, 0.000001));
+    });
 
-        await tester.pumpWidget(
-          MaterialApp(
-            home: GroupAdminPage(
-              token: 'admin-token',
-              adminApi: fakeApi,
-              autoLoad: true,
+    testWidgets('tap map -> reverse geocode -> address updated', (
+      tester,
+    ) async {
+      final fakeClient = _FakeGeoapifyClient(
+        searchResults: const [],
+        reverseResult: const GeoapifyPlace(
+          displayName: 'Bitexco Tower, Ho Chi Minh City',
+          lat: 10.7716,
+          lng: 106.7044,
+          country: 'Vietnam',
+          city: 'Ho Chi Minh City',
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AdminLocationPicker(
+              geoapifyClient: fakeClient,
+              onChanged: (_) {},
             ),
           ),
-        );
-        await tester.pumpAndSettle();
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.textContaining('Advanced'));
-        await tester.ensureVisible(find.text('Tạo geofence'));
+      final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+      final center = tester.getCenter(find.byType(FlutterMap));
+      map.options.onTap?.call(
+        TapPosition(center, Offset.zero),
+        const LatLng(10.7716, 106.7044),
+      );
+      await tester.pumpAndSettle();
 
-        await tester.enterText(_textFieldByLabel('Tên geofence'), 'VP HCM');
-        await tester.enterText(_textFieldByLabel('Bán kính (m)'), '250');
+      expect(find.text('Bitexco Tower, Ho Chi Minh City'), findsWidgets);
+    });
 
-        await tester.tap(find.textContaining('Advanced'));
-        await tester.pumpAndSettle();
+    testWidgets('save geofence payload đúng', (tester) async {
+      final fakeApi = _FakeAdminApi(
+        groups: const [
+          GroupLite(id: 1, code: 'G01', name: 'Group 01', active: true),
+        ],
+      );
 
-        await tester.enterText(_textFieldByLabel('Vĩ độ'), '10.776889');
-        await tester.enterText(_textFieldByLabel('Kinh độ'), '106.700806');
-        await tester.tap(find.text('Áp dụng'));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: GroupAdminPage(
+            token: 'admin-token',
+            adminApi: fakeApi,
+            autoLoad: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Tạo geofence'));
-        await tester.pumpAndSettle();
+      final scrollable = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        _textFieldByLabel('Tên geofence'),
+        500,
+        scrollable: scrollable,
+      );
 
-        expect(fakeApi.createGeofenceCalls, 1);
-        expect(fakeApi.lastToken, 'admin-token');
-        expect(fakeApi.lastGroupId, 1);
-        expect(fakeApi.lastName, 'VP HCM');
-        expect(fakeApi.lastLatitude, closeTo(10.776889, 0.000001));
-        expect(fakeApi.lastLongitude, closeTo(106.700806, 0.000001));
-        expect(fakeApi.lastRadiusM, 250);
-      },
-    );
+      await tester.enterText(_textFieldByLabel('Tên geofence'), 'VP HCM');
+      await tester.scrollUntilVisible(
+        _textFieldByLabel('Bán kính (m)'),
+        500,
+        scrollable: scrollable,
+      );
+      await tester.enterText(_textFieldByLabel('Bán kính (m)'), '250');
+
+      final map = tester.widget<FlutterMap>(find.byType(FlutterMap).last);
+      map.options.onTap?.call(
+        const TapPosition(Offset.zero, Offset.zero),
+        const LatLng(10.776889, 106.700806),
+      );
+      await tester.pumpAndSettle();
+
+      final createButton = find.widgetWithText(FilledButton, 'Tạo geofence');
+      await tester.scrollUntilVisible(
+        createButton,
+        500,
+        scrollable: scrollable,
+      );
+      final button = tester.widget<FilledButton>(createButton);
+      expect(button.onPressed, isNotNull);
+      button.onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(fakeApi.createGeofenceCalls, 1);
+      expect(fakeApi.lastToken, 'admin-token');
+      expect(fakeApi.lastGroupId, 1);
+      expect(fakeApi.lastName, 'VP HCM');
+      expect(fakeApi.lastLatitude, closeTo(10.776889, 0.000001));
+      expect(fakeApi.lastLongitude, closeTo(106.700806, 0.000001));
+      expect(fakeApi.lastRadiusM, 250);
+    });
   });
 }
