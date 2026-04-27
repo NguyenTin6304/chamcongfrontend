@@ -128,7 +128,7 @@ extension _GeofenceMapX on _GeofencesTabState {
   }
 
   Widget _buildGeofenceMapCardExtracted() {
-    final tileUrl =
+    const tileUrl =
         'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}';
     final editing = _editingGeofence;
     final center = editing != null

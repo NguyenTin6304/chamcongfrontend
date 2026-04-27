@@ -131,6 +131,31 @@ extension _GeofenceConfigFormX on _GeofencesTabState {
               });
             },
           ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Text(
+                'Loại địa điểm:',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(width: 12),
+              _LocationTypeChip(
+                label: 'Văn phòng',
+                value: 'VP',
+                selected: _formLocationType == 'VP',
+                color: AppColors.geofenceVpColor,
+                onTap: () => setState(() => _formLocationType = 'VP'),
+              ),
+              const SizedBox(width: 8),
+              _LocationTypeChip(
+                label: 'Site',
+                value: 'SITE',
+                selected: _formLocationType == 'SITE',
+                color: AppColors.geofenceSiteColor,
+                onTap: () => setState(() => _formLocationType = 'SITE'),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -154,7 +179,7 @@ extension _GeofenceConfigFormX on _GeofencesTabState {
                     : (_isCreating ? _saveNew : _saveEdit),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.bgCard,
                 ),
                 child: _savingGeofence
                     ? const SizedBox(
@@ -162,7 +187,7 @@ extension _GeofenceConfigFormX on _GeofencesTabState {
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.bgCard,
                         ),
                       )
                     : const Text('Lưu'),

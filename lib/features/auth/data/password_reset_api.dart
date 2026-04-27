@@ -1,9 +1,9 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
 class PasswordResetApi {
   const PasswordResetApi();
@@ -80,7 +80,7 @@ class PasswordResetApi {
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <String, dynamic>{};
   }
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 import 'package:birdle/core/theme/app_dimensions.dart';
 import 'package:birdle/core/theme/app_text_styles.dart';
-import 'tabs/explanation_policy_settings_tab.dart';
-import 'tabs/general_settings_tab.dart';
-import 'tabs/rules_settings_tab.dart';
+import 'package:birdle/features/admin/presentation/settings/tabs/explanation_policy_settings_tab.dart';
+import 'package:birdle/features/admin/presentation/settings/tabs/general_settings_tab.dart';
+import 'package:birdle/features/admin/presentation/settings/tabs/rules_settings_tab.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -153,8 +153,8 @@ class _PlaceholderTab extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.construction_outlined, size: 48, color: AppColors.border),
-          SizedBox(height: 8),
+          const Icon(Icons.construction_outlined, size: 48, color: AppColors.border),
+          const SizedBox(height: 8),
           Text(
             'Tính năng đang phát triển',
             style: AppTextStyles.body.copyWith(color: AppColors.textMuted),

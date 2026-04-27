@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 import 'package:birdle/core/theme/app_dimensions.dart';
 import 'package:birdle/core/theme/app_text_styles.dart';
 

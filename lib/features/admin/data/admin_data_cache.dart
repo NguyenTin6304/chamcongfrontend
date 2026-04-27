@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import 'admin_api.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
 
 /// In-memory cache for shared admin list data.
 /// Prevents redundant API calls when multiple self-contained tabs need the

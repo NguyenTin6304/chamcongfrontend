@@ -1,6 +1,6 @@
-﻿import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'session_storage.dart';
+import 'package:birdle/core/storage/session_storage.dart';
 
 class TokenStorage {
   static const _persistentAccessTokenKey = 'access_token';

@@ -1,9 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../../core/config/app_config.dart';
-import '../../../location/data/geoapify_client.dart';
+import 'package:birdle/core/config/app_config.dart';
+import 'package:birdle/features/location/data/geoapify_client.dart';
 
 class LocationPickerValue {
   const LocationPickerValue({
@@ -219,7 +219,7 @@ class _AdminLocationPickerState extends State<AdminLocationPicker> {
       setState(() {
         _suggestions = suggestions;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -292,7 +292,7 @@ class _AdminLocationPickerState extends State<AdminLocationPicker> {
         });
         _emitSelection();
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }

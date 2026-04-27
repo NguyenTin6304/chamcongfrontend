@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../features/attendance/presentation/history_page.dart';
-import '../../features/attendance/presentation/profile_page.dart';
-import '../../features/home/presentation/home_page.dart';
+import 'package:birdle/features/attendance/presentation/history_page.dart';
+import 'package:birdle/features/attendance/presentation/profile_page.dart';
+import 'package:birdle/features/home/presentation/home_page.dart';
 
 class AppScaffold extends StatefulWidget {
   const AppScaffold({

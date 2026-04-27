@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 
 String exceptionStatusLabel(String status) {
   switch (status.toUpperCase()) {
@@ -40,19 +40,19 @@ String exceptionStatusLabel(String status) {
     case 'PENDING_ADMIN':
       return (
         bg: AppColors.exceptionTabAllBg,
-        text: AppColors.exceptionTabAllText,
+        text: AppColors.primary,
         border: AppColors.exceptionTabAllBorder,
       );
     case 'APPROVED':
       return (
         bg: AppColors.badgeBgOnTime,
-        text: AppColors.badgeTextOnTime,
+        text: AppColors.success,
         border: AppColors.exceptionTabApprovedBorder,
       );
     case 'REJECTED':
       return (
         bg: AppColors.badgeBgOutOfRange,
-        text: AppColors.badgeTextOutOfRange,
+        text: AppColors.danger,
         border: AppColors.exceptionTabRejectedBorder,
       );
     case 'EXPIRED':

@@ -239,7 +239,7 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
       centerLng = AppConfig.defaultMapCenterLng;
     }
 
-    final tileUrl =
+    const tileUrl =
         'https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${AppConfig.geoapifyApiKey}';
 
     await showDialog<void>(
@@ -345,11 +345,11 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                                     item.checkInLat!, item.checkInLng!),
                                 width: 36,
                                 height: 48,
-                                child: Column(
+                                child: const Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     _MapLabel(label: 'Vào', color: AppColors.success),
-                                    const Icon(Icons.location_on,
+                                    Icon(Icons.location_on,
                                         color: AppColors.success, size: 28),
                                   ],
                                 ),
@@ -360,11 +360,11 @@ class _AttendanceLogsTabState extends State<AttendanceLogsTab> {
                                     item.checkOutLat!, item.checkOutLng!),
                                 width: 36,
                                 height: 48,
-                                child: Column(
+                                child: const Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     _MapLabel(label: 'Ra', color: AppColors.danger),
-                                    const Icon(Icons.location_on,
+                                    Icon(Icons.location_on,
                                         color: AppColors.danger, size: 28),
                                   ],
                                 ),

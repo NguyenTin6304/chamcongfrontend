@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/download/file_downloader.dart';
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
+import 'package:birdle/core/download/file_downloader.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
 
 part 'widgets/employee_edit_panel.dart';
 part 'widgets/employee_table.dart';
@@ -192,7 +192,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
       if (status != 'resigned') {
         AdminDataCache.instance.replaceEmployees(_employees);
       }
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -284,7 +284,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
           '${employee.code} - ${employee.fullName} đã chuyển sang nghỉ việc.',
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -330,7 +330,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
         _selectedUserByEmployee.remove(employee.id);
       });
       _showSnack('Đã khôi phục nhân viên ${employee.code}.');
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -379,7 +379,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
         return;
       }
       _showSnack('Đã tải file: ${report.fileName}.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -449,7 +449,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
       _showSnack(
         active ? 'Đã kích hoạt nhân viên.' : 'Đã vô hiệu hoá nhân viên.',
       );
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -576,7 +576,7 @@ class _EmployeesTabState extends State<EmployeesTab> {
                 }
                 dialogOpen = false;
                 Navigator.of(context).pop();
-              } catch (error) {
+              } on Object catch (error) {
                 if (!mounted) {
                   return;
                 }

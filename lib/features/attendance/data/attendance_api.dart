@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
 class AttendanceStatusResult {
   const AttendanceStatusResult({
@@ -193,6 +193,30 @@ class EmployeeExceptionItem {
       canSubmitExplanation &&
       employeeSubmittedAt == null &&
       !isDeadlineExpired;
+}
+
+class LeaveRequestItem {
+  const LeaveRequestItem({
+    required this.id,
+    required this.employeeId,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.status,
+    this.reason,
+    this.adminNote,
+    this.createdAt,
+  });
+
+  final int id;
+  final int employeeId;
+  final String leaveType;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String? reason;
+  final String status;
+  final String? adminNote;
+  final DateTime? createdAt;
 }
 
 class EmployeeProfile {
@@ -556,6 +580,57 @@ class AttendanceApi {
     );
   }
 
+  // ── Leave Requests ────────────────────────────────────────────────────────
+
+  Future<LeaveRequestItem> submitLeaveRequest({
+    required String token,
+    required String leaveType,
+    required DateTime startDate,
+    required DateTime endDate,
+    String? reason,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/leave-requests');
+    final body = <String, dynamic>{
+      'leave_type': leaveType,
+      'start_date': '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}',
+      'end_date': '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}',
+      if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+    };
+    final response = await http.post(uri, headers: _authHeaders(token), body: jsonEncode(body));
+    final data = _parseJsonMap(response.body);
+    if (response.statusCode == 201) return _leaveRequestFromMap(data);
+    throw Exception(_extractErrorMessage(data, 'Submit leave request failed (${response.statusCode})'));
+  }
+
+  Future<List<LeaveRequestItem>> getMyLeaveRequests({
+    required String token,
+    int? year,
+  }) async {
+    final query = year != null ? '?year=$year' : '';
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/leave-requests/me$query');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final list = _parseJsonList(response.body);
+      return list.whereType<Map<String, dynamic>>().map(_leaveRequestFromMap).toList();
+    }
+    final err = _parseJsonMap(response.body);
+    throw Exception(_extractErrorMessage(err, 'Load leave requests failed (${response.statusCode})'));
+  }
+
+  LeaveRequestItem _leaveRequestFromMap(Map<String, dynamic> e) {
+    return LeaveRequestItem(
+      id: _toInt(e['id']) ?? 0,
+      employeeId: _toInt(e['employee_id']) ?? 0,
+      leaveType: e['leave_type'] as String? ?? 'PAID',
+      startDate: _toDateOnly(e['start_date']) ?? DateTime.now(),
+      endDate: _toDateOnly(e['end_date']) ?? DateTime.now(),
+      reason: e['reason'] as String?,
+      status: e['status'] as String? ?? 'PENDING',
+      adminNote: e['admin_note'] as String?,
+      createdAt: _toDateTime(e['created_at']),
+    );
+  }
+
   Future<List<GeofencePoint>> getMyGeofences(String token) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/attendance/geofences');
     final response = await http.get(uri, headers: _authHeaders(token));
@@ -590,7 +665,7 @@ class AttendanceApi {
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <String, dynamic>{};
   }
 
@@ -600,7 +675,7 @@ class AttendanceApi {
       if (decoded is List<dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <dynamic>[];
   }
 
