@@ -40,19 +40,19 @@ String exceptionStatusLabel(String status) {
     case 'PENDING_ADMIN':
       return (
         bg: AppColors.exceptionTabAllBg,
-        text: AppColors.primary,
+        text: AppColors.exceptionTabAllText,
         border: AppColors.exceptionTabAllBorder,
       );
     case 'APPROVED':
       return (
         bg: AppColors.badgeBgOnTime,
-        text: AppColors.success,
+        text: AppColors.badgeTextOnTime,
         border: AppColors.exceptionTabApprovedBorder,
       );
     case 'REJECTED':
       return (
         bg: AppColors.badgeBgOutOfRange,
-        text: AppColors.danger,
+        text: AppColors.badgeTextOutOfRange,
         border: AppColors.exceptionTabRejectedBorder,
       );
     case 'EXPIRED':
