@@ -98,6 +98,7 @@ class _FakeAdminApi extends AdminApi {
     required double longitude,
     required int radiusM,
     bool active = true,
+    String locationType = 'SITE',
   }) async {
     createGeofenceCalls += 1;
     lastToken = token;
@@ -114,6 +115,7 @@ class _FakeAdminApi extends AdminApi {
       longitude: longitude,
       radiusM: radiusM,
       active: active,
+      locationType: locationType,
     );
   }
 
@@ -127,6 +129,7 @@ class _FakeAdminApi extends AdminApi {
     double? longitude,
     int? radiusM,
     bool? active,
+    String? locationType,
   }) async {
     updateGeofenceCalls += 1;
     return GroupGeofenceLite(
@@ -137,6 +140,7 @@ class _FakeAdminApi extends AdminApi {
       longitude: longitude ?? 0,
       radiusM: radiusM ?? 0,
       active: active ?? true,
+      locationType: locationType ?? 'SITE',
     );
   }
 }

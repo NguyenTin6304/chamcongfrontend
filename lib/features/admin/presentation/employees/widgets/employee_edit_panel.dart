@@ -124,7 +124,7 @@ extension _EmployeeEditPanelX on _EmployeesTabState {
                   });
                   nav.pop();
                   _showSnack('Đã lưu thay đổi nhân viên.');
-                } catch (error) {
+                } on Object catch (error) {
                   if (!mounted) {
                     return;
                   }

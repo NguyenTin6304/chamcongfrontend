@@ -1,10 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
 import 'dart:html' as html;
 import 'dart:js' as js;
 
-import '../../../../core/config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
 const Duration _scriptLoadTimeout = Duration(seconds: 8);
 const Duration _readyTimeout = Duration(seconds: 8);

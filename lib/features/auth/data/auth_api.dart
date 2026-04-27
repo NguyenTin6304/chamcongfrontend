@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
 class LoginResult {
   const LoginResult({
@@ -328,7 +328,7 @@ class AuthApi {
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <String, dynamic>{};
   }
 

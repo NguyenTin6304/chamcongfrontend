@@ -2,11 +2,11 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
 
 part 'widgets/group_card.dart';
 part 'widgets/group_card_grid.dart';
@@ -96,7 +96,7 @@ class _GroupsTabState extends State<GroupsTab> {
       setState(() {
         _groups = groups;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -122,7 +122,7 @@ class _GroupsTabState extends State<GroupsTab> {
       setState(() {
         _employees = employees;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -214,7 +214,7 @@ class _GroupsTabState extends State<GroupsTab> {
               summary[group.id] ?? const <GroupGeofenceLite>[];
         }
       });
-    } catch (_) {
+    } on Object catch (_) {
       try {
         final entries = await Future.wait(
           groups.map((group) async {
@@ -224,7 +224,7 @@ class _GroupsTabState extends State<GroupsTab> {
                 groupId: group.id,
               );
               return MapEntry(group.id, items);
-            } catch (_) {
+            } on Object catch (_) {
               return MapEntry(group.id, const <GroupGeofenceLite>[]);
             }
           }),
@@ -237,7 +237,7 @@ class _GroupsTabState extends State<GroupsTab> {
             ..clear()
             ..addEntries(entries);
         });
-      } catch (_) {
+      } on Object catch (_) {
         // Leave existing data untouched if both strategies fail.
       }
     } finally {
@@ -271,7 +271,7 @@ class _GroupsTabState extends State<GroupsTab> {
             .toList(growable: false);
       });
       _showSnack('Đã cập nhật nhóm cho nhân viên.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -299,7 +299,7 @@ class _GroupsTabState extends State<GroupsTab> {
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.danger,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.bgCard,
             ),
             child: const Text('Xóa'),
           ),
@@ -327,7 +327,7 @@ class _GroupsTabState extends State<GroupsTab> {
       await _loadGroupGeofenceCards();
       await _loadEmployees(token);
       _showSnack('Đã xoá nhóm.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }

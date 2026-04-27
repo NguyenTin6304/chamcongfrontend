@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
 /// Thrown when the backend returns HTTP 401 (token missing or expired).
 /// Catch this to redirect the user to the login screen.
@@ -149,6 +149,7 @@ class GroupGeofenceLite {
     required this.longitude,
     required this.radiusM,
     required this.active,
+    this.locationType = 'SITE',
   });
 
   final int id;
@@ -158,6 +159,9 @@ class GroupGeofenceLite {
   final double longitude;
   final int radiusM;
   final bool active;
+
+  /// 'VP' = văn phòng, 'SITE' = công trường/khách hàng
+  final String locationType;
 }
 
 class ReportDownloadResult {
@@ -367,6 +371,34 @@ class DashboardExceptionItem {
   final String reason;
   final String timeLabel;
   final String status;
+}
+
+class AdminLeaveRequestItem {
+  const AdminLeaveRequestItem({
+    required this.id,
+    required this.employeeId,
+    required this.employeeName,
+    required this.employeeCode,
+    required this.leaveType,
+    required this.startDate,
+    required this.endDate,
+    required this.status,
+    this.reason,
+    this.adminNote,
+    this.createdAt,
+  });
+
+  final int id;
+  final int employeeId;
+  final String employeeName;
+  final String employeeCode;
+  final String leaveType;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String? reason;
+  final String status;
+  final String? adminNote;
+  final DateTime? createdAt;
 }
 
 class AdminApi {
@@ -971,6 +1003,7 @@ class AdminApi {
     required double longitude,
     required int radiusM,
     bool active = true,
+    String locationType = 'SITE',
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/groups/$groupId/geofences');
     final response = await http.post(
@@ -982,6 +1015,7 @@ class AdminApi {
         'longitude': longitude,
         'radius_m': radiusM,
         'active': active,
+        'location_type': locationType,
       }),
     );
 
@@ -1008,6 +1042,7 @@ class AdminApi {
     double? longitude,
     int? radiusM,
     bool? active,
+    String? locationType,
   }) async {
     final uri = Uri.parse(
       '${AppConfig.apiBaseUrl}/groups/$groupId/geofences/$geofenceId',
@@ -1027,6 +1062,9 @@ class AdminApi {
     }
     if (active != null) {
       body['active'] = active;
+    }
+    if (locationType != null) {
+      body['location_type'] = locationType;
     }
 
     final response = await http.put(
@@ -1128,6 +1166,43 @@ class AdminApi {
       _extractErrorMessage(
         data,
         'Export report failed (${response.statusCode})',
+      ),
+    );
+  }
+
+  Future<ReportDownloadResult> downloadMonthlyAttendance({
+    required String token,
+    required int month,
+    required int year,
+    int? groupId,
+  }) async {
+    final query = <String, String>{
+      'month': month.toString(),
+      'year': year.toString(),
+      if (groupId != null) 'group_id': groupId.toString(),
+    };
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/reports/attendance-monthly.xlsx',
+    ).replace(queryParameters: query);
+    final response = await http.get(uri, headers: _authHeaders(token));
+
+    if (response.statusCode == 200) {
+      final disposition = response.headers['content-disposition'];
+      final fileName =
+          _extractFilenameFromDisposition(disposition) ??
+          'cham_cong_thang_${month.toString().padLeft(2, '0')}_$year.xlsx';
+      return ReportDownloadResult(
+        fileName: fileName,
+        bytes: response.bodyBytes,
+      );
+    }
+    if (response.statusCode == 401) throw const UnauthorizedException();
+    final bodyText = utf8.decode(response.bodyBytes, allowMalformed: true);
+    final data = _parseJsonMap(bodyText);
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        'Export monthly failed (${response.statusCode})',
       ),
     );
   }
@@ -1917,6 +1992,7 @@ class AdminApi {
       longitude: _toDouble(e['longitude']) ?? 0,
       radiusM: (e['radius_m'] as num?)?.toInt() ?? 0,
       active: e['active'] as bool? ?? true,
+      locationType: e['location_type'] as String? ?? 'SITE',
     );
   }
 
@@ -2031,7 +2107,7 @@ class AdminApi {
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <String, dynamic>{};
   }
 
@@ -2041,7 +2117,7 @@ class AdminApi {
       if (decoded is List<dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <dynamic>[];
   }
 
@@ -2063,7 +2139,7 @@ class AdminApi {
           return candidate;
         }
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <dynamic>[];
   }
 
@@ -2136,7 +2212,7 @@ class AdminApi {
       return const <Map<String, dynamic>>[];
     }
     return value
-        .whereType<Map>()
+        .whereType<Map<dynamic, dynamic>>()
         .map(
           (item) => item.map((key, value) => MapEntry(key.toString(), value)),
         )
@@ -2199,5 +2275,95 @@ class AdminApi {
     final first = parts.first.substring(0, 1).toUpperCase();
     final last = parts.last.substring(0, 1).toUpperCase();
     return '$first$last';
+  }
+
+  // ── Leave Requests (admin) ──────────────────────────────────────────────
+
+  Future<List<AdminLeaveRequestItem>> getLeaveRequests({
+    required String token,
+    String? status,
+    int? month,
+    int? year,
+    int? employeeId,
+  }) async {
+    final params = <String, String>{};
+    if (status != null) params['status'] = status;
+    if (month != null) params['month'] = month.toString();
+    if (year != null) params['year'] = year.toString();
+    if (employeeId != null) params['employee_id'] = employeeId.toString();
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/leave-requests',
+    ).replace(queryParameters: params.isEmpty ? null : params);
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      return _parseJsonList(response.body)
+          .whereType<Map<String, dynamic>>()
+          .map(_leaveRequestItemFromMap)
+          .toList(growable: false);
+    }
+    final err = _parseResponse(response);
+    throw Exception(err['detail'] ?? 'Không thể tải danh sách nghỉ phép');
+  }
+
+  Future<AdminLeaveRequestItem> approveLeaveRequest({
+    required String token,
+    required int leaveId,
+    String? adminNote,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/leave-requests/$leaveId/approve',
+    );
+    final body = <String, dynamic>{};
+    if (adminNote != null && adminNote.trim().isNotEmpty) {
+      body['admin_note'] = adminNote.trim();
+    }
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode(body),
+    );
+    final data = _parseResponse(response);
+    if (response.statusCode == 200) {
+      return _leaveRequestItemFromMap(data);
+    }
+    throw Exception(data['detail'] ?? 'Không thể duyệt đơn nghỉ phép');
+  }
+
+  Future<AdminLeaveRequestItem> rejectLeaveRequest({
+    required String token,
+    required int leaveId,
+    required String adminNote,
+  }) async {
+    final uri = Uri.parse(
+      '${AppConfig.apiBaseUrl}/leave-requests/$leaveId/reject',
+    );
+    final response = await http.patch(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode({'admin_note': adminNote.trim()}),
+    );
+    final data = _parseResponse(response);
+    if (response.statusCode == 200) {
+      return _leaveRequestItemFromMap(data);
+    }
+    throw Exception(data['detail'] ?? 'Không thể từ chối đơn nghỉ phép');
+  }
+
+  AdminLeaveRequestItem _leaveRequestItemFromMap(Map<String, dynamic> m) {
+    return AdminLeaveRequestItem(
+      id: m['id'] as int,
+      employeeId: m['employee_id'] as int,
+      employeeName: (m['employee_name'] as String?) ?? '',
+      employeeCode: (m['employee_code'] as String?) ?? '',
+      leaveType: (m['leave_type'] as String?) ?? '',
+      startDate: DateTime.parse(m['start_date'] as String),
+      endDate: DateTime.parse(m['end_date'] as String),
+      reason: m['reason'] as String?,
+      status: (m['status'] as String?) ?? '',
+      adminNote: m['admin_note'] as String?,
+      createdAt: m['created_at'] != null
+          ? DateTime.tryParse(m['created_at'] as String)
+          : null,
+    );
   }
 }

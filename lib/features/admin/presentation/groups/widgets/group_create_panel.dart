@@ -118,7 +118,7 @@ extension _GroupCreatePanelX on _GroupsTabState {
                     return;
                   }
                   Navigator.of(context).pop();
-                } catch (_) {
+                } on Object catch (_) {
                   if (!mounted) {
                     return;
                   }
@@ -295,7 +295,7 @@ extension _GroupCreatePanelX on _GroupsTabState {
                                 onPressed: _savingGroup ? null : onSave,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
+                                  foregroundColor: AppColors.bgCard,
                                 ),
                                 child: _savingGroup
                                     ? const SizedBox(
@@ -303,7 +303,7 @@ extension _GroupCreatePanelX on _GroupsTabState {
                                         height: 14,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: Colors.white,
+                                          color: AppColors.bgCard,
                                         ),
                                       )
                                     : Text(

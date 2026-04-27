@@ -1,6 +1,6 @@
-﻿import 'package:flutter/widgets.dart';
+import 'package:flutter/widgets.dart';
 
-import 'recaptcha_v2_stub.dart'
+import 'package:birdle/features/auth/presentation/widgets/recaptcha_v2_stub.dart'
     if (dart.library.html) 'recaptcha_v2_web.dart' as impl;
 
 class RecaptchaV2Controller {

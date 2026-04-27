@@ -65,7 +65,7 @@ extension _GeofenceListX on _GeofencesTabState {
                         onPressed: _selectedGroupId == null ? null : _startCreate,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppColors.bgCard,
                         ),
                         icon: const Icon(Icons.add, size: 16),
                         label: const Text('Thêm vùng'),
@@ -124,7 +124,7 @@ extension _GeofenceListX on _GeofencesTabState {
                                       label: const Text('Thêm vùng mới'),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppColors.primary,
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: AppColors.bgCard,
                                       ),
                                     ),
                                   ],
@@ -193,13 +193,36 @@ extension _GeofenceListX on _GeofencesTabState {
                                                           AppColors.textPrimary,
                                                     ),
                                                   ),
-                                                  Text(
-                                                    '${geo.radiusM}m',
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      color:
-                                                          AppColors.textMuted,
-                                                    ),
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        '${geo.radiusM}m',
+                                                        style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color: AppColors.textMuted,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                        decoration: BoxDecoration(
+                                                          color: geo.locationType == 'VP'
+                                                              ? AppColors.geofenceVpBg
+                                                              : AppColors.badgeBgLate,
+                                                          borderRadius: BorderRadius.circular(4),
+                                                        ),
+                                                        child: Text(
+                                                          geo.locationType == 'VP' ? 'VP' : 'Site',
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.w600,
+                                                            color: geo.locationType == 'VP'
+                                                                ? AppColors.geofenceVpText
+                                                                : AppColors.geofenceSiteText,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ],
                                               ),

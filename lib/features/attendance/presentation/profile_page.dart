@@ -811,6 +811,13 @@ class _ProfilePageBodyState extends State<ProfilePageBody> {
       child: Column(
         children: [
           _buildSettingItem(
+            icon: Icons.event_note_outlined,
+            iconColor: AppColors.success,
+            label: 'Đơn nghỉ phép',
+            onTap: () => Navigator.of(context).pushNamed('/home/leaves'),
+          ),
+          _buildDivider(),
+          _buildSettingItem(
             icon: Icons.assignment_late_outlined,
             iconColor: AppColors.warning,
             label: 'Giải trình ngoại lệ',

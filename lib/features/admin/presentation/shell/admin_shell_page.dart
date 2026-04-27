@@ -1,32 +1,32 @@
 // ignore_for_file: unused_field
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/storage/token_storage.dart';
-import '../../../../widgets/common/admin_sidebar.dart';
-import '../../../../widgets/common/admin_topbar.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
-import '../admin_shell.dart';
-import '../attendance_logs/attendance_logs_tab.dart';
-import '../dashboard/dashboard_tab.dart';
-import '../employees/employees_tab.dart';
-import '../exceptions/exceptions_screen.dart' as admin_exceptions;
-import '../geofences/geofences_tab.dart';
-import '../groups/groups_tab.dart';
-import '../reports/reports_tab.dart';
-import '../settings/settings_screen.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/widgets/common/admin_sidebar.dart';
+import 'package:birdle/widgets/common/admin_topbar.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
+import 'package:birdle/features/admin/presentation/admin_shell.dart';
+import 'package:birdle/features/admin/presentation/attendance_logs/attendance_logs_tab.dart';
+import 'package:birdle/features/admin/presentation/dashboard/dashboard_tab.dart';
+import 'package:birdle/features/admin/presentation/employees/employees_tab.dart';
+import 'package:birdle/features/admin/presentation/exceptions/exceptions_screen.dart'
+    as admin_exceptions;
+import 'package:birdle/features/admin/presentation/geofences/geofences_tab.dart';
+import 'package:birdle/features/admin/presentation/groups/groups_tab.dart';
+import 'package:birdle/features/admin/presentation/leaves/leaves_tab.dart';
+import 'package:birdle/features/admin/presentation/reports/reports_tab.dart';
+import 'package:birdle/features/admin/presentation/settings/settings_screen.dart';
 
 /// Single entry point for all admin routes.
 /// Replaces the 6 thin per-section wrapper widgets.
 class AdminShellPage extends StatefulWidget {
-  const AdminShellPage({
-    required this.email,
-    this.initialSection,
-    super.key,
-  });
+  const AdminShellPage({required this.email, this.initialSection, super.key});
 
   final String email;
   final String? initialSection;
@@ -50,6 +50,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   final Set<int> _updatingExceptionIds = {};
   _AdminShellNav _activeNav = _AdminShellNav.dashboard;
   final Set<_AdminShellNav> _tabsLoaded = {};
+  int _refreshEpoch = 0;
   String? _error;
   String? _info;
 
@@ -92,6 +93,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
         return _AdminShellNav.reports;
       case 'exceptions':
         return _AdminShellNav.exceptions;
+      case 'leaves':
+        return _AdminShellNav.leaves;
       case 'settings':
         return _AdminShellNav.settings;
       case 'dashboard':
@@ -119,7 +122,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
     await _tokenStorage.clearToken();
     AdminDataCache.instance.invalidate();
     if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+    unawaited(
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false),
+    );
   }
 
   Future<void> _bootstrap() async {
@@ -142,24 +147,21 @@ class _AdminShellPageState extends State<AdminShellPage> {
       return;
     }
 
-    await Future.wait<void>([
-      _loadExceptions(),
-      _loadTabIfNeeded(_activeNav),
-    ]);
+    await Future.wait<void>([_loadExceptions(), _loadTabIfNeeded(_activeNav)]);
   }
 
   Future<void> _refreshAll() async {
     _tabsLoaded.clear();
     AdminDataCache.instance.invalidate();
+    if (mounted) {
+      setState(() => _refreshEpoch++);
+    }
     if (_activeNav == _AdminShellNav.exceptions) {
       await _loadTabIfNeeded(_activeNav);
       return;
     }
 
-    await Future.wait<void>([
-      _loadExceptions(),
-      _loadTabIfNeeded(_activeNav),
-    ]);
+    await Future.wait<void>([_loadExceptions(), _loadTabIfNeeded(_activeNav)]);
   }
 
   Future<void> _logout() async {
@@ -169,8 +171,12 @@ class _AdminShellPageState extends State<AdminShellPage> {
       if (!mounted) {
         return;
       }
-      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-    } catch (error) {
+      unawaited(
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false),
+      );
+    } on Object catch (error) {
       _showSnack('Đăng xuất thất bại: $error');
     }
   }
@@ -226,6 +232,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
         return 'Báo cáo';
       case _AdminShellNav.exceptions:
         return 'Ngoại lệ';
+      case _AdminShellNav.leaves:
+        return 'Nghỉ phép';
       case _AdminShellNav.settings:
         return 'Cài đặt';
     }
@@ -269,6 +277,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
         icon: Icons.error_outline,
         label: 'Ngoại lệ',
         badgeCount: pending,
+      ),
+      const AdminSidebarItem<_AdminShellNav>(
+        value: _AdminShellNav.leaves,
+        icon: Icons.event_busy_outlined,
+        label: 'Nghỉ phép',
       ),
       const AdminSidebarItem<_AdminShellNav>(
         value: _AdminShellNav.settings,
@@ -317,8 +330,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
       case _AdminShellNav.groups:
       case _AdminShellNav.geofences:
       case _AdminShellNav.reports:
+      case _AdminShellNav.leaves:
       case _AdminShellNav.settings:
-        // SettingsScreen and RulesSettingsTab manage rule loading/saving locally.
         break;
       case _AdminShellNav.exceptions:
         // Shell keeps the lightweight badge state; detailed actions stay in
@@ -353,7 +366,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
     } on UnauthorizedException {
       await _handleUnauthorized();
       return;
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -397,32 +410,48 @@ class _AdminShellPageState extends State<AdminShellPage> {
     );
   }
 
+  Key _tabKey(_AdminShellNav nav) =>
+      ValueKey<String>('admin-tab-${nav.index}-$_refreshEpoch');
+
   Widget _buildContentByNav() {
     switch (_activeNav) {
       case _AdminShellNav.dashboard:
         return DashboardTab(
-          onNavigateTo: (section) => _switchNav(_initialNavFromSection(section)),
+          key: _tabKey(_AdminShellNav.dashboard),
+          onNavigateTo: (section) =>
+              _switchNav(_initialNavFromSection(section)),
         );
       case _AdminShellNav.logs:
-        return const AttendanceLogsTab();
+        return AttendanceLogsTab(key: _tabKey(_AdminShellNav.logs));
       case _AdminShellNav.employees:
-        return const EmployeesTab();
+        return EmployeesTab(key: _tabKey(_AdminShellNav.employees));
       case _AdminShellNav.groups:
         return GroupsTab(
-          onNavigateTo: (section) => _switchNav(_initialNavFromSection(section)),
+          key: _tabKey(_AdminShellNav.groups),
+          onNavigateTo: (section) =>
+              _switchNav(_initialNavFromSection(section)),
         );
       case _AdminShellNav.geofences:
         return GeofencesTab(
-          onNavigateTo: (section) => _switchNav(_initialNavFromSection(section)),
+          key: _tabKey(_AdminShellNav.geofences),
+          onNavigateTo: (section) =>
+              _switchNav(_initialNavFromSection(section)),
         );
       case _AdminShellNav.reports:
-        return const ReportsTab();
+        return ReportsTab(key: _tabKey(_AdminShellNav.reports));
       case _AdminShellNav.exceptions:
-        return const admin_exceptions.ExceptionsScreen();
+        return admin_exceptions.ExceptionsScreen(
+          key: _tabKey(_AdminShellNav.exceptions),
+        );
+      case _AdminShellNav.leaves:
+        return SizedBox(
+          height: MediaQuery.of(context).size.height - 108,
+          child: LeavesTab(key: _tabKey(_AdminShellNav.leaves)),
+        );
       case _AdminShellNav.settings:
         return SizedBox(
           height: MediaQuery.of(context).size.height - 108,
-          child: const SettingsScreen(),
+          child: SettingsScreen(key: _tabKey(_AdminShellNav.settings)),
         );
     }
   }
@@ -499,5 +528,6 @@ enum _AdminShellNav {
   geofences,
   reports,
   exceptions,
+  leaves,
   settings,
 }

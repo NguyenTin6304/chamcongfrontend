@@ -56,6 +56,20 @@ class AppColors {
   static const Color exceptionTabRejectedBorder = Color(0xFFFECACA);
   static const Color exceptionCardMutedBg = Color(0xFFFAFAFA);
 
+  // Geofence location type badge colors
+  static const Color geofenceVpColor   = Color(0xFF3B82F6);
+  static const Color geofenceVpBg      = Color(0xFFDBEAFE);
+  static const Color geofenceVpText    = Color(0xFF1D4ED8);
+  static const Color geofenceSiteColor = Color(0xFFF59E0B);
+  static const Color geofenceSiteText  = Color(0xFFB45309);
+
+  // Report legend chip colors
+  static const Color reportSiteLegend      = Color(0xFFFEF9C3);
+  static const Color reportNoGeoLegend     = Color(0xFFF3F4F6);
+  static const Color reportHalfLegend      = Color(0xFFFED7AA);
+  static const Color reportHolidayLegend   = Color(0xFFE9D5FF);
+  static const Color reportPaidLeaveLegend = Color(0xFFD1FAE5);
+
   // DESIGN.md alias tokens (home + mobile UI)
   static const Color primaryLight = Color(0xFFEEF1FF);
   static const Color surface = bgCard;

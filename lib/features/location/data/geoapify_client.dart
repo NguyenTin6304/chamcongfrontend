@@ -3,15 +3,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../../core/config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
-enum GeoapifyErrorCode {
-  network,
-  rateLimit,
-  invalidKey,
-  badRequest,
-  unknown,
-}
+enum GeoapifyErrorCode { network, rateLimit, invalidKey, badRequest, unknown }
 
 class GeoapifyException implements Exception {
   const GeoapifyException({
@@ -341,16 +335,22 @@ class GeoapifyClient {
     final features = data['features'];
     if (features is List && features.isNotEmpty) {
       return features
-          .whereType<Map>()
-          .map((feature) => GeoapifyPlace.fromFeature(feature.cast<String, dynamic>()))
+          .whereType<Map<dynamic, dynamic>>()
+          .map(
+            (feature) =>
+                GeoapifyPlace.fromFeature(feature.cast<String, dynamic>()),
+          )
           .toList(growable: false);
     }
 
     final results = data['results'];
     if (results is List) {
       return results
-          .whereType<Map>()
-          .map((result) => GeoapifyPlace.fromResult(result.cast<String, dynamic>()))
+          .whereType<Map<dynamic, dynamic>>()
+          .map(
+            (result) =>
+                GeoapifyPlace.fromResult(result.cast<String, dynamic>()),
+          )
           .toList(growable: false);
     }
 
@@ -363,7 +363,7 @@ class GeoapifyClient {
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-    } catch (_) {}
+    } on Object catch (_) {}
     return <String, dynamic>{};
   }
 

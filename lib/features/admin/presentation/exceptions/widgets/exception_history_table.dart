@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../../core/storage/token_storage.dart';
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 import 'package:birdle/core/theme/app_dimensions.dart';
 import 'package:birdle/core/theme/app_text_styles.dart';
-import '../../../data/admin_api.dart';
-import 'deadline_badge.dart';
-import 'exception_ui_helpers.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/deadline_badge.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/exception_ui_helpers.dart';
 
 class DateRange {
   const DateRange({required this.from, required this.to});
@@ -295,9 +295,9 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
+      shape: const RoundedRectangleBorder(
         borderRadius: AppRadius.cardAll,
-        side: const BorderSide(color: AppColors.border, width: 0.5),
+        side: BorderSide(color: AppColors.border, width: 0.5),
       ),
       child: ClipRRect(
         borderRadius: AppRadius.cardAll,
@@ -335,20 +335,20 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
                   dataRowMaxHeight: 56,
                   dividerThickness: 0.5,
                   columns: [
-                    DataColumn(label: Text('STT')),
+                    const DataColumn(label: Text('STT')),
                     if (showRetention)
                       const DataColumn(label: Text('Lưu hồ sơ')),
                     if (showDeadline)
                       const DataColumn(label: Text('HẠN GIẢI TRÌNH')),
-                    DataColumn(label: Text('NHÂN VIÊN')),
-                    DataColumn(label: Text('LOẠI NGOẠI LỆ')),
-                    DataColumn(label: Text('NGÀY')),
-                    DataColumn(label: Text('GIỜ VÀO')),
-                    DataColumn(label: Text('GIỜ RA')),
-                    DataColumn(label: Text('LÝ DO')),
-                    DataColumn(label: Text('TRẠNG THÁI')),
-                    DataColumn(label: Text('NGƯỜI DUYỆT')),
-                    DataColumn(label: Text('CHI TIẾT')),
+                    const DataColumn(label: Text('NHÂN VIÊN')),
+                    const DataColumn(label: Text('LOẠI NGOẠI LỆ')),
+                    const DataColumn(label: Text('NGÀY')),
+                    const DataColumn(label: Text('GIỜ VÀO')),
+                    const DataColumn(label: Text('GIỜ RA')),
+                    const DataColumn(label: Text('LÝ DO')),
+                    const DataColumn(label: Text('TRẠNG THÁI')),
+                    const DataColumn(label: Text('NGƯỜI DUYỆT')),
+                    const DataColumn(label: Text('CHI TIẾT')),
                   ],
                   rows: rows
                       .asMap()
@@ -598,35 +598,35 @@ class _ExceptionHistoryTableState extends State<ExceptionHistoryTable> {
         headingRowColor: WidgetStateProperty.all(AppColors.bgPage),
         headingTextStyle: AppTextStyles.sectionLabel.copyWith(color: AppColors.textMuted, letterSpacing: 0.06),
         columns: [
-          DataColumn(label: Text('STT')),
+          const DataColumn(label: Text('STT')),
           if (showRetention) const DataColumn(label: Text('Lưu hồ sơ')),
           if (showDeadline) const DataColumn(label: Text('HẠN GIẢI TRÌNH')),
-          DataColumn(label: Text('NHÂN VIÊN')),
-          DataColumn(label: Text('LOẠI NGOẠI LỆ')),
-          DataColumn(label: Text('NGÀY')),
-          DataColumn(label: Text('GIỜ VÀO')),
-          DataColumn(label: Text('GIỜ RA')),
-          DataColumn(label: Text('LÝ DO')),
-          DataColumn(label: Text('TRẠNG THÁI')),
-          DataColumn(label: Text('NGƯỜI DUYỆT')),
-          DataColumn(label: Text('CHI TIẾT')),
+          const DataColumn(label: Text('NHÂN VIÊN')),
+          const DataColumn(label: Text('LOẠI NGOẠI LỆ')),
+          const DataColumn(label: Text('NGÀY')),
+          const DataColumn(label: Text('GIỜ VÀO')),
+          const DataColumn(label: Text('GIỜ RA')),
+          const DataColumn(label: Text('LÝ DO')),
+          const DataColumn(label: Text('TRẠNG THÁI')),
+          const DataColumn(label: Text('NGƯỜI DUYỆT')),
+          const DataColumn(label: Text('CHI TIẾT')),
         ],
         rows: List.generate(
           3,
           (_) => DataRow(
             cells: [
-              DataCell(_ShimmerCell(width: 24)),
+              const DataCell(_ShimmerCell(width: 24)),
               if (showRetention) const DataCell(_ShimmerCell(width: 120)),
               if (showDeadline) const DataCell(_ShimmerCell(width: 120)),
-              DataCell(_ShimmerCell(width: 180)),
-              DataCell(_ShimmerCell(width: 120)),
-              DataCell(_ShimmerCell(width: 80)),
-              DataCell(_ShimmerCell(width: 56)),
-              DataCell(_ShimmerCell(width: 56)),
-              DataCell(_ShimmerCell(width: 170)),
-              DataCell(_ShimmerCell(width: 90)),
-              DataCell(_ShimmerCell(width: 120)),
-              DataCell(_ShimmerCell(width: 60)),
+              const DataCell(_ShimmerCell(width: 180)),
+              const DataCell(_ShimmerCell(width: 120)),
+              const DataCell(_ShimmerCell(width: 80)),
+              const DataCell(_ShimmerCell(width: 56)),
+              const DataCell(_ShimmerCell(width: 56)),
+              const DataCell(_ShimmerCell(width: 170)),
+              const DataCell(_ShimmerCell(width: 90)),
+              const DataCell(_ShimmerCell(width: 120)),
+              const DataCell(_ShimmerCell(width: 60)),
             ],
           ),
         ),
