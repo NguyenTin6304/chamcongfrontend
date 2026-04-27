@@ -20,14 +20,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   static const _items = <({IconData icon, String label})>[
     (icon: Icons.settings_outlined, label: 'Chung'),
-    (icon: Icons.person_outline, label: 'Tài khoản'),
-    (icon: Icons.notifications_none_outlined, label: 'Thông báo'),
     (icon: Icons.access_time_outlined, label: 'Quy tắc chấm công'),
     (icon: Icons.timer_outlined, label: 'Chính sách giải trình'),
-    (icon: Icons.lock_outline, label: 'Bảo mật'),
-    (icon: Icons.email_outlined, label: 'Email & Tích hợp'),
-    (icon: Icons.list_alt_outlined, label: 'Nhật ký hệ thống'),
-    (icon: Icons.help_outline, label: 'Trợ giúp'),
   ];
 
   @override
@@ -53,12 +47,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   final item = _items[index];
                   final active = index == selectedTabIndex;
                   final hover = index == _hoveredIndex;
-                  final showDivider = index == 8;
-
                   return Column(
                     children: [
-                      if (showDivider)
-                        const Divider(height: 1, color: AppColors.border),
                       MouseRegion(
                         onEnter: (_) => setState(() => _hoveredIndex = index),
                         onExit: (_) => setState(() => _hoveredIndex = null),
@@ -127,40 +117,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               index: selectedTabIndex,
               children: const [
                 GeneralSettingsTab(),
-                _PlaceholderTab(),
-                _PlaceholderTab(),
                 RulesSettingsTab(),
                 ExplanationPolicySettingsTab(),
-                _PlaceholderTab(),
-                _PlaceholderTab(),
-                _PlaceholderTab(),
-                _PlaceholderTab(),
               ],
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.construction_outlined, size: 48, color: AppColors.border),
-          const SizedBox(height: 8),
-          Text(
-            'Tính năng đang phát triển',
-            style: AppTextStyles.body.copyWith(color: AppColors.textMuted),
-          ),
-        ],
-      ),
     );
   }
 }
