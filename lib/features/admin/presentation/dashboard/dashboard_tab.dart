@@ -588,7 +588,7 @@ class _DashboardTabState extends State<DashboardTab> {
             const SizedBox(height: 2),
             if (_loadingLogs) _buildDashboardLogSkeleton(),
             if (!_loadingLogs && _logs.isEmpty)
-              Padding(
+              const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(child: Text('Chưa có dữ liệu hôm nay')),
               ),
@@ -835,7 +835,7 @@ class _DashboardTabState extends State<DashboardTab> {
           children: [
             Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Text(
                     'Khu vực địa lý đang hoạt động',
                     style: AppTextStyles.bodyBold,
@@ -851,13 +851,13 @@ class _DashboardTabState extends State<DashboardTab> {
             if (_loadingGeofences)
               ...List<Widget>.generate(
                 3,
-                (_) => Padding(
+                (_) => const Padding(
                   padding: EdgeInsets.only(bottom: 10),
                   child: _SkeletonRow(),
                 ),
               ),
             if (!_loadingGeofences && _geofences.isEmpty)
-              Padding(
+              const Padding(
                 padding: EdgeInsets.only(bottom: 10),
                 child: Text('Chưa có khu vực địa lý.'),
               ),
@@ -953,12 +953,12 @@ class _DashboardTabState extends State<DashboardTab> {
             ),
             const SizedBox(height: AppSpacing.sm),
             if (_loadingExceptions)
-              Padding(
+              const Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: LinearProgressIndicator(minHeight: 2),
               ),
             if (!_loadingExceptions && _exceptions.isEmpty)
-              Padding(
+              const Padding(
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: Text('Không có ngoại lệ chưa được giải quyết.'),
               ),

@@ -1,16 +1,18 @@
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'core/layout/app_scaffold.dart';
-import 'core/services/notification_store.dart';
-import 'core/services/push_notification_service.dart';
-import 'core/theme/app_colors.dart';
-import 'features/admin/presentation/shell/admin_shell_page.dart';
-import 'features/auth/presentation/forgot_password_page.dart';
-import 'features/auth/presentation/login_page.dart';
-import 'features/auth/presentation/reset_password_page.dart';
-import 'features/attendance/presentation/employee_exceptions_screen.dart';
+import 'package:birdle/core/layout/app_scaffold.dart';
+import 'package:birdle/core/services/notification_store.dart';
+import 'package:birdle/core/services/push_notification_service.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/features/admin/presentation/shell/admin_shell_page.dart';
+import 'package:birdle/features/auth/presentation/forgot_password_page.dart';
+import 'package:birdle/features/auth/presentation/login_page.dart';
+import 'package:birdle/features/auth/presentation/reset_password_page.dart';
+import 'package:birdle/features/attendance/presentation/employee_exceptions_screen.dart';
+import 'package:birdle/features/attendance/presentation/leave_request_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,9 +45,11 @@ class _MainAppState extends State<MainApp> {
     '/admin/geofences',
     '/admin/reports',
     '/admin/exceptions',
+    '/admin/leaves',
     '/admin/settings',
     '/home',
     '/home/exceptions',
+    '/home/leaves',
     '/history',
     '/profile',
   };
@@ -140,6 +144,12 @@ class _MainAppState extends State<MainApp> {
           initialSection: 'exceptions',
         );
         break;
+      case '/admin/leaves':
+        page = AdminShellPage(
+          email: _extractEmailArg(settings),
+          initialSection: 'leaves',
+        );
+        break;
       case '/admin/settings':
         page = AdminShellPage(
           email: _extractEmailArg(settings),
@@ -151,6 +161,9 @@ class _MainAppState extends State<MainApp> {
         break;
       case '/home/exceptions':
         page = const EmployeeExceptionsScreen();
+        break;
+      case '/home/leaves':
+        page = const LeaveRequestScreen();
         break;
       case '/history':
         page = const AppScaffold(initialIndex: 1);
@@ -185,6 +198,15 @@ class _MainAppState extends State<MainApp> {
         },
         scrollbars: true,
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('vi'),
+        Locale('en'),
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
         scaffoldBackgroundColor: AppColors.bgPage,

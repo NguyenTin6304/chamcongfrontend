@@ -4,17 +4,17 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/download/file_downloader.dart';
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/download/file_downloader.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 import 'package:birdle/core/theme/app_dimensions.dart';
 import 'package:birdle/core/theme/app_text_styles.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import 'widgets/exception_history_table.dart';
-import 'widgets/exception_ui_helpers.dart';
-import 'widgets/pending_exception_card.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/exception_history_table.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/exception_ui_helpers.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/pending_exception_card.dart';
 
 class ExceptionsScreen extends StatefulWidget {
   const ExceptionsScreen({super.key});
@@ -370,7 +370,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         initialApprove: initialApprove,
         readOnly: readOnly,
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -461,7 +461,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
           ),
         );
         await _refreshData();
-      } catch (error) {
+      } on Object catch (error) {
         if (!mounted) {
           return;
         }
@@ -633,7 +633,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                         ),
                         if (initialApprove == false)
                           Padding(
-                            padding: EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.only(top: 6),
                             child: Text(
                               'Bắt buộc nhập note khi từ chối.',
                               style: AppTextStyles.caption.copyWith(color: AppColors.danger),
@@ -760,7 +760,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
                   const SnackBar(content: Text('Đã gia hạn giải trình.')),
                 );
                 await _refreshData();
-              } catch (error) {
+              } on Object catch (error) {
                 if (!mounted || !dialogContext.mounted) {
                   return;
                 }
@@ -884,7 +884,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         bytes: Uint8List.fromList(utf8.encode(csv)),
         fileName: fileName,
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -1035,7 +1035,7 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
   // ignore: unused_element
   Widget _buildPendingCards(List<ExceptionModel> pending) {
     if (pending.isEmpty) {
-      return Padding(
+      return const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: Text(
           'Không có yêu cầu chờ xử lý.',

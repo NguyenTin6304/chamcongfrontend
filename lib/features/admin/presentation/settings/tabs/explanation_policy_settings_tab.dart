@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../../core/storage/token_storage.dart';
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 import 'package:birdle/core/theme/app_dimensions.dart';
 import 'package:birdle/core/theme/app_text_styles.dart';
-import '../../../data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
 
 class ExplanationPolicySettingsTab extends StatefulWidget {
   const ExplanationPolicySettingsTab({super.key});
@@ -220,7 +220,7 @@ class _ExplanationPolicySettingsTabState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Phiên đăng nhập đã hết hạn.')),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -295,7 +295,7 @@ class _ExplanationPolicySettingsTabState
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Phiên đăng nhập đã hết hạn.')),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -348,7 +348,7 @@ class _ExplanationPolicySettingsTabState
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: AppColors.border),
                 if (_loading)
-                  Padding(
+                  const Padding(
                     padding: EdgeInsets.only(top: 12),
                     child: LinearProgressIndicator(minHeight: 2),
                   ),

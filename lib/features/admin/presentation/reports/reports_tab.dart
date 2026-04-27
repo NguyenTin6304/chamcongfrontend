@@ -2,13 +2,21 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/download/file_downloader.dart';
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import '../../../../widgets/common/status_badge.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
+import 'package:birdle/core/download/file_downloader.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
+import 'package:birdle/widgets/common/status_badge.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
+
+part 'widgets/reports_monthly_panel.dart';
+part 'widgets/reports_filter_card.dart';
+part 'widgets/reports_trend_card.dart';
+part 'widgets/reports_donut_card.dart';
+part 'widgets/reports_top_late_card.dart';
+part 'widgets/reports_group_perf_card.dart';
+part 'widgets/reports_heatmap_card.dart';
 
 class ReportsTab extends StatefulWidget {
   const ReportsTab({super.key});
@@ -27,6 +35,10 @@ class _ReportsTabState extends State<ReportsTab> {
   List<DashboardAttendanceLogItem> _reportsLogs = const [];
   List<DashboardAttendanceLogItem> _reportsLateTop = const [];
 
+  // ── Sub-tab ───────────────────────────────────────────────────────────────
+  int _activeSubTab = 0; // 0 = Chi tiết, 1 = Bảng chấm công
+
+  // ── Chi tiết tab state ────────────────────────────────────────────────────
   DateTime _reportsMonth = DateTime(DateTime.now().year, DateTime.now().month);
   int? _reportsGroupId;
   String _reportsStatus = 'all';
@@ -36,6 +48,12 @@ class _ReportsTabState extends State<ReportsTab> {
   bool _loadingReportsLogs = false;
   bool _loadingReportsLateTop = false;
   bool _exportingReportsExcel = false;
+
+  // ── Bảng chấm công tab state ──────────────────────────────────────────────
+  int _monthlyMonth = DateTime.now().month;
+  int _monthlyYear  = DateTime.now().year;
+  int? _monthlyGroupId;
+  bool _exportingMonthly = false;
 
   // Memoisation caches
   List<_ReportCountItem>? _cachedTopLateItems;
@@ -85,9 +103,8 @@ class _ReportsTabState extends State<ReportsTab> {
       });
     } on UnauthorizedException {
       AdminDataCache.instance.sessionExpired.value = true;
-    } catch (_) {}
+    } on Object catch (_) {}
   }
-
 
   Future<void> _loadReportsTrends(String token) async {
     setState(() => _loadingReportsTrends = true);
@@ -101,7 +118,7 @@ class _ReportsTabState extends State<ReportsTab> {
       );
       if (!mounted) return;
       setState(() => _reportsTrends = data);
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       setState(() => _reportsTrends = const []);
       _showSnack('Không thể tải xu hướng chấm công.');
@@ -123,7 +140,7 @@ class _ReportsTabState extends State<ReportsTab> {
       );
       if (!mounted) return;
       setState(() => _reportsLogs = result.items);
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       setState(() => _reportsLogs = const []);
       _showSnack('Không thể tải dữ liệu báo cáo.');
@@ -146,7 +163,7 @@ class _ReportsTabState extends State<ReportsTab> {
       );
       if (!mounted) return;
       setState(() => _reportsLateTop = result.items);
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       setState(() => _reportsLateTop = const []);
       _showSnack('Không thể tải top nhân viên vào muộn.');
@@ -197,7 +214,7 @@ class _ReportsTabState extends State<ReportsTab> {
       await saveBytesAsFile(bytes: report.bytes, fileName: report.fileName);
       if (!mounted) return;
       _showSnack('Xuất báo cáo Excel thành công.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       _showSnack('Không thể xuất báo cáo Excel. Vui lòng thử lại.');
     } finally {
@@ -205,7 +222,43 @@ class _ReportsTabState extends State<ReportsTab> {
     }
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  Future<void> _exportMonthlyExcel() async {
+    final token = _token;
+    if (token == null || token.isEmpty) {
+      _showSnack('Phiên đăng nhập đã hết hạn.');
+      return;
+    }
+    setState(() => _exportingMonthly = true);
+    try {
+      final result = await _adminApi.downloadMonthlyAttendance(
+        token: token,
+        month: _monthlyMonth,
+        year: _monthlyYear,
+        groupId: _monthlyGroupId,
+      );
+      await saveBytesAsFile(bytes: result.bytes, fileName: result.fileName);
+      if (!mounted) return;
+      _showSnack('Xuất bảng chấm công thành công.');
+    } on Exception catch (_) {
+      if (!mounted) return;
+      _showSnack('Không thể xuất bảng chấm công. Vui lòng thử lại.');
+    } finally {
+      if (mounted) setState(() => _exportingMonthly = false);
+    }
+  }
+
+  void _shiftMonthlyMonth(int delta) {
+    setState(() {
+      var m = _monthlyMonth + delta;
+      var y = _monthlyYear;
+      if (m > 12) { m = 1;  y++; }
+      if (m < 1)  { m = 12; y--; }
+      _monthlyMonth = m;
+      _monthlyYear  = y;
+    });
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   void _showSnack(String text) {
     if (!mounted) return;
@@ -237,10 +290,9 @@ class _ReportsTabState extends State<ReportsTab> {
         return h + (m / 60);
       }
     }
-    // Backend returns "8.5h" format — strip the "h" suffix before parsing
     final stripped = raw.replaceAll(RegExp(r'[hH]$'), '').trim();
     final parsed = double.tryParse(stripped.replaceAll(',', '.')) ?? 0;
-    return parsed < 0 ? 0 : parsed; // guard against bad data (checkout < checkin)
+    return parsed < 0 ? 0 : parsed;
   }
 
   double _reportsTotalHours() {
@@ -306,7 +358,7 @@ class _ReportsTabState extends State<ReportsTab> {
     return Color.lerp(base, AppColors.textMuted.withValues(alpha: 0.25), 0.2)!;
   }
 
-  // ── Memoised computations ────────────────────────────────────────────────
+  // ── Memoised computations ─────────────────────────────────────────────────
 
   List<_ReportCountItem> _reportsTopLateItems() {
     if (_cachedTopLateItems != null &&
@@ -427,7 +479,7 @@ class _ReportsTabState extends State<ReportsTab> {
     return map;
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -447,749 +499,181 @@ class _ReportsTabState extends State<ReportsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            SizedBox(
-              width: 220,
-              child: KpiCard(
-                label: 'Tổng lượt',
-                value: _loadingReportsLogs ? '--' : _formatThousands(totalLogs),
-                icon: Icons.fact_check_outlined,
-                iconColor: AppColors.primary,
-                valueColor: AppColors.primary,
-                loading: _loadingReportsLogs,
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: KpiCard(
-                label: 'Tỷ lệ đúng giờ',
-                value: _loadingReportsLogs
-                    ? '--'
-                    : '${_formatPercent(onTimeRate)}%',
-                icon: Icons.check_circle_outline,
-                iconColor: AppColors.success,
-                valueColor: AppColors.success,
-                loading: _loadingReportsLogs,
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: KpiCard(
-                label: 'Tổng giờ làm',
-                value: _loadingReportsLogs
-                    ? '--'
-                    : _formatPercent(reportsTotalHours),
-                icon: Icons.timer_outlined,
-                iconColor: AppColors.warning,
-                valueColor: AppColors.warning,
-                loading: _loadingReportsLogs,
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: KpiCard(
-                label: 'Tăng ca',
-                value: _loadingReportsLogs
-                    ? '--'
-                    : _formatThousands(overtimeCount),
-                icon: Icons.bolt_outlined,
-                iconColor: AppColors.overtime,
-                valueColor: AppColors.overtime,
-                loading: _loadingReportsLogs,
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: KpiCard(
-                label: 'Ngoài vùng',
-                value: _loadingReportsLogs
-                    ? '--'
-                    : '${_formatPercent(outOfRangeRate)}%',
-                icon: Icons.location_off_outlined,
-                iconColor: AppColors.danger,
-                valueColor: AppColors.danger,
-                loading: _loadingReportsLogs,
-              ),
-            ),
-          ],
-        ),
+        _buildSubTabBar(),
         const SizedBox(height: 16),
-        _buildFilterCard(),
-        const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 1040) {
-              return Column(
-                children: [
-                  _buildTrendCard(),
-                  const SizedBox(height: 16),
-                  _buildStatusDonutCard(
-                    onTimeCount: onTimeCount,
-                    lateCount: lateCount,
-                    outOfRangeCount: outOfRangeCount,
-                    overtimeCount: overtimeCount,
-                  ),
-                ],
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 6, child: _buildTrendCard()),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 4,
-                  child: _buildStatusDonutCard(
-                    onTimeCount: onTimeCount,
-                    lateCount: lateCount,
-                    outOfRangeCount: outOfRangeCount,
-                    overtimeCount: overtimeCount,
-                  ),
+        if (_activeSubTab == 0) ...[
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: 220,
+                child: KpiCard(
+                  label: 'Tổng lượt',
+                  value: _loadingReportsLogs ? '--' : _formatThousands(totalLogs),
+                  icon: Icons.fact_check_outlined,
+                  iconColor: AppColors.primary,
+                  valueColor: AppColors.primary,
+                  loading: _loadingReportsLogs,
                 ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 1040) {
-              return Column(
+              ),
+              SizedBox(
+                width: 220,
+                child: KpiCard(
+                  label: 'Tỷ lệ đúng giờ',
+                  value: _loadingReportsLogs
+                      ? '--'
+                      : '${_formatPercent(onTimeRate)}%',
+                  icon: Icons.check_circle_outline,
+                  iconColor: AppColors.success,
+                  valueColor: AppColors.success,
+                  loading: _loadingReportsLogs,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: KpiCard(
+                  label: 'Tổng giờ làm',
+                  value: _loadingReportsLogs
+                      ? '--'
+                      : _formatPercent(reportsTotalHours),
+                  icon: Icons.timer_outlined,
+                  iconColor: AppColors.warning,
+                  valueColor: AppColors.warning,
+                  loading: _loadingReportsLogs,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: KpiCard(
+                  label: 'Tăng ca',
+                  value: _loadingReportsLogs
+                      ? '--'
+                      : _formatThousands(overtimeCount),
+                  icon: Icons.bolt_outlined,
+                  iconColor: AppColors.overtime,
+                  valueColor: AppColors.overtime,
+                  loading: _loadingReportsLogs,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: KpiCard(
+                  label: 'Ngoài vùng',
+                  value: _loadingReportsLogs
+                      ? '--'
+                      : '${_formatPercent(outOfRangeRate)}%',
+                  icon: Icons.location_off_outlined,
+                  iconColor: AppColors.danger,
+                  valueColor: AppColors.danger,
+                  loading: _loadingReportsLogs,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildFilterCard(),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 1040) {
+                return Column(
+                  children: [
+                    _buildTrendCard(),
+                    const SizedBox(height: 16),
+                    _buildStatusDonutCard(
+                      onTimeCount: onTimeCount,
+                      lateCount: lateCount,
+                      outOfRangeCount: outOfRangeCount,
+                      overtimeCount: overtimeCount,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildTopLateCard(),
-                  const SizedBox(height: 16),
-                  _buildGroupPerformanceCard(),
+                  Expanded(flex: 6, child: _buildTrendCard()),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 4,
+                    child: _buildStatusDonutCard(
+                      onTimeCount: onTimeCount,
+                      lateCount: lateCount,
+                      outOfRangeCount: outOfRangeCount,
+                      overtimeCount: overtimeCount,
+                    ),
+                  ),
                 ],
               );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: _buildTopLateCard()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildGroupPerformanceCard()),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 16),
-        _buildHeatmapCard(),
+            },
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 1040) {
+                return Column(
+                  children: [
+                    _buildTopLateCard(),
+                    const SizedBox(height: 16),
+                    _buildGroupPerformanceCard(),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _buildTopLateCard()),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildGroupPerformanceCard()),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildHeatmapCard(),
+        ] else
+          _buildMonthlyExportPanel(),
       ],
     );
   }
 
-  Widget _buildFilterCard() {
-    final monthLabel = DateFormat('MM/yyyy').format(_reportsMonth);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.bgPage,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  onPressed: () => _shiftReportsMonth(-1),
-                  icon: const Icon(Icons.chevron_left, size: 18),
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
-                  style: IconButton.styleFrom(
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                Text(
-                  monthLabel,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => _shiftReportsMonth(1),
-                  icon: const Icon(Icons.chevron_right, size: 18),
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
-                  style: IconButton.styleFrom(
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 250,
-            child: DropdownButtonFormField<int?>(
-              key: ValueKey<int?>(_reportsGroupId),
-              initialValue: _reportsGroupId,
-              decoration: _decoration('Nhóm', Icons.group_outlined),
-              items: _groupItems(),
-              onChanged: (value) {
-                setState(() => _reportsGroupId = value);
-                _onReportsFilterChanged();
-              },
-            ),
-          ),
-          SizedBox(
-            width: 180,
-            child: DropdownButtonFormField<String>(
-              key: ValueKey<String>(_reportsStatus),
-              initialValue: _reportsStatus,
-              decoration: _decoration('Trạng thái', Icons.rule_outlined),
-              items: const [
-                DropdownMenuItem<String>(
-                  value: 'all',
-                  child: Text('Tất cả'),
-                ),
-                DropdownMenuItem<String>(
-                  value: 'on_time',
-                  child: Text('Đúng giờ'),
-                ),
-                DropdownMenuItem<String>(
-                  value: 'late',
-                  child: Text('Vào muộn'),
-                ),
-                DropdownMenuItem<String>(
-                  value: 'out_of_range',
-                  child: Text('Ngoài vùng'),
-                ),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _reportsStatus = value);
-                _onReportsFilterChanged();
-              },
-            ),
-          ),
-          ElevatedButton.icon(
-            onPressed: _exportingReportsExcel ? null : _exportReportsExcel,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            icon: _exportingReportsExcel
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.download_outlined),
-            label: const Text('Xuất báo cáo Excel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrendCard() {
-    const periodTabs = <(String, String)>[
-      ('day', 'Ngày'),
-      ('week', 'Tuần'),
-      ('month', 'Tháng'),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Xu hướng chấm công',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+  Widget _buildSubTabBar() {
+    const tabs = [('Chi tiết', 0), ('Bảng chấm công', 1)];
+    return Row(
+      children: tabs.map((tab) {
+        final active = _activeSubTab == tab.$2;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () => setState(() => _activeSubTab = tab.$2),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+              decoration: BoxDecoration(
+                color: active ? AppColors.primary : AppColors.bgPage,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: active ? AppColors.primary : AppColors.border,
                 ),
               ),
-              Wrap(
-                spacing: 6,
-                children: periodTabs
-                    .map((tab) {
-                      final active = _reportsTrendPeriod == tab.$1;
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(999),
-                        onTap: () => _onReportsTrendPeriodChanged(tab.$1),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: active
-                                ? AppColors.primary
-                                : AppColors.bgPage,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            tab.$2,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: active
-                                  ? Colors.white
-                                  : AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      );
-                    })
-                    .toList(growable: false),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Row(
-            children: [
-              _LegendDot(color: AppColors.success, label: 'Đúng giờ'),
-              SizedBox(width: 12),
-              _LegendDot(color: AppColors.warning, label: 'Vào muộn'),
-              SizedBox(width: 12),
-              _LegendDot(color: AppColors.danger, label: 'Ngoài vùng'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 260,
-            child: RepaintBoundary(
-              child: _ReportsLineChart(
-                data: _reportsTrends,
-                loading: _loadingReportsTrends,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusDonutCard({
-    required int onTimeCount,
-    required int lateCount,
-    required int outOfRangeCount,
-    required int overtimeCount,
-  }) {
-    final total = onTimeCount + lateCount + outOfRangeCount + overtimeCount;
-    final segments = [
-      _DonutSegmentData(
-        label: 'Đúng giờ',
-        count: onTimeCount,
-        color: AppColors.success,
-      ),
-      _DonutSegmentData(
-        label: 'Vào muộn',
-        count: lateCount,
-        color: AppColors.warning,
-      ),
-      _DonutSegmentData(
-        label: 'Ngoài vùng',
-        count: outOfRangeCount,
-        color: AppColors.danger,
-      ),
-      _DonutSegmentData(
-        label: 'Tăng ca',
-        count: overtimeCount,
-        color: AppColors.overtime,
-      ),
-    ];
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Phân bổ trạng thái',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 10),
-          Center(
-            child: RepaintBoundary(
-              child: SizedBox(
-                width: 200,
-                height: 200,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CustomPaint(
-                      size: const Size.square(190),
-                      painter: _DonutChartPainter(
-                        segments: segments,
-                        total: total,
-                      ),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _formatThousands(total),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 24,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const Text(
-                          'Tổng lượt',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+              child: Text(
+                tab.$1,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: active ? AppColors.bgCard : AppColors.textPrimary,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          ...segments.map((segment) {
-            final percent =
-                total == 0 ? 0.0 : (segment.count * 100 / total);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: segment.color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      segment.label,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${_formatPercent(percent)}% (${_formatThousands(segment.count)})',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopLateCard() {
-    final rows = _reportsTopLateItems();
-    final maxCount =
-        rows.isEmpty ? 1 : rows.map((e) => e.count).reduce(math.max);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Top nhân viên đi muộn',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 12),
-          if (_loadingReportsLateTop)
-            const LinearProgressIndicator(minHeight: 2)
-          else if (rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Text('Chưa có dữ liệu đi muộn trong tháng này.'),
-            )
-          else
-            ...rows.map((row) {
-              final ratio = row.count / maxCount;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${row.name} (${row.code})',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${row.count} lượt',
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        value: ratio,
-                        minHeight: 8,
-                        color: AppColors.warning,
-                        backgroundColor: AppColors.bgPage,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGroupPerformanceCard() {
-    final rows = _reportsGroupPerformanceItems();
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Hiệu suất theo nhóm',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 12),
-          if (_loadingReportsLogs)
-            const LinearProgressIndicator(minHeight: 2)
-          else if (rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Text('Chưa có dữ liệu nhóm trong tháng này.'),
-            )
-          else
-            ...rows.map((row) {
-              final total = row.total == 0 ? 1 : row.total;
-              final onTimeRatio = row.onTime / total;
-              final lateRatio = row.late / total;
-              final outRatio = row.outOfRange / total;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      row.groupName,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: (onTimeRatio * 1000).round().clamp(0, 1000),
-                            child: Container(
-                              height: 10,
-                              color: AppColors.success,
-                            ),
-                          ),
-                          Expanded(
-                            flex: (lateRatio * 1000).round().clamp(0, 1000),
-                            child: Container(
-                              height: 10,
-                              color: AppColors.warning,
-                            ),
-                          ),
-                          Expanded(
-                            flex: (outRatio * 1000).round().clamp(0, 1000),
-                            child: Container(
-                              height: 10,
-                              color: AppColors.danger,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Đúng giờ ${row.onTime} · Vào muộn ${row.late} · Ngoài vùng ${row.outOfRange}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeatmapCard() {
-    final counts = _reportsHeatmapCounts();
-    final firstDay = DateTime(_reportsMonth.year, _reportsMonth.month, 1);
-    final lastDay = DateTime(_reportsMonth.year, _reportsMonth.month + 1, 0);
-    final daysInMonth = lastDay.day;
-    final offset = firstDay.weekday - DateTime.monday;
-    final totalCells = (((offset + daysInMonth) / 7).ceil()) * 7;
-    final maxCount = counts.isEmpty ? 1 : counts.values.reduce(math.max);
-    const weekdayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.bgCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Mật độ chấm công',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: weekdayLabels
-                .map(
-                  (label) => Expanded(
-                    child: Center(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-          const SizedBox(height: 8),
-          if (_loadingReportsLogs)
-            const LinearProgressIndicator(minHeight: 2)
-          else
-            RepaintBoundary(
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: totalCells,
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: 1.9,
-                ),
-                itemBuilder: (context, index) {
-                  final day = index - offset + 1;
-                  if (day <= 0 || day > daysInMonth) {
-                    return const SizedBox.shrink();
-                  }
-                  final date = DateTime(
-                    _reportsMonth.year,
-                    _reportsMonth.month,
-                    day,
-                  );
-                  final count = counts[date] ?? 0;
-                  final weekend =
-                      date.weekday == DateTime.saturday ||
-                      date.weekday == DateTime.sunday;
-                  final ratio = count / maxCount;
-                  final color =
-                      _heatmapCellColor(ratio: ratio, weekend: weekend);
-                  final message =
-                      '${DateFormat('dd/MM/yyyy').format(date)}: $count lượt';
-                  return Tooltip(
-                    message: message,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () => _showSnack(message),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: weekend
-                                ? AppColors.textMuted.withValues(alpha: 0.25)
-                                : AppColors.border,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '$day',
-                            style: TextStyle(
-                              fontSize: weekend ? 10 : 11,
-                              fontWeight: FontWeight.w600,
-                              color: weekend
-                                  ? AppColors.textMuted
-                                  : AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
+        );
+      }).toList(growable: false),
     );
   }
 }
 
-// ── Private data models ──────────────────────────────────────────────────────
+// ── Private data models ───────────────────────────────────────────────────────
 
 class _ReportCountItem {
   const _ReportCountItem({
@@ -1242,282 +726,4 @@ class _DonutSegmentData {
   final String label;
   final int count;
   final Color color;
-}
-
-class _DonutChartPainter extends CustomPainter {
-  _DonutChartPainter({required this.segments, required this.total});
-
-  final List<_DonutSegmentData> segments;
-  final int total;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final stroke = math.min(size.width, size.height) * 0.17;
-    final rect = Rect.fromCircle(
-      center: Offset(size.width / 2, size.height / 2),
-      radius: math.min(size.width, size.height) / 2 - stroke / 2,
-    );
-    final bgPaint = Paint()
-      ..color = AppColors.bgPage
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-    canvas.drawArc(rect, 0, math.pi * 2, false, bgPaint);
-
-    if (total <= 0) return;
-
-    var start = -math.pi / 2;
-    for (final segment in segments) {
-      if (segment.count <= 0) continue;
-      final sweep = (segment.count / total) * math.pi * 2;
-      final paint = Paint()
-        ..color = segment.color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
-        ..strokeCap = StrokeCap.butt;
-      canvas.drawArc(rect, start, sweep, false, paint);
-      start += sweep;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
-    if (oldDelegate.total != total ||
-        oldDelegate.segments.length != segments.length) {
-      return true;
-    }
-    for (var i = 0; i < segments.length; i++) {
-      if (segments[i].count != oldDelegate.segments[i].count ||
-          segments[i].color != oldDelegate.segments[i].color) {
-        return true;
-      }
-    }
-    return false;
-  }
-}
-
-class _LegendDot extends StatelessWidget {
-  const _LegendDot({required this.color, required this.label});
-
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReportsLineChart extends StatelessWidget {
-  const _ReportsLineChart({required this.data, required this.loading});
-
-  final List<DashboardWeeklyTrendItem> data;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final chartData = loading
-        ? const [
-            DashboardWeeklyTrendItem(
-              day: '1',
-              onTime: 40,
-              late: 20,
-              outOfRange: 10,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '2',
-              onTime: 35,
-              late: 16,
-              outOfRange: 9,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '3',
-              onTime: 50,
-              late: 14,
-              outOfRange: 8,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '4',
-              onTime: 42,
-              late: 18,
-              outOfRange: 10,
-            ),
-            DashboardWeeklyTrendItem(
-              day: '5',
-              onTime: 56,
-              late: 15,
-              outOfRange: 6,
-            ),
-          ]
-        : data;
-
-    if (!loading && chartData.isEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.border, width: 0.5),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        alignment: Alignment.center,
-        child: const Text(
-          'Không có dữ liệu xu hướng.',
-          style: TextStyle(color: AppColors.textMuted),
-        ),
-      );
-    }
-
-    final labelStride = chartData.length > 16
-        ? 5
-        : chartData.length > 10
-            ? 2
-            : 1;
-
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border, width: 0.5),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: CustomPaint(
-              painter: _ReportsLineChartPainter(
-                data: chartData,
-                loading: loading,
-              ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: chartData.asMap().entries
-              .map(
-                (entry) => Expanded(
-                  child: Center(
-                    child: Text(
-                      entry.key % labelStride == 0 ||
-                              entry.key == chartData.length - 1
-                          ? entry.value.day
-                          : '',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList(growable: false),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReportsLineChartPainter extends CustomPainter {
-  _ReportsLineChartPainter({required this.data, required this.loading});
-
-  final List<DashboardWeeklyTrendItem> data;
-  final bool loading;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = AppColors.bgPage
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (var i = 0; i < 5; i++) {
-      final y = (size.height - 16) * (i / 4) + 8;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    if (data.isEmpty) return;
-    final maxValue = data
-        .map((e) => math.max(e.onTime, math.max(e.late, e.outOfRange)))
-        .reduce(math.max)
-        .toDouble()
-        .clamp(10, 1000)
-        .toDouble();
-
-    final onTimePoints = <Offset>[];
-    final latePoints = <Offset>[];
-    final outPoints = <Offset>[];
-
-    final stepX = data.length <= 1 ? 0.0 : size.width / (data.length - 1);
-    for (var i = 0; i < data.length; i++) {
-      final x = data.length == 1 ? size.width / 2 : stepX * i;
-      onTimePoints.add(
-        Offset(
-          x,
-          size.height -
-              ((data[i].onTime / maxValue) * (size.height - 16)) -
-              8,
-        ),
-      );
-      latePoints.add(
-        Offset(
-          x,
-          size.height -
-              ((data[i].late / maxValue) * (size.height - 16)) -
-              8,
-        ),
-      );
-      outPoints.add(
-        Offset(
-          x,
-          size.height -
-              ((data[i].outOfRange / maxValue) * (size.height - 16)) -
-              8,
-        ),
-      );
-    }
-
-    _drawLine(canvas, onTimePoints, AppColors.success, loading);
-    _drawLine(canvas, latePoints, AppColors.warning, loading);
-    _drawLine(canvas, outPoints, AppColors.danger, loading);
-  }
-
-  void _drawLine(
-    Canvas canvas,
-    List<Offset> points,
-    Color color,
-    bool loading,
-  ) {
-    final linePaint = Paint()
-      ..color = loading ? color.withValues(alpha: 0.5) : color
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    final dotPaint = Paint()..color = linePaint.color;
-    if (points.length == 1) {
-      canvas.drawCircle(points.first, 2.5, dotPaint);
-      return;
-    }
-    if (points.length < 2) return;
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-    canvas.drawPath(path, linePaint);
-
-    for (final point in points) {
-      canvas.drawCircle(point, 2.5, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ReportsLineChartPainter oldDelegate) {
-    return oldDelegate.loading != loading || oldDelegate.data != data;
-  }
 }

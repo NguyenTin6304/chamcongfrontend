@@ -5,7 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../config/app_config.dart';
+import 'package:birdle/core/config/app_config.dart';
 
 class PushNotificationService {
   const PushNotificationService._();
@@ -24,7 +24,7 @@ class PushNotificationService {
         ),
       );
       debugPrint('[FCM] Firebase initialized');
-    } catch (e) {
+    } on Object catch (e) {
       debugPrint('[FCM] Firebase init failed: $e');
     }
   }
@@ -64,7 +64,7 @@ class PushNotificationService {
       await _sendTokenToBackend(token, accessToken: accessToken);
       debugPrint('[FCM] Token registered with backend');
       return token;
-    } catch (e, st) {
+    } on Object catch (e, st) {
       debugPrint('[FCM] requestTokenAndRegister error: $e\n$st');
       return null;
     }

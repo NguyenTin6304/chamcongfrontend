@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../../core/theme/app_colors.dart';
+import 'package:birdle/core/theme/app_colors.dart';
 import 'package:birdle/core/theme/app_dimensions.dart';
 import 'package:birdle/core/theme/app_text_styles.dart';
-import 'exception_ui_helpers.dart';
+import 'package:birdle/features/admin/presentation/exceptions/widgets/exception_ui_helpers.dart';
 
 class ExceptionModel {
   const ExceptionModel({
@@ -199,7 +199,7 @@ class PendingExceptionCard extends StatelessWidget {
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.exceptionCardMutedBg,
                 borderRadius: AppRadius.iconBoxAll,
               ),
@@ -295,7 +295,7 @@ class PendingExceptionCard extends StatelessWidget {
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    shape: RoundedRectangleBorder(
+                    shape: const RoundedRectangleBorder(
                       borderRadius: AppRadius.iconBoxAll,
                     ),
                   ),
@@ -317,7 +317,7 @@ class PendingExceptionCard extends StatelessWidget {
                       horizontal: 16,
                       vertical: 8,
                     ),
-                    shape: RoundedRectangleBorder(
+                    shape: const RoundedRectangleBorder(
                       borderRadius: AppRadius.iconBoxAll,
                     ),
                   ),

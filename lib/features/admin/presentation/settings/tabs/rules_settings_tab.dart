@@ -162,8 +162,13 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
       if (previous.code == 'late') {
         final grace = active ? (_toInt(previous.fields['grace_minutes']) ?? 15) : 0;
         await _putActiveRule({'grace_minutes': grace});
+      } else if (previous.code == 'auto_checkout') {
+        final time = previous.fields['auto_checkout_time']?.toString() ?? '';
+        if (active && time.isNotEmpty) {
+          _ruleEndTime = time;
+          await _putActiveRule({'end_time': time});
+        }
       }
-      // Other rule cards are UI-only — no backend per-rule toggle
     } on Exception catch (_) {
       if (!mounted) return;
       setState(() => _rules[index] = previous); // revert
@@ -187,6 +192,12 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         case 'late':
           final grace = _toInt(item.fields['grace_minutes']);
           if (grace != null) extra['grace_minutes'] = grace;
+        case 'auto_checkout':
+          final endTime = item.fields['auto_checkout_time']?.toString();
+          if (endTime != null && endTime.isNotEmpty) {
+            extra['end_time'] = endTime;
+            _ruleEndTime = endTime;
+          }
         case 'gps':
           final radius = _toInt(item.fields['min_accuracy_meters']);
           if (radius != null) extra['radius_m'] = radius;
@@ -221,10 +232,16 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
           case 'late':
             final grace = _toInt(rule.fields['grace_minutes']);
             if (grace != null) extra['grace_minutes'] = grace;
+          case 'auto_checkout':
+            final endTime = rule.fields['auto_checkout_time']?.toString();
+            if (endTime != null && endTime.isNotEmpty) {
+              extra['end_time'] = endTime;
+              _ruleEndTime = endTime;
+            }
           case 'gps':
             final radius = _toInt(rule.fields['min_accuracy_meters']);
             if (radius != null) extra['radius_m'] = radius;
-            final lat = _toDouble(rule.fields['latitude']); 
+            final lat = _toDouble(rule.fields['latitude']);
             if (lat != null) extra['latitude'] = lat;
             final lng = _toDouble(rule.fields['longitude']);
             if (lng != null) extra['longitude'] = lng;
@@ -372,32 +389,6 @@ class _RulesSettingsTabState extends State<RulesSettingsTab> {
         iconFg: AppColors.primary,
         isActive: true,
         fields: {'latitude': 0.0, 'longitude': 0.0, 'min_accuracy_meters': 200},
-      ),
-      _RuleItem(
-        id: null,
-        code: 'overtime',
-        name: 'Tính giờ tăng ca',
-        icon: Icons.bolt_outlined,
-        iconBg: Color(0xFFEDE9FE),
-        iconFg: AppColors.overtime,
-        isActive: true,
-        fields: {'ot_after_minutes': 60, 'ot_multiplier': 1.5},
-      ),
-      _RuleItem(
-        id: null,
-        code: 'auto_exception',
-        name: 'Tạo ngoại lệ tự động',
-        icon: Icons.error_outline,
-        iconBg: Color(0xFFFEE2E2),
-        iconFg: AppColors.danger,
-        isActive: true,
-        fields: {
-          'trigger_conditions': {
-            'missing_checkin': true,
-            'missing_checkout': true,
-            'out_of_range': true,
-          },
-        },
       ),
     ];
   }
@@ -565,61 +556,6 @@ class _RuleCard extends StatelessWidget {
             ),
           ],
         );
-      case 'overtime':
-        return Column(
-          children: [
-            _NumberFieldRow(
-              label: 'ot_after_minutes',
-              value: item.fields['ot_after_minutes'],
-              onChanged: (v) => onChangedField('ot_after_minutes', v),
-            ),
-            const SizedBox(height: 8),
-            _DoubleFieldRow(
-              label: 'ot_multiplier',
-              value: item.fields['ot_multiplier'],
-              onChanged: (v) => onChangedField('ot_multiplier', v),
-            ),
-          ],
-        );
-      case 'auto_exception':
-        final map =
-            Map<String, dynamic>.from(
-              (item.fields['trigger_conditions'] as Map<dynamic, dynamic>?) ??
-                  const {},
-            );
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _ConditionChip(
-              label: 'Thiếu checkin',
-              value: map['missing_checkin'] == true,
-              onChanged: (v) {
-                final next = Map<String, dynamic>.from(map)
-                  ..['missing_checkin'] = v;
-                onChangedField('trigger_conditions', next);
-              },
-            ),
-            _ConditionChip(
-              label: 'Thiếu checkout',
-              value: map['missing_checkout'] == true,
-              onChanged: (v) {
-                final next = Map<String, dynamic>.from(map)
-                  ..['missing_checkout'] = v;
-                onChangedField('trigger_conditions', next);
-              },
-            ),
-            _ConditionChip(
-              label: 'Ngoài vùng',
-              value: map['out_of_range'] == true,
-              onChanged: (v) {
-                final next = Map<String, dynamic>.from(map)
-                  ..['out_of_range'] = v;
-                onChangedField('trigger_conditions', next);
-              },
-            ),
-          ],
-        );
       default:
         return const SizedBox.shrink();
     }
@@ -760,28 +696,6 @@ class _TextFieldRowState extends State<_TextFieldRow> {
   }
 }
 
-class _ConditionChip extends StatelessWidget {
-  const _ConditionChip({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      selected: value,
-      label: Text(label),
-      selectedColor: AppColors.primary.withValues(alpha: 0.14),
-      checkmarkColor: AppColors.primary,
-      onSelected: onChanged,
-    );
-  }
-}
 
 class _RuleItem {
   const _RuleItem({

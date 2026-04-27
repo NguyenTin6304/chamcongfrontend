@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 
 import 'dart:html' as html;
@@ -58,7 +58,7 @@ class RecaptchaV2ControllerImpl {
     if (_grecaptcha != null && _widgetId != null) {
       try {
         _grecaptcha!.callMethod('reset', [_widgetId]);
-      } catch (_) {
+      } on Object catch (_) {
         // Ignore reset errors when webview is disposed/recreated.
       }
     }
@@ -116,20 +116,17 @@ class _RecaptchaV2WebBoxState extends State<_RecaptchaV2WebBox> {
     _viewType = 'recaptcha-v2-view-$_widgetCounter';
 
     // ignore: undefined_prefixed_name
-    ui_web.platformViewRegistry.registerViewFactory(
-      _viewType,
-      (int _) {
-        final container = html.DivElement()
-          ..id = 'recaptcha-v2-container-$_widgetCounter'
-          ..style.width = '304px'
-          ..style.height = '78px'
-          ..style.minHeight = '78px'
-          ..style.display = 'block';
+    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int _) {
+      final container = html.DivElement()
+        ..id = 'recaptcha-v2-container-$_widgetCounter'
+        ..style.width = '304px'
+        ..style.height = '78px'
+        ..style.minHeight = '78px'
+        ..style.display = 'block';
 
-        _container = container;
-        return container;
-      },
-    );
+      _container = container;
+      return container;
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _bootstrap();
@@ -165,7 +162,7 @@ class _RecaptchaV2WebBoxState extends State<_RecaptchaV2WebBox> {
         return;
       }
       await _renderRecaptcha(siteKey: siteKey, container: container);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -225,7 +222,7 @@ class _RecaptchaV2WebBoxState extends State<_RecaptchaV2WebBox> {
           _error = null;
         });
         return;
-      } catch (error) {
+      } on Object catch (error) {
         lastError = error;
         await Future<void>.delayed(const Duration(milliseconds: 120));
       }
@@ -268,10 +265,7 @@ class _RecaptchaV2WebBoxState extends State<_RecaptchaV2WebBox> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               _error!,
-              style: TextStyle(
-                color: Colors.red.shade700,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.red.shade700, fontSize: 12),
             ),
           ),
       ],
@@ -287,7 +281,7 @@ Future<void> _ensureScriptLoaded() async {
   _scriptFuture ??= _loadRecaptchaScript();
   try {
     await _scriptFuture!;
-  } catch (_) {
+  } on Object catch (_) {
     _scriptFuture = null;
     rethrow;
   }
@@ -301,7 +295,7 @@ Future<void> _loadRecaptchaScript() async {
     try {
       await _loadScriptFromUrl(src: src, scriptId: '$_scriptIdPrefix-$i');
       return;
-    } catch (error) {
+    } on Object catch (error) {
       lastError = error;
     }
   }
@@ -317,7 +311,8 @@ Future<void> _loadScriptFromUrl({
     return;
   }
 
-  final existing = html.document.getElementById(scriptId) as html.ScriptElement?;
+  final existing =
+      html.document.getElementById(scriptId) as html.ScriptElement?;
   if (existing == null) {
     final completer = Completer<void>();
     final script = html.ScriptElement()
@@ -328,23 +323,30 @@ Future<void> _loadScriptFromUrl({
       ..defer = true
       ..crossOrigin = 'anonymous';
 
-    script.onLoad.first.then((_) {
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    });
+    unawaited(
+      script.onLoad.first.then((_) {
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      }),
+    );
 
-    script.onError.first.then((_) {
-      if (!completer.isCompleted) {
-        completer.completeError(StateError('load recaptcha script failed: $src'));
-      }
-    });
+    unawaited(
+      script.onError.first.then((_) {
+        if (!completer.isCompleted) {
+          completer.completeError(
+            StateError('load recaptcha script failed: $src'),
+          );
+        }
+      }),
+    );
 
     html.document.head?.append(script);
 
     await completer.future.timeout(
       _scriptLoadTimeout,
-      onTimeout: () => throw TimeoutException('load recaptcha script timeout: $src'),
+      onTimeout: () =>
+          throw TimeoutException('load recaptcha script timeout: $src'),
     );
   }
 

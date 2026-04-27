@@ -1,5 +1,5 @@
-import '../../../core/storage/token_storage.dart';
-import 'auth_api.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/features/auth/data/auth_api.dart';
 
 class AuthSessionService {
   AuthSessionService({
@@ -20,7 +20,7 @@ class AuthSessionService {
     try {
       await _authApi.me(token: accessToken);
       return accessToken;
-    } catch (error) {
+    } on Object catch (error) {
       if (!_isAuthFailure(error)) {
         rethrow;
       }
@@ -43,7 +43,7 @@ class AuthSessionService {
         email: lastEmail,
       );
       return refreshed.accessToken;
-    } catch (_) {
+    } on Object catch (_) {
       await _tokenStorage.clearSession(keepLastEmail: true);
       return null;
     }

@@ -1,11 +1,11 @@
 {
-    "name": "birdle",
-    "short_name": "birdle",
+    "name": "Chấm Công GPIT",
+    "short_name": "Chấm Công",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#D71920",
-    "description": "A new Flutter project.",
+    "description": "Ứng dụng chấm công GPIT.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

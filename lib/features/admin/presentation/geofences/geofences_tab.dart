@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
-import '../../../../core/config/app_config.dart';
-import '../../../../core/storage/token_storage.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../widgets/common/kpi_card.dart';
-import '../../data/admin_api.dart';
-import '../../data/admin_data_cache.dart';
+import 'package:birdle/core/config/app_config.dart';
+import 'package:birdle/core/storage/token_storage.dart';
+import 'package:birdle/core/theme/app_colors.dart';
+import 'package:birdle/widgets/common/kpi_card.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/data/admin_data_cache.dart';
 
 part 'widgets/geofence_config_form.dart';
 part 'widgets/geofence_list.dart';
@@ -48,6 +48,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
   List<GeoPlaceSuggestion> _placeSuggestions = const [];
 
   bool _formActive = true;
+  String _formLocationType = 'SITE';
 
   final _geofenceSearchController = TextEditingController();
   final _formNameController = TextEditingController();
@@ -116,7 +117,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
       setState(() {
         _groups = groups;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -159,7 +160,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
       setState(() {
         _geofences = rows;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -187,6 +188,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
     _formRadiusController.text = '200';
     _formAddressController.clear();
     _formActive = true;
+    _formLocationType = 'SITE';
     _newGeofencePoint = null;
     _cachedGeofenceCircles = null;
     _cachedGeofenceMarkers = null;
@@ -207,6 +209,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
     _formRadiusController.text = item.radiusM.toString();
     _formAddressController.clear();
     _formActive = item.active;
+    _formLocationType = item.locationType;
     setState(() {
       _editingGeofence = item;
       _isCreating = false;
@@ -257,6 +260,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
         longitude: lng,
         radiusM: radius.clamp(10, 2000),
         active: _formActive,
+        locationType: _formLocationType,
       );
       if (!mounted) {
         return;
@@ -264,7 +268,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
       _cancelForm();
       await _loadGeofences(token, groupId);
       _showSnack('Đã thêm vùng địa lý mới.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -306,6 +310,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
         longitude: lng,
         radiusM: radius.clamp(10, 2000),
         active: _formActive,
+        locationType: _formLocationType,
       );
       if (!mounted) {
         return;
@@ -313,7 +318,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
       _cancelForm();
       await _loadGeofences(token, groupId);
       _showSnack('Đã cập nhật vùng địa lý.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -348,7 +353,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.danger,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.bgCard,
             ),
             child: const Text('Xóa'),
           ),
@@ -373,7 +378,7 @@ class _GeofencesTabState extends State<GeofencesTab> {
       _cancelForm();
       await _loadGeofences(token, groupId);
       _showSnack('Đã xóa vùng địa lý.');
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) {
         return;
       }
@@ -557,5 +562,48 @@ class _GeofencesTabState extends State<GeofencesTab> {
   @override
   Widget build(BuildContext context) {
     return _buildGeofencesPage();
+  }
+}
+
+class _LocationTypeChip extends StatelessWidget {
+  const _LocationTypeChip({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.12) : Colors.transparent,
+          border: Border.all(
+            color: selected ? color : AppColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? color : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
   }
 }

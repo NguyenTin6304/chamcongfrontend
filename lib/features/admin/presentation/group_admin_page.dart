@@ -1,10 +1,10 @@
-﻿
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/download/file_downloader.dart';
-import '../data/admin_api.dart';
-import 'widgets/admin_location_picker.dart';
+import 'package:birdle/core/download/file_downloader.dart';
+import 'package:birdle/features/admin/data/admin_api.dart';
+import 'package:birdle/features/admin/presentation/widgets/admin_location_picker.dart';
 
 class GroupAdminPage extends StatefulWidget {
   const GroupAdminPage({
@@ -240,7 +240,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
         }
         _syncSelectedGroupRuleForm();
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -275,7 +275,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
           _selectedGroupByEmployee[e.id] = e.groupId;
         }
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -314,7 +314,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       setState(() {
         _geofences = geofences;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -407,7 +407,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       await _loadGroups();
       await _loadGeofences();
       await _loadEmployees();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -521,7 +521,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
         _syncSelectedGroupRuleForm();
         _info = 'Đã cập nhật rule thời gian cho ${updated.code}.';
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -597,7 +597,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
         _syncSelectedGroupRuleForm();
         _info = 'Đã xóa rule giờ của ${updated.code}. Hệ thống sẽ fallback system rule.';
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -629,7 +629,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
         _syncSelectedGroupRuleForm();
         _info = updated.active ? 'Đã bật ${updated.code}' : 'Đã tắt ${updated.code}';
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -694,7 +694,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       await _loadGroups();
       await _loadGeofences();
       await _loadEmployees();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -725,7 +725,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       );
 
       await _loadGeofences();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -806,7 +806,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       });
 
       await _loadGeofences();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -849,7 +849,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       });
 
       await _loadGeofences();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -889,7 +889,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
         _selectedGroupByEmployee[updated.id] = updated.groupId;
         _info = 'Đã gán group cho ${updated.code}';
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
@@ -938,7 +938,7 @@ class _GroupAdminPageState extends State<GroupAdminPage> {
       setState(() {
         _info = 'Đã tải file theo group. Vị trí: $savedPath';
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) {
         return;
       }
