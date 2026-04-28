@@ -884,13 +884,13 @@ class _ExceptionsScreenState extends State<ExceptionsScreen> {
         bytes: Uint8List.fromList(utf8.encode(csv)),
         fileName: fileName,
       );
-    } on Object catch (error) {
+    } on Exception catch (_) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Khong the xuat exception voi filter hien tai: $error'),
+        const SnackBar(
+          content: Text('Không thể xuất danh sách. Vui lòng thử lại.'),
         ),
       );
     } finally {

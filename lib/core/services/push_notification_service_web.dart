@@ -81,6 +81,34 @@ class PushNotificationService {
     });
   }
 
+  /// Checks whether the app was launched by tapping a notification
+  /// (terminated state). Calls [onRoute] with the route string if found.
+  static Future<void> handleInitialMessage(
+    void Function(String route) onRoute,
+  ) async {
+    try {
+      final message = await FirebaseMessaging.instance.getInitialMessage();
+      if (message == null) return;
+      final route = message.data['route'] as String? ?? '';
+      debugPrint('[FCM] getInitialMessage: route=$route');
+      if (route.isNotEmpty) onRoute(route);
+    } on Object catch (e) {
+      debugPrint('[FCM] getInitialMessage error: $e');
+    }
+  }
+
+  /// Listens for notification taps while the app is in the background.
+  /// Calls [onRoute] with the route string extracted from the data payload.
+  static void setupBackgroundTapHandler(
+    void Function(String route) onRoute,
+  ) {
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      final route = message.data['route'] as String? ?? '';
+      debugPrint('[FCM] onMessageOpenedApp: route=$route');
+      if (route.isNotEmpty) onRoute(route);
+    });
+  }
+
   static Future<void> _sendTokenToBackend(
     String fcmToken, {
     required String accessToken,

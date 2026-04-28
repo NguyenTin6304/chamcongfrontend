@@ -1,9 +1,5 @@
 // Firebase Messaging Service Worker
 // Handles push notifications when the app is in the background or closed.
-//
-// IMPORTANT: Replace the placeholder values below with your actual Firebase
-// project config from the Firebase Console → Project Settings → Your apps.
-// These values are public and safe to commit.
 
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
@@ -24,10 +20,30 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const title = (payload.notification && payload.notification.title) || 'Thông báo';
   const body = (payload.notification && payload.notification.body) || '';
+  const route = (payload.data && payload.data.route) || '';
 
   self.registration.showNotification(title, {
     body: body,
     icon: '/icons/Icon-192.png',
     badge: '/icons/Icon-192.png',
+    data: { route },
   });
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const route = (event.notification.data && event.notification.data.route) || '/home';
+  const targetUrl = self.location.origin + '/#' + route;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('navigate' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(targetUrl);
+    }),
+  );
 });

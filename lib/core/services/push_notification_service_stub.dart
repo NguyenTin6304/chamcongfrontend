@@ -12,4 +12,12 @@ class PushNotificationService {
   static void setupForegroundHandler(
     void Function(String title, String body) onMessage,
   ) {}
+
+  static Future<void> handleInitialMessage(
+    void Function(String route) onRoute,
+  ) async {}
+
+  static void setupBackgroundTapHandler(
+    void Function(String route) onRoute,
+  ) {}
 }

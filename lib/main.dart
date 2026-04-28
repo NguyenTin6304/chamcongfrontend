@@ -28,10 +28,24 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
+  static final GlobalKey<NavigatorState> _navigatorKey =
+      GlobalKey<NavigatorState>();
+
   @override
   void initState() {
     super.initState();
     PushNotificationService.setupForegroundHandler(NotificationStore.add);
+    PushNotificationService.setupBackgroundTapHandler(_navigateFromNotification);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      PushNotificationService.handleInitialMessage(_navigateFromNotification);
+    });
+  }
+
+  void _navigateFromNotification(String route) {
+    _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+      route,
+      (r) => false,
+    );
   }
 
   static const Set<String> _supportedPaths = {
@@ -186,6 +200,7 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Chấm Công GPIT',
       scrollBehavior: const MaterialScrollBehavior().copyWith(
