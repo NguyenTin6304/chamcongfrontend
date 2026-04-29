@@ -1,5 +1,3 @@
-// ignore_for_file: unused_field
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -38,15 +36,13 @@ class AdminShellPage extends StatefulWidget {
 class _AdminShellPageState extends State<AdminShellPage> {
   final _tokenStorage = TokenStorage();
   final _adminApi = const AdminApi();
-  final _dateFormat = DateFormat('yyyy-MM-dd');
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
 
   String? _token;
   bool _loadingExceptions = false;
   List<AttendanceExceptionItem> _exceptions = const [];
-  final String _exceptionTypeFilter = 'SUSPECTED_LOCATION_SPOOF';
-  final String _exceptionStatusFilter = 'OPEN';
+  final String _exceptionStatusFilter = 'PENDING_ADMIN';
   final Set<int> _updatingExceptionIds = {};
   _AdminShellNav _activeNav = _AdminShellNav.dashboard;
   final Set<_AdminShellNav> _tabsLoaded = {};
@@ -240,7 +236,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   List<AdminSidebarItem<_AdminShellNav>> _shellNavItems() {
-    final pending = _exceptions.where((e) => e.status == 'OPEN').length;
+    final pending = _exceptions.length;
     return [
       const AdminSidebarItem<_AdminShellNav>(
         value: _AdminShellNav.dashboard,
@@ -354,7 +350,6 @@ class _AdminShellPageState extends State<AdminShellPage> {
     try {
       final items = await _adminApi.listAttendanceExceptions(
         token: token,
-        exceptionType: _exceptionTypeFilter,
         statusFilter: _exceptionStatusFilter,
       );
       if (!mounted) {
